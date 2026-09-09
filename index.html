@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wireframe — VoxReady</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --accent:#17354F; --accentsoft:#e4eaf1; --accent2:#DB6427;
+    --bg:#f4f4f2; --sidebar:#fbfbfa; --panel:#ffffff; --ink:#22303c; --muted:#8a8a8a;
+    --line:#cfcfcf; --line2:#b5b5b5; --soft:#eef0f2; --barfill:#e2e2df; --stat:#fafafa;
+    --chrome2:#edeef0; --note:#fff5ec; --noteline:#f0c49e; --notetext:#9c5320;
+    --ph1:#f0f0ee; --ph2:#e8e8e5; --topbar:#ffffff;
+  }
+  [data-palette="voxready"]{--accent:#17354F; --accentsoft:#e4eaf1;}
+  [data-palette="teal"]{--accent:#0f6e56; --accentsoft:#dcf1ea;}
+  [data-palette="coral"]{--accent:#b1502b; --accentsoft:#f7e6dd;}
+  [data-palette="violet"]{--accent:#534ab7; --accentsoft:#eae8fa;}
+  [data-theme="dark"]{
+    --bg:#15191d; --sidebar:#1b2128; --panel:#222a31; --ink:#e7eaed; --muted:#9aa3ab;
+    --line:#374049; --line2:#475159; --soft:#2a333b; --barfill:#3a444d; --stat:#262f37;
+    --chrome2:#2a333b; --note:#2f2719; --noteline:#5e4a26; --notetext:#e3b483;
+    --ph1:#283038; --ph2:#222a31; --topbar:#1b2128; --accentsoft:#26384a;
+  }
+  [data-theme="dark"][data-palette="teal"]{--accentsoft:#1f352e;}
+  [data-theme="dark"][data-palette="coral"]{--accentsoft:#3a2a22;}
+  [data-theme="dark"][data-palette="violet"]{--accentsoft:#2c2945;}
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Poppins','Segoe UI',Helvetica,Arial,sans-serif;color:var(--ink);background:var(--bg);font-size:14px;}
+  .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;height:58px;padding:0 18px;background:var(--topbar);border-bottom:1px solid var(--line);gap:14px;}
+  .tb-title{font-size:13px;color:var(--muted);}
+  .tb-right{margin-left:auto;display:flex;align-items:center;gap:16px;}
+  .ctrl{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);}
+  select.lang{height:30px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink);font-size:12px;padding:0 8px;font-family:inherit;}
+  .iconbtn{width:32px;height:32px;border:1px solid var(--line);border-radius:7px;background:var(--panel);color:var(--ink);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .iconbtn:hover{background:var(--soft);}
+  .swatches{display:flex;gap:6px;}
+  .sw{width:20px;height:20px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+  .sw.on{border-color:var(--ink);}
+  .logo-slot{height:40px;padding:4px 9px;border:1px solid var(--line2);border-radius:7px;display:flex;align-items:center;justify-content:center;background:#ffffff;}
+  .app{display:flex;min-height:calc(100vh - 58px);}
+  .sidebar{width:262px;background:var(--sidebar);border-right:1px solid var(--line);padding:14px 0;position:sticky;top:58px;height:calc(100vh - 58px);overflow-y:auto;flex-shrink:0;}
+  .brand{padding:0 18px 14px;border-bottom:1px solid var(--line);margin-bottom:10px;}
+  .brandlogo-wrap{background:#fff;border-radius:8px;padding:6px 9px;display:inline-block;}
+  .brand p{font-size:11px;color:var(--muted);margin:7px 0 0;}
+  .role{padding:14px 18px 4px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;}
+  .navitem{display:flex;align-items:center;gap:9px;padding:8px 18px;cursor:pointer;font-size:13px;color:var(--ink);border-left:3px solid transparent;}
+  .navitem:hover{background:var(--soft);}
+  .navitem.active{background:var(--accentsoft);border-left-color:var(--accent);color:var(--accent);font-weight:600;}
+  .navitem .n{width:20px;height:20px;border-radius:50%;background:var(--barfill);color:var(--muted);font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .navitem.active .n{background:var(--accent);color:#fff;}
+  .main{flex:1;padding:26px 30px 60px;overflow-x:hidden;}
+  .crumbs{font-size:12px;color:var(--muted);margin-bottom:4px;}
+  .screen-title{font-size:20px;font-weight:600;margin:0 0 2px;}
+  .screen-sub{font-size:13px;color:var(--muted);margin:0 0 18px;}
+  .chrome{background:var(--panel);border:1px solid var(--line2);border-radius:8px;overflow:hidden;}
+  .chrome-bar{display:flex;align-items:center;gap:6px;padding:8px 12px;background:var(--chrome2);border-bottom:1px solid var(--line);}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--line);}
+  .urlbar{flex:1;margin-left:8px;background:var(--panel);border:1px solid var(--line);border-radius:5px;font-size:11px;color:var(--muted);padding:4px 10px;}
+  .canvas{padding:20px;}
+  .ph{background:repeating-linear-gradient(135deg,var(--ph1),var(--ph1) 7px,var(--ph2) 7px,var(--ph2) 14px);border:1px dashed var(--line2);border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;text-align:center;}
+  .box{border:1px solid var(--line);border-radius:6px;background:var(--panel);}
+  .soft{background:var(--soft);}
+  .bar{height:11px;background:var(--barfill);border-radius:3px;}
+  .bar.s{width:55%;} .bar.m{width:75%;} .bar.l{width:92%;}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line2);background:var(--panel);border-radius:6px;padding:7px 14px;font-size:12px;color:var(--ink);cursor:pointer;font-family:inherit;}
+  .btn.pri{background:var(--accent2);color:#fff;border-color:var(--accent2);}
+  .btn.nav{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .btn.ghost{background:transparent;}
+  .btn.disabled{opacity:.4;cursor:not-allowed;pointer-events:none;}
+  .pill{display:inline-block;border:1px solid var(--line2);border-radius:999px;padding:3px 11px;font-size:11px;color:var(--ink);background:var(--panel);}
+  .pill.on{background:var(--accentsoft);border-color:var(--accent);color:var(--accent);}
+  .label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:6px;}
+  .field{border:1px solid var(--line);border-radius:6px;height:34px;background:var(--panel);display:flex;align-items:center;padding:0 10px;color:var(--muted);font-size:12px;}
+  .area{border:1px solid var(--line);border-radius:6px;background:var(--panel);min-height:64px;padding:10px;color:var(--muted);font-size:12px;}
+  .row{display:flex;gap:14px;}
+  .col{flex:1;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .card{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:14px;}
+  .scard{border:1px solid var(--line);border-radius:8px;background:var(--panel);padding:13px;display:flex;flex-direction:column;}
+  .scard h4{margin:0 0 4px;font-size:14px;font-weight:600;}
+  .scard .ctx{font-size:12px;color:var(--muted);margin:0 0 9px;line-height:1.4;}
+  .meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px;}
+  .tagm{font-size:10.5px;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:2px 7px;}
+  .stat{border:1px solid var(--line);border-radius:8px;background:var(--stat);padding:12px 14px;}
+  .stat .k{font-size:11px;color:var(--muted);}
+  .stat .v{font-size:22px;font-weight:600;margin-top:3px;color:var(--accent);}
+  .note{background:var(--note);border:1px solid var(--noteline);border-radius:7px;padding:11px 13px;font-size:12px;color:var(--notetext);margin-top:16px;}
+  table.wf{width:100%;border-collapse:collapse;font-size:12px;}
+  table.wf th,table.wf td{border:1px solid var(--line);padding:8px 10px;text-align:left;color:var(--ink);}
+  table.wf th{background:var(--soft);color:var(--muted);font-weight:600;}
+  .vid{position:relative;border:1px solid var(--line2);border-radius:8px;min-height:230px;background:#202830;display:flex;align-items:center;justify-content:center;color:#aab4bd;font-size:13px;overflow:hidden;}
+  .vid .tag{position:absolute;top:8px;left:10px;background:rgba(255,255,255,.12);color:#eee;font-size:11px;padding:3px 9px;border-radius:5px;}
+  .self{position:relative;border:1px solid var(--line2);border-radius:8px;min-height:230px;background:#323b43;display:flex;align-items:center;justify-content:center;color:#cdd4da;font-size:13px;overflow:hidden;}
+  .reclamp{position:absolute;top:8px;right:10px;display:flex;align-items:center;gap:6px;background:rgba(0,0,0,.4);padding:3px 9px;border-radius:5px;color:#fff;font-size:11px;}
+  .recdot{width:8px;height:8px;border-radius:50%;background:#e24b4a;}
+  .meter{height:9px;border-radius:5px;background:var(--barfill);overflow:hidden;}
+  .meter > i{display:block;height:100%;background:var(--accent);border-radius:5px;}
+  .areaScore{border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--panel);}
+  .areaScore .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
+  .areaScore .name{font-size:13px;font-weight:600;}
+  .areaScore .sc{font-size:18px;font-weight:700;color:var(--accent);}
+  .legend{font-size:11px;color:var(--muted);margin-top:6px;}
+  .consent{width:16px;height:16px;accent-color:var(--accent2);margin:1px 0 0;flex-shrink:0;}
+  .calhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+  .calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .calgrid .dow{font-size:10px;color:var(--muted);text-align:center;padding-bottom:2px;}
+  .calday{text-align:center;padding:7px 0;border-radius:6px;cursor:pointer;font-size:12px;border:1px solid transparent;color:var(--ink);}
+  .calday:hover{background:var(--soft);}
+  .calday.sel{background:var(--accent2);color:#fff;font-weight:600;}
+  /* ===== user chip + logout (topbar) ===== */
+  .userchip{display:flex;align-items:center;gap:10px;}
+  .userchip .uava{width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .userchip .umeta{display:flex;flex-direction:column;line-height:1.2;}
+  .userchip .uname{font-size:12px;font-weight:600;color:var(--ink);}
+  .userchip .urole{font-size:10.5px;color:var(--muted);}
+  .logoutbtn{height:30px;border:1px solid var(--line2);border-radius:6px;background:var(--panel);color:var(--ink);font-size:12px;padding:0 12px;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;}
+  .logoutbtn:hover{background:var(--soft);}
+  /* ===== login screen ===== */
+  .login{min-height:calc(100vh - 58px);display:flex;align-items:center;justify-content:center;padding:40px 20px;}
+  .login-card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:32px 30px;box-shadow:0 8px 30px rgba(0,0,0,.06);}
+  .login-logo{display:flex;justify-content:center;margin-bottom:18px;}
+  .login-logo .brandlogo-wrap{background:#fff;border-radius:10px;padding:8px 12px;}
+  .login-title{font-size:20px;font-weight:600;text-align:center;margin:0 0 4px;}
+  .login-sub{font-size:13px;color:var(--muted);text-align:center;margin:0 0 22px;}
+  .login-field{margin-bottom:14px;}
+  .login-field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;font-weight:600;margin-bottom:6px;}
+  .login-input{width:100%;height:40px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--ink);font-size:13px;padding:0 12px;font-family:inherit;}
+  .login-input:focus{outline:none;border-color:var(--accent);}
+  .login-btn{width:100%;height:42px;border:none;border-radius:8px;background:var(--accent2);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:6px;}
+  .login-btn:hover{filter:brightness(1.05);}
+  .login-err{font-size:12px;color:#c0392b;margin:8px 0 0;min-height:16px;text-align:center;}
+  .login-divider{display:flex;align-items:center;gap:10px;margin:22px 0 14px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
+  .login-divider::before,.login-divider::after{content:"";flex:1;height:1px;background:var(--line);}
+  .tu{display:flex;align-items:center;gap:12px;width:100%;text-align:left;border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:11px 13px;cursor:pointer;font-family:inherit;margin-bottom:9px;}
+  .tu:hover{border-color:var(--accent);background:var(--accentsoft);}
+  .tu .tuava{width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .tu .tumeta{flex:1;min-width:0;}
+  .tu .tuname{font-size:13px;font-weight:600;color:var(--ink);}
+  .tu .turole{font-size:11px;color:var(--muted);}
+  .tu .tugo{font-size:16px;color:var(--muted);}
+</style>
+</head>
+<body data-theme="light" data-palette="voxready">
+
+<header class="topbar">
+  <span class="tb-title" id="tbTitle"></span>
+  <div class="tb-right">
+    <div class="ctrl"><span style="font-size:14px;">🌐</span>
+      <select class="lang" id="lang">
+        <option value="es">Español</option>
+        <option value="en">English</option>
+        <option value="pt">Português</option>
+      </select>
+    </div>
+    <button class="iconbtn" id="themeBtn" title="Modo claro / oscuro">🌙</button>
+    <div class="ctrl" id="palLabel">Paleta
+      <div class="swatches" id="swatches">
+        <span class="sw on" data-p="voxready" style="background:#17354F;" title="VoxReady"></span>
+        <span class="sw" data-p="teal" style="background:#0f6e56;"></span>
+        <span class="sw" data-p="coral" style="background:#b1502b;"></span>
+        <span class="sw" data-p="violet" style="background:#534ab7;"></span>
+      </div>
+    </div>
+    <div class="logo-slot" title="Cliente: Visum"><img src="Visum_logo.png" alt="Visum" style="max-width:104px;max-height:30px;display:block;"></div>
+    <div class="userchip" id="userChip" style="display:none;">
+      <div class="uava" id="uAva"></div>
+      <div class="umeta"><span class="uname" id="uName"></span><span class="urole" id="uRole"></span></div>
+      <button class="logoutbtn" id="logoutBtn">⎋ <span id="logoutLbl"></span></button>
+    </div>
+  </div>
+</header>
+
+<div class="login" id="loginView"></div>
+
+<div class="app" id="appView" style="display:none;">
+  <nav class="sidebar">
+    <div class="brand">
+      <span class="brandlogo-wrap"><img src="VoxReady_logo.png" alt="VoxReady" style="height:34px;display:block;"></span>
+      <p id="brandP"></p>
+    </div>
+    <div id="navWrap"></div>
+  </nav>
+  <main class="main" id="main"></main>
+</div>
+
+<script>
+/* ============ datos simulados de progreso ============ */
+const CHARTDATA = [
+  [55,60,64,67,70],   // Expresión
+  [62,68,73,78,81],   // Tono de voz
+  [60,66,70,75,79],   // Coherencia
+  [40,46,50,54,58]    // Empatía
+];
+const CHARTCOLORS = ['#17354F','#DB6427','#2f9c83','#9aa0a6'];
+
+/* ============ i18n strings ============ */
+const I = {
+  es:{
+    tbTitle:"VoxReady — Wireframe (prototipo)", palette:"Paleta", brandP:"Wireframe v0.4 · low-fi",
+    theme:"Modo claro / oscuro",
+    login:{title:"Inicia sesión en VoxReady",sub:"Selecciona un usuario de prueba o escribe tus credenciales.",
+      emailL:"Correo electrónico",emailPh:"tu@empresa.com",passL:"Contraseña",passPh:"••••••••",
+      signIn:"Iniciar sesión",err:"Correo no reconocido. Usa uno de los usuarios de prueba.",
+      testL:"Usuarios de prueba",logout:"Cerrar sesión"},
+    roles:["Usuario final (vocero)","Admin del cliente","Configurador maestro"],
+    nav:["Inicio / mis prácticas","Elegir escenario","Consentimiento + check técnico","Sesión de práctica (50/50)","Analizando…","Informe tipo coach","Mi progreso","Panel del cliente","Editor de tema","Política de retención","Panel maestro","Editor de rúbrica / patrón","Cola de etiquetado"],
+    practice:"Practicar", start:"Empezar", openLesson:"Abrir lección", back:"← Volver", noteUX:"Nota UX:",
+    L:{
+      u1:{crumbs:"Usuario final",title:"Inicio / mis prácticas",sub:"Lo primero que ve el vocero. La acción dominante es practicar; el progreso lo motiva a repetir.",
+        s1:"Sesiones completadas",s2:"Última puntuación global",s3:"Área a mejorar",s3v:"Nivel de empatía",
+        sugT:"Escenarios sugeridos para ti",sugHelp:"Recomendados según tu área más débil. Al elegir uno pasas al consentimiento y la comprobación técnica, y luego a la sesión.",
+        c1n:"Retiro de producto",c1c:"Eres el vocero ante prensa tras detectar un defecto. Entrevista de 8 preguntas.",c1m:["≈ 6 min","Intermedio","Dirección"],
+        c2n:"Incidente de seguridad",c2c:"Filtración de datos de clientes. Debes informar sin alarmar.",c2m:["≈ 5 min","Difícil","Planta"],
+        microT:"Microlecciones (teoría + ejemplo)",microMeta:"3–5 min · abre la lección",
+        m1:"Mensajes puente",m2:"Preguntas hostiles",m3:"Lenguaje no verbal",
+        note:"El botón “Practicar” es la acción dominante y lleva al flujo de sesión. Las microlecciones preparan al vocero entre prácticas y se recomiendan según su área más floja."},
+      u2:{crumbs:"Usuario final › Practicar",title:"Elegir escenario",sub:"Catálogo de temas que el admin configuró para el público interno del usuario.",
+        filters:["Todos","Sanitaria","Reputacional","Operativa"],search:"Buscar escenario…",img:"Imagen / icono",
+        dir:"Dirección",plant:"Planta",start:"Empezar",note:"Cada tarjeta marca el público interno para que el usuario vea solo lo pertinente a su rol."},
+      u3:{crumbs:"Usuario final › Practicar",title:"Consentimiento + comprobación técnica",sub:"Paso obligatorio antes de grabar. Bloquea el inicio hasta consentir y validar cámara/micrófono.",
+        camL:"Vista previa de cámara",camOk:"cámara OK",mic:"Micrófono",micOk:"Detectado",light:"Iluminación",lightW:"Mejorable",
+        consentL:"Consentimiento de grabación (biométrico)",legal:"Texto legal: se grabará su voz e imagen para evaluar su desempeño. Datos tratados como biométricos…",
+        chk1:"Acepto la grabación y el tratamiento según la política de retención de mi organización.",chk2:"Entiendo que puedo solicitar el borrado de mis grabaciones.",
+        beginBtn:"Comenzar sesión",cancel:"Cancelar",sesLang:"Marca ambas casillas para habilitar el botón.",
+        note:"“Comenzar” permanece deshabilitado hasta marcar ambos consentimientos. El check técnico evita grabaciones inservibles."},
+      u4:{crumbs:"Usuario final › Sesión en curso",title:"Sesión de práctica — vista dividida 50/50",sub:"Pantalla central. Entrevistador IA y self-view del mismo tamaño, lado a lado.",
+        interviewer:"Entrevistador IA",interviewerV:"Avatar / video del entrevistador",selfV:"Self-view del usuario",
+        qL:"Pregunta actual (subtítulo en vivo)",qEx:"¿Por qué su empresa tardó tres semanas en avisar a los clientes del defecto, sabiendo que ya había reportes de fallas?",pause:"⏸ Pausar",repeat:"Repetir pregunta",qn:"Pregunta 3 de 8",finish:"Finalizar entrevista",
+        note:"Nada se evalúa en pantalla durante la sesión (análisis asíncrono). Solo subtítulo en vivo + controles mínimos."},
+      u5:{crumbs:"Usuario final",title:"Analizando tu sesión…",sub:"Transición mientras corren los tres pipelines (voz, imagen, contenido) y la fusión.",
+        head:"Estamos preparando tu informe",small:"Suele tardar unos segundos.",
+        p1:"Transcribiendo y evaluando contenido",p2:"Analizando tono de voz",p3:"Analizando expresión y gesto",p4:"Integrando empatía (fusión)",
+        note:"Mostrar los pasos reduce la ansiedad de la espera y comunica que la evaluación es multimodal."},
+      u6:{crumbs:"Usuario final › Informe",title:"Informe tipo coach",sub:"Narrativa coach primero; los puntajes por área quedan como apoyo visual debajo.",
+        globalL:"Evaluación global",scenLine:"Escenario: retiro de producto · 24 jun 2026",good:"Lo que hiciste bien",improve:"Qué mejorar la próxima vez",
+        quote:"“Sonaste firme al dar los datos, pero al hablar del cliente afectado evitaste la mirada — eso restó empatía percibida.” (observación de ejemplo, señal cruzada)",
+        detail:"Detalle por área",areas:["Expresión","Tono de voz","Coherencia","Nivel de empatía"],watch:"▷ Ver mi grabación",redo:"Repetir este escenario",
+        note:"Primero el relato accionable (cómo mejorar), luego los números. La línea de tiempo con marcas por minuto queda para fase 2."},
+      u7:{crumbs:"Usuario final",title:"Mi progreso",sub:"Evolución de las cuatro áreas, recomendaciones y agenda de tu próxima sesión.",
+        trendL:"Tendencia de las 4 áreas (últimas 5 sesiones)",series:["Expresión","Tono de voz","Coherencia","Empatía"],
+        tblTitle:"Avance por área",tblCols:["Área","Actual","Cambio"],
+        recoTitle:"Recomendaciones para ti",
+        recos:[{t:"Trabaja el contacto visual",d:"Tu empatía baja cuando desvías la mirada. Practica mantenerla en momentos difíciles."},
+               {t:"Reduce muletillas",d:"Detectamos 14 “eh/este” por sesión. La microlección de dicción ayuda."},
+               {t:"Refuerza el mensaje puente",d:"Te cuesta volver a tu mensaje clave tras una pregunta trampa."}],
+        calTitle:"Programa tu próxima sesión",calHelp:"Elige un día en el calendario para agendar tu práctica.",
+        calBtn:"Confirmar",calNone:"sin fecha",nextLabel:"Próxima sesión:",
+        months:["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"],
+        weekdays:["L","M","X","J","V","S","D"],
+        note:"El progreso convierte la práctica suelta en un plan: gráfico de tendencia, recomendaciones accionables y un calendario para mantener el hábito."},
+      a1:{crumbs:"Admin del cliente",title:"Panel del cliente",sub:"El admin gestiona temas, usuarios y uso. No ve cómo se evalúa.",
+        st:["Temas activos","Voceros","Sesiones (mes)","Global medio"],themesL:"Temas configurados",newT:"+ Nuevo tema",
+        th:["Tema","Público interno","Idiomas","Retención",""],edit:"Editar",
+        rows:[["Retiro de producto","Dirección","ES, EN","90 días"],["Incidente de seguridad","Planta","ES","Solo métricas"],["Crisis reputacional","Dirección","ES, EN, PT","30 días"]],
+        note:"La tabla expone público interno y retención porque son las decisiones que el admin toca a diario."},
+      a2:{crumbs:"Admin del cliente › Temas",title:"Editor de tema",sub:"Paquete autocontenido: contexto, mensajes clave, óptica y público. Sin tocar la rúbrica.",
+        nameL:"Nombre del tema",nameV:"Retiro de producto",ctxL:"Contexto del escenario",ctxV:"Sector, tipo de crisis, situación de partida…",
+        opticL:"Óptica institucional",optics:["Empática","Formal","Técnica"],pubL:"Público interno",pubs:["Dirección","Planta","Técnicos"],
+        keyL:"Mensajes clave (sostener)",addMsg:"+ Añadir mensaje",redL:"Líneas rojas (nunca decir)",addRed:"+ Añadir línea roja",
+        save:"Guardar tema",preview:"Vista previa de una sesión",
+        note:"Mensajes clave y líneas rojas se editan como listas claras; alimentan la evaluación de “coherencia” aunque el admin no vea el scoring."},
+      a3:{crumbs:"Admin del cliente › Configuración",title:"Política de retención",sub:"Decisión sensible de datos biométricos. La define el admin del cliente.",
+        q1:"¿Qué se conserva tras cada sesión?",opt1:"Video + audio completos y métricas (permite autorrevisión y coaching)",opt2:"Solo métricas derivadas (no se guarda la grabación)",
+        termL:"Plazo de conservación",terms:["30 días","90 días","180 días","Personalizado"],termLeg:"Al expirar, las grabaciones se borran/anonimizan automáticamente (job por cliente).",
+        delL:"Solicitudes de borrado",th:["Usuario","Solicitado",""],delRow:["Vocero #14","22 jun"],process:"Procesar",
+        note:"El borrado por expiración y a solicitud son funciones de primera clase, no ajustes ocultos — exigido por el tratamiento de datos biométricos (UK GDPR)."},
+      m1:{crumbs:"Configurador maestro",title:"Panel maestro",sub:"El equipo central: salud del estándar global, cola de revisión y métricas entre clientes.",
+        st:["Clientes activos","Sesiones (semana)","En cola de revisión","Acuerdo IA-humano"],
+        verL:"Versión del patrón maestro",verLeg:"v0.4 · vigente para todos los clientes",openRub:"Abrir editor de rúbrica →",distL:"Distribución de puntajes (global)",hist:"Histograma",
+        note:"“Acuerdo IA-humano” es la métrica de calidad del producto: mide qué tanto coincide la IA con el etiquetado experto."},
+      m2:{crumbs:"Configurador maestro › Estándar",title:"Editor de rúbrica / patrón maestro",sub:"Define qué es “buena vocería”. Transversal a todos los clientes; es el activo del producto.",
+        areasL:"Áreas de evaluación y peso",th:["Área","Canal","Criterios","Peso"],
+        rows:[["Expresión","Imagen / no verbal","Contacto visual, postura, gesto","25%"],["Tono de voz","Voz / prosodia","Ritmo, pausas, muletillas, firmeza","25%"],["Coherencia","Contenido","Mensajes puente, líneas clave","30%"],["Nivel de empatía","Señal cruzada","Congruencia, calidez, reconocimiento","20%"]],
+        descL:"Descriptores por nivel (área: empatía)",descV:"Nivel alto / medio / bajo: definiciones que guían al LLM-juez…",
+        multiL:"Multiidioma",multiLeg:"La rúbrica de voz se ajusta por idioma (muletillas, ritmo).",publish:"Publicar versión",draft:"Guardar borrador",
+        note:"Versionar el patrón permite re-evaluar grabaciones antiguas cuando cambie el estándar."},
+      m3:{crumbs:"Configurador maestro › Calidad",title:"Cola de etiquetado y segunda opinión",sub:"El equipo central revisa casos de baja confianza; cada corrección calibra y entrena los modelos.",
+        queueL:"Cola (23)",q1:"Confianza baja · empatía",q2:"Puntaje límite",q3:"Muestreo aleatorio",
+        caseL:"Caso #8842 — revisión",rec:"Grabación",proposal:"Propuesta de la IA",areas:["Expresión","Tono","Coherencia","Empatía"],
+        commentL:"Comentario del experto",confirm:"Confirmar / corregir",skip:"Saltar",
+        note:"Esta pantalla es a la vez “segunda opinión” y generación de datos de entrenamiento. Un solo flujo, dos propósitos."},
+      lesson:{crumbs:"Usuario final › Microlección",backTo:"Volver al inicio",mins:"4 min",
+        objL:"Qué aprenderás",obj:"Cómo redirigir una pregunta difícil hacia tu mensaje clave sin evadir.",
+        vidL:"Video / ejemplo",exL:"Ejemplo comentado",exV:"Antes / después de una respuesta real…",cta:"Practicar un escenario con esto →",
+        note:"La microlección es teoría breve + ejemplo. No se evalúa: prepara al vocero. Al terminar, sugiere practicar un escenario relacionado."}
+    }
+  }
+};
+
+/* ---- English ---- */
+I.en = {
+  tbTitle:"VoxReady — Wireframe (prototype)", palette:"Palette", brandP:"Wireframe v0.4 · low-fi",
+  theme:"Light / dark mode",
+  login:{title:"Sign in to VoxReady",sub:"Pick a test user or type your credentials.",
+    emailL:"Email",emailPh:"you@company.com",passL:"Password",passPh:"••••••••",
+    signIn:"Sign in",err:"Email not recognized. Use one of the test users.",
+    testL:"Test users",logout:"Sign out"},
+  roles:["End user (spokesperson)","Client admin","Master configurator"],
+  nav:["Home / my practice","Choose scenario","Consent + tech check","Practice session (50/50)","Analyzing…","Coach-style report","My progress","Client dashboard","Topic editor","Retention policy","Master dashboard","Rubric / standard editor","Labeling queue"],
+  practice:"Practice", start:"Start", openLesson:"Open lesson", back:"← Back", noteUX:"UX note:",
+  L:{
+    u1:{crumbs:"End user",title:"Home / my practice",sub:"The first thing the spokesperson sees. Practice is the dominant action; progress drives repetition.",
+      s1:"Sessions completed",s2:"Latest overall score",s3:"Area to improve",s3v:"Empathy level",
+      sugT:"Scenarios suggested for you",sugHelp:"Recommended based on your weakest area. Choosing one takes you to consent and the tech check, then the session.",
+      c1n:"Product recall",c1c:"You're the spokesperson facing the press after a defect is found. 8-question interview.",c1m:["≈ 6 min","Intermediate","Leadership"],
+      c2n:"Security incident",c2c:"Customer data breach. You must inform without causing alarm.",c2m:["≈ 5 min","Hard","Frontline"],
+      microT:"Microlessons (theory + example)",microMeta:"3–5 min · opens the lesson",
+      m1:"Bridging messages",m2:"Hostile questions",m3:"Body language",
+      note:"The “Practice” button is the dominant action and leads into the session flow. Microlessons prep the spokesperson between practices and are recommended by weakest area."},
+    u2:{crumbs:"End user › Practice",title:"Choose scenario",sub:"Catalog of topics the admin configured for the user's internal audience.",
+      filters:["All","Health","Reputational","Operational"],search:"Search scenario…",img:"Image / icon",
+      dir:"Leadership",plant:"Frontline",start:"Start",note:"Each card marks the internal audience so the user only sees what's relevant to their role."},
+    u3:{crumbs:"End user › Practice",title:"Consent + technical check",sub:"Mandatory before recording. Blocks start until consent is given and camera/mic are validated.",
+      camL:"Camera preview",camOk:"camera OK",mic:"Microphone",micOk:"Detected",light:"Lighting",lightW:"Could improve",
+      consentL:"Recording consent (biometric)",legal:"Legal text: your voice and image will be recorded to evaluate your performance. Treated as biometric data…",
+      chk1:"I accept recording and processing per my organization's retention policy.",chk2:"I understand I can request deletion of my recordings.",
+      beginBtn:"Start session",cancel:"Cancel",sesLang:"Tick both boxes to enable the button.",
+      note:"“Start” stays disabled until both consents are checked. The tech check prevents unusable recordings."},
+    u4:{crumbs:"End user › Session in progress",title:"Practice session — split 50/50 view",sub:"Core screen. AI interviewer and self-view at the same size, side by side.",
+      interviewer:"AI interviewer",interviewerV:"Interviewer avatar / video",selfV:"User self-view",
+      qL:"Current question (live caption)",qEx:"Why did your company take three weeks to warn customers about the defect, when failure reports were already coming in?",pause:"⏸ Pause",repeat:"Repeat question",qn:"Question 3 of 8",finish:"End interview",
+      note:"Nothing is scored on screen during the session (asynchronous analysis). Only a live caption + minimal controls."},
+    u5:{crumbs:"End user",title:"Analyzing your session…",sub:"Transition while the three pipelines (voice, image, content) and fusion run.",
+      head:"We're preparing your report",small:"Usually takes a few seconds.",
+      p1:"Transcribing and scoring content",p2:"Analyzing tone of voice",p3:"Analyzing expression and gesture",p4:"Integrating empathy (fusion)",
+      note:"Showing the steps reduces wait anxiety and signals the evaluation is multimodal."},
+    u6:{crumbs:"End user › Report",title:"Coach-style report",sub:"Coach narrative first; area scores sit below as visual support.",
+      globalL:"Overall evaluation",scenLine:"Scenario: product recall · Jun 24, 2026",good:"What you did well",improve:"What to improve next time",
+      quote:"“You sounded firm on the data, but you avoided eye contact when talking about the affected customer — that lowered perceived empathy.” (sample observation, cross-signal)",
+      detail:"Detail by area",areas:["Expression","Tone of voice","Coherence","Empathy level"],watch:"▷ Watch my recording",redo:"Redo this scenario",
+      note:"The actionable narrative first (how to improve), then the numbers. The per-minute timeline is left for phase 2."},
+    u7:{crumbs:"End user",title:"My progress",sub:"Evolution of the four areas, recommendations and scheduling your next session.",
+      trendL:"Trend of the 4 areas (last 5 sessions)",series:["Expression","Tone","Coherence","Empathy"],
+      tblTitle:"Progress by area",tblCols:["Area","Current","Change"],
+      recoTitle:"Recommendations for you",
+      recos:[{t:"Work on eye contact",d:"Your empathy drops when you look away. Practice holding it during hard moments."},
+             {t:"Reduce fillers",d:"We detected 14 “um/uh” per session. The diction microlesson helps."},
+             {t:"Reinforce the bridge",d:"You struggle to return to your key message after a trap question."}],
+      calTitle:"Schedule your next session",calHelp:"Pick a day in the calendar to book your practice.",
+      calBtn:"Confirm",calNone:"no date",nextLabel:"Next session:",
+      months:["January","February","March","April","May","June","July","August","September","October","November","December"],
+      weekdays:["M","T","W","T","F","S","S"],
+      note:"Progress turns loose practice into a plan: trend chart, actionable recommendations and a calendar to keep the habit."},
+    a1:{crumbs:"Client admin",title:"Client dashboard",sub:"The admin manages topics, users and usage. Does not see how scoring works.",
+      st:["Active topics","Spokespeople","Sessions (month)","Average overall"],themesL:"Configured topics",newT:"+ New topic",
+      th:["Topic","Internal audience","Languages","Retention",""],edit:"Edit",
+      rows:[["Product recall","Leadership","ES, EN","90 days"],["Security incident","Frontline","ES","Metrics only"],["Reputational crisis","Leadership","ES, EN, PT","30 days"]],
+      note:"The table surfaces internal audience and retention because they're the decisions the admin touches daily."},
+    a2:{crumbs:"Client admin › Topics",title:"Topic editor",sub:"Self-contained package: context, key messages, optics and audience. Without touching the rubric.",
+      nameL:"Topic name",nameV:"Product recall",ctxL:"Scenario context",ctxV:"Sector, type of crisis, starting situation…",
+      opticL:"Institutional optics",optics:["Empathetic","Formal","Technical"],pubL:"Internal audience",pubs:["Leadership","Frontline","Technical"],
+      keyL:"Key messages (hold)",addMsg:"+ Add message",redL:"Red lines (never say)",addRed:"+ Add red line",
+      save:"Save topic",preview:"Preview a session",
+      note:"Key messages and red lines are edited as clear lists; they feed the “coherence” score even though the admin doesn't see scoring."},
+    a3:{crumbs:"Client admin › Settings",title:"Retention policy",sub:"Sensitive biometric-data decision. Set by the client admin.",
+      q1:"What is kept after each session?",opt1:"Full video + audio and metrics (enables self-review and coaching)",opt2:"Derived metrics only (recording not stored)",
+      termL:"Retention term",terms:["30 days","90 days","180 days","Custom"],termLeg:"On expiry, recordings are auto-deleted/anonymized (per-client job).",
+      delL:"Deletion requests",th:["User","Requested",""],delRow:["Spokesperson #14","Jun 22"],process:"Process",
+      note:"Expiry and on-request deletion are first-class functions, not hidden settings — required by biometric data processing (UK GDPR)."},
+    m1:{crumbs:"Master configurator",title:"Master dashboard",sub:"The central team: health of the global standard, review queue and cross-client metrics.",
+      st:["Active clients","Sessions (week)","In review queue","AI-human agreement"],
+      verL:"Master standard version",verLeg:"v0.4 · live for all clients",openRub:"Open rubric editor →",distL:"Score distribution (global)",hist:"Histogram",
+      note:"“AI-human agreement” is the product's quality metric: how much the AI matches expert labeling."},
+    m2:{crumbs:"Master configurator › Standard",title:"Rubric / master standard editor",sub:"Defines what “good spokesmanship” is. Cross-client; it's the product's core asset.",
+      areasL:"Evaluation areas and weight",th:["Area","Channel","Criteria","Weight"],
+      rows:[["Expression","Image / non-verbal","Eye contact, posture, gesture","25%"],["Tone of voice","Voice / prosody","Pace, pauses, fillers, firmness","25%"],["Coherence","Content","Bridging messages, key lines","30%"],["Empathy level","Cross-signal","Congruence, warmth, acknowledgment","20%"]],
+      descL:"Level descriptors (area: empathy)",descV:"High / medium / low level: definitions that guide the LLM judge…",
+      multiL:"Multilingual",multiLeg:"The voice rubric adjusts by language (fillers, pace).",publish:"Publish version",draft:"Save draft",
+      note:"Versioning the standard lets you re-evaluate old recordings when the standard changes."},
+    m3:{crumbs:"Master configurator › Quality",title:"Labeling and second-opinion queue",sub:"The central team reviews low-confidence cases; each correction calibrates and trains the models.",
+      queueL:"Queue (23)",q1:"Low confidence · empathy",q2:"Borderline score",q3:"Random sampling",
+      caseL:"Case #8842 — review",rec:"Recording",proposal:"AI proposal",areas:["Expression","Tone","Coherence","Empathy"],
+      commentL:"Expert comment",confirm:"Confirm / correct",skip:"Skip",
+      note:"This screen is both “second opinion” and training-data generation. One flow, two purposes."},
+    lesson:{crumbs:"End user › Microlesson",backTo:"Back to home",mins:"4 min",
+      objL:"What you'll learn",obj:"How to redirect a hard question toward your key message without dodging.",
+      vidL:"Video / example",exL:"Annotated example",exV:"Before / after of a real answer…",cta:"Practice a scenario with this →",
+      note:"The microlesson is brief theory + example. It isn't scored: it preps the spokesperson. At the end it suggests practicing a related scenario."}
+  }
+};
+
+/* ---- Português ---- */
+I.pt = {
+  tbTitle:"VoxReady — Wireframe (protótipo)", palette:"Paleta", brandP:"Wireframe v0.4 · low-fi",
+  theme:"Modo claro / escuro",
+  login:{title:"Entre no VoxReady",sub:"Escolha um usuário de teste ou digite suas credenciais.",
+    emailL:"E-mail",emailPh:"voce@empresa.com",passL:"Senha",passPh:"••••••••",
+    signIn:"Entrar",err:"E-mail não reconhecido. Use um dos usuários de teste.",
+    testL:"Usuários de teste",logout:"Sair"},
+  roles:["Usuário final (porta-voz)","Admin do cliente","Configurador mestre"],
+  nav:["Início / minhas práticas","Escolher cenário","Consentimento + verificação técnica","Sessão de prática (50/50)","Analisando…","Relatório tipo coach","Meu progresso","Painel do cliente","Editor de tema","Política de retenção","Painel mestre","Editor de rubrica / padrão","Fila de rotulagem"],
+  practice:"Praticar", start:"Começar", openLesson:"Abrir lição", back:"← Voltar", noteUX:"Nota UX:",
+  L:{
+    u1:{crumbs:"Usuário final",title:"Início / minhas práticas",sub:"O primeiro que o porta-voz vê. Praticar é a ação dominante; o progresso motiva a repetir.",
+      s1:"Sessões concluídas",s2:"Última pontuação global",s3:"Área a melhorar",s3v:"Nível de empatia",
+      sugT:"Cenários sugeridos para você",sugHelp:"Recomendados conforme sua área mais fraca. Ao escolher um, você vai ao consentimento e à verificação técnica e depois à sessão.",
+      c1n:"Recall de produto",c1c:"Você é o porta-voz diante da imprensa após detectar um defeito. Entrevista de 8 perguntas.",c1m:["≈ 6 min","Intermediário","Direção"],
+      c2n:"Incidente de segurança",c2c:"Vazamento de dados de clientes. Você deve informar sem alarmar.",c2m:["≈ 5 min","Difícil","Operação"],
+      microT:"Microlições (teoria + exemplo)",microMeta:"3–5 min · abre a lição",
+      m1:"Mensagens-ponte",m2:"Perguntas hostis",m3:"Linguagem não verbal",
+      note:"O botão “Praticar” é a ação dominante e leva ao fluxo da sessão. As microlições preparam o porta-voz entre práticas e são recomendadas pela área mais fraca."},
+    u2:{crumbs:"Usuário final › Praticar",title:"Escolher cenário",sub:"Catálogo de temas que o admin configurou para o público interno do usuário.",
+      filters:["Todos","Sanitária","Reputacional","Operacional"],search:"Buscar cenário…",img:"Imagem / ícone",
+      dir:"Direção",plant:"Operação",start:"Começar",note:"Cada cartão marca o público interno para o usuário ver só o pertinente ao seu papel."},
+    u3:{crumbs:"Usuário final › Praticar",title:"Consentimento + verificação técnica",sub:"Passo obrigatório antes de gravar. Bloqueia o início até consentir e validar câmera/microfone.",
+      camL:"Pré-visualização da câmera",camOk:"câmera OK",mic:"Microfone",micOk:"Detectado",light:"Iluminação",lightW:"Pode melhorar",
+      consentL:"Consentimento de gravação (biométrico)",legal:"Texto legal: sua voz e imagem serão gravadas para avaliar seu desempenho. Dados tratados como biométricos…",
+      chk1:"Aceito a gravação e o tratamento conforme a política de retenção da minha organização.",chk2:"Entendo que posso solicitar a exclusão das minhas gravações.",
+      beginBtn:"Começar sessão",cancel:"Cancelar",sesLang:"Marque as duas caixas para habilitar o botão.",
+      note:"“Começar” fica desabilitado até marcar ambos os consentimentos. A verificação técnica evita gravações inservíveis."},
+    u4:{crumbs:"Usuário final › Sessão em curso",title:"Sessão de prática — vista dividida 50/50",sub:"Tela central. Entrevistador IA e self-view do mesmo tamanho, lado a lado.",
+      interviewer:"Entrevistador IA",interviewerV:"Avatar / vídeo do entrevistador",selfV:"Self-view do usuário",
+      qL:"Pergunta atual (legenda ao vivo)",qEx:"Por que sua empresa demorou três semanas para avisar os clientes sobre o defeito, mesmo já havendo relatos de falhas?",pause:"⏸ Pausar",repeat:"Repetir pergunta",qn:"Pergunta 3 de 8",finish:"Encerrar entrevista",
+      note:"Nada é avaliado na tela durante a sessão (análise assíncrona). Só legenda ao vivo + controles mínimos."},
+    u5:{crumbs:"Usuário final",title:"Analisando sua sessão…",sub:"Transição enquanto rodam os três pipelines (voz, imagem, conteúdo) e a fusão.",
+      head:"Estamos preparando seu relatório",small:"Costuma levar alguns segundos.",
+      p1:"Transcrevendo e avaliando conteúdo",p2:"Analisando tom de voz",p3:"Analisando expressão e gesto",p4:"Integrando empatia (fusão)",
+      note:"Mostrar os passos reduz a ansiedade da espera e comunica que a avaliação é multimodal."},
+    u6:{crumbs:"Usuário final › Relatório",title:"Relatório tipo coach",sub:"Narrativa coach primeiro; as pontuações por área ficam como apoio visual abaixo.",
+      globalL:"Avaliação global",scenLine:"Cenário: recall de produto · 24 jun 2026",good:"O que você fez bem",improve:"O que melhorar da próxima vez",
+      quote:"“Você soou firme nos dados, mas evitou o olhar ao falar do cliente afetado — isso reduziu a empatia percebida.” (observação de exemplo, sinal cruzado)",
+      detail:"Detalhe por área",areas:["Expressão","Tom de voz","Coerência","Nível de empatia"],watch:"▷ Ver minha gravação",redo:"Repetir este cenário",
+      note:"Primeiro o relato acionável (como melhorar), depois os números. A linha do tempo por minuto fica para a fase 2."},
+    u7:{crumbs:"Usuário final",title:"Meu progresso",sub:"Evolução das quatro áreas, recomendações e agendamento da próxima sessão.",
+      trendL:"Tendência das 4 áreas (últimas 5 sessões)",series:["Expressão","Tom","Coerência","Empatia"],
+      tblTitle:"Avanço por área",tblCols:["Área","Atual","Variação"],
+      recoTitle:"Recomendações para você",
+      recos:[{t:"Trabalhe o contato visual",d:"Sua empatia cai quando desvia o olhar. Pratique mantê-lo nos momentos difíceis."},
+             {t:"Reduza vícios de linguagem",d:"Detectamos 14 “é/né” por sessão. A microlição de dicção ajuda."},
+             {t:"Reforce a mensagem-ponte",d:"Você tem dificuldade em voltar à mensagem-chave após uma pergunta-armadilha."}],
+      calTitle:"Agende sua próxima sessão",calHelp:"Escolha um dia no calendário para marcar sua prática.",
+      calBtn:"Confirmar",calNone:"sem data",nextLabel:"Próxima sessão:",
+      months:["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"],
+      weekdays:["S","T","Q","Q","S","S","D"],
+      note:"O progresso transforma a prática solta em um plano: gráfico de tendência, recomendações acionáveis e um calendário para manter o hábito."},
+    a1:{crumbs:"Admin do cliente",title:"Painel do cliente",sub:"O admin gerencia temas, usuários e uso. Não vê como se avalia.",
+      st:["Temas ativos","Porta-vozes","Sessões (mês)","Global médio"],themesL:"Temas configurados",newT:"+ Novo tema",
+      th:["Tema","Público interno","Idiomas","Retenção",""],edit:"Editar",
+      rows:[["Recall de produto","Direção","ES, EN","90 dias"],["Incidente de segurança","Operação","ES","Só métricas"],["Crise reputacional","Direção","ES, EN, PT","30 dias"]],
+      note:"A tabela expõe público interno e retenção porque são as decisões que o admin toca no dia a dia."},
+    a2:{crumbs:"Admin do cliente › Temas",title:"Editor de tema",sub:"Pacote autocontido: contexto, mensagens-chave, ótica e público. Sem tocar na rubrica.",
+      nameL:"Nome do tema",nameV:"Recall de produto",ctxL:"Contexto do cenário",ctxV:"Setor, tipo de crise, situação inicial…",
+      opticL:"Ótica institucional",optics:["Empática","Formal","Técnica"],pubL:"Público interno",pubs:["Direção","Operação","Técnicos"],
+      keyL:"Mensagens-chave (sustentar)",addMsg:"+ Adicionar mensagem",redL:"Linhas vermelhas (nunca dizer)",addRed:"+ Adicionar linha vermelha",
+      save:"Salvar tema",preview:"Prévia de uma sessão",
+      note:"Mensagens-chave e linhas vermelhas são editadas como listas claras; alimentam a avaliação de “coerência” mesmo que o admin não veja a pontuação."},
+    a3:{crumbs:"Admin do cliente › Configuração",title:"Política de retenção",sub:"Decisão sensível de dados biométricos. Definida pelo admin do cliente.",
+      q1:"O que se conserva após cada sessão?",opt1:"Vídeo + áudio completos e métricas (permite autorrevisão e coaching)",opt2:"Apenas métricas derivadas (gravação não é guardada)",
+      termL:"Prazo de conservação",terms:["30 dias","90 dias","180 dias","Personalizado"],termLeg:"Ao expirar, as gravações são apagadas/anonimizadas automaticamente (job por cliente).",
+      delL:"Solicitações de exclusão",th:["Usuário","Solicitado",""],delRow:["Porta-voz #14","22 jun"],process:"Processar",
+      note:"A exclusão por expiração e a pedido são funções de primeira classe, não ajustes ocultos — exigido pelo tratamento de dados biométricos (UK GDPR)."},
+    m1:{crumbs:"Configurador mestre",title:"Painel mestre",sub:"A equipe central: saúde do padrão global, fila de revisão e métricas entre clientes.",
+      st:["Clientes ativos","Sessões (semana)","Na fila de revisão","Concordância IA-humano"],
+      verL:"Versão do padrão mestre",verLeg:"v0.4 · vigente para todos os clientes",openRub:"Abrir editor de rubrica →",distL:"Distribuição de pontuações (global)",hist:"Histograma",
+      note:"“Concordância IA-humano” é a métrica de qualidade do produto: o quanto a IA coincide com a rotulagem especialista."},
+    m2:{crumbs:"Configurador mestre › Padrão",title:"Editor de rubrica / padrão mestre",sub:"Define o que é “boa porta-vozaria”. Transversal a todos os clientes; é o ativo do produto.",
+      areasL:"Áreas de avaliação e peso",th:["Área","Canal","Critérios","Peso"],
+      rows:[["Expressão","Imagem / não verbal","Contato visual, postura, gesto","25%"],["Tom de voz","Voz / prosódia","Ritmo, pausas, vícios, firmeza","25%"],["Coerência","Conteúdo","Mensagens-ponte, linhas-chave","30%"],["Nível de empatia","Sinal cruzado","Congruência, calor, reconhecimento","20%"]],
+      descL:"Descritores por nível (área: empatia)",descV:"Nível alto / médio / baixo: definições que guiam o LLM-juiz…",
+      multiL:"Multi-idioma",multiLeg:"A rubrica de voz se ajusta por idioma (vícios, ritmo).",publish:"Publicar versão",draft:"Salvar rascunho",
+      note:"Versionar o padrão permite reavaliar gravações antigas quando o padrão mudar."},
+    m3:{crumbs:"Configurador mestre › Qualidade",title:"Fila de rotulagem e segunda opinião",sub:"A equipe central revisa casos de baixa confiança; cada correção calibra e treina os modelos.",
+      queueL:"Fila (23)",q1:"Baixa confiança · empatia",q2:"Pontuação limítrofe",q3:"Amostragem aleatória",
+      caseL:"Caso #8842 — revisão",rec:"Gravação",proposal:"Proposta da IA",areas:["Expressão","Tom","Coerência","Empatia"],
+      commentL:"Comentário do especialista",confirm:"Confirmar / corrigir",skip:"Pular",
+      note:"Esta tela é ao mesmo tempo “segunda opinião” e geração de dados de treino. Um fluxo, dois propósitos."},
+    lesson:{crumbs:"Usuário final › Microlição",backTo:"Voltar ao início",mins:"4 min",
+      objL:"O que você vai aprender",obj:"Como redirecionar uma pergunta difícil para sua mensagem-chave sem evadir.",
+      vidL:"Vídeo / exemplo",exL:"Exemplo comentado",exV:"Antes / depois de uma resposta real…",cta:"Praticar um cenário com isto →",
+      note:"A microlição é teoria breve + exemplo. Não é avaliada: prepara o porta-voz. No fim, sugere praticar um cenário relacionado."}
+  }
+};
+
+/* ============ chart helper (SVG line chart) ============ */
+function buildChart(){
+  const W=600,H=190,pl=30,pr=10,pt=12,pb=22,n=CHARTDATA[0].length;
+  const x=i=>Math.round(pl+i*(W-pl-pr)/(n-1));
+  const y=v=>Math.round(pt+(100-v)/(100-30)*(H-pt-pb));
+  let grid='';
+  [40,60,80].forEach(g=>{grid+=`<line x1="${pl}" y1="${y(g)}" x2="${W-pr}" y2="${y(g)}" style="stroke:var(--line)" stroke-width="1"/><text x="4" y="${y(g)+3}" font-size="9" style="fill:var(--muted)">${g}</text>`;});
+  let lines='';
+  CHARTDATA.forEach((s,si)=>{
+    const pts=s.map((v,i)=>`${x(i)},${y(v)}`).join(' ');
+    lines+=`<polyline points="${pts}" fill="none" stroke="${CHARTCOLORS[si]}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    s.forEach((v,i)=>{lines+=`<circle cx="${x(i)}" cy="${y(v)}" r="2.8" fill="${CHARTCOLORS[si]}"/>`;});
+  });
+  let xl='';
+  for(let i=0;i<n;i++) xl+=`<text x="${x(i)}" y="${H-6}" font-size="9" style="fill:var(--muted)" text-anchor="middle">S${i+1}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;">${grid}${lines}${xl}</svg>`;
+}
+
+/* ============ screen templates ============ */
+const bars = n => '<div class="bar l" style="margin-bottom:6px;"></div>'.repeat(n);
+const TPL = {
+  u1:(t,c)=>`
+    <div class="row" style="margin-bottom:16px;">
+      <div class="stat col"><div class="k">${t.s1}</div><div class="v">12</div></div>
+      <div class="stat col"><div class="k">${t.s2}</div><div class="v">74</div></div>
+      <div class="stat col"><div class="k">${t.s3}</div><div class="v" style="font-size:15px;">${t.s3v}</div></div>
+    </div>
+    <div class="row">
+      <div class="card col">
+        <div class="label">${t.sugT}</div>
+        <div class="legend" style="margin:-2px 0 12px;">${t.sugHelp}</div>
+        <div class="scard" style="margin-bottom:10px;">
+          <h4>${t.c1n}</h4><p class="ctx">${t.c1c}</p>
+          <div class="meta">${t.c1m.map(m=>`<span class="tagm">${m}</span>`).join('')}</div>
+          <div><span class="btn pri" onclick="go('u3')">${c.practice}</span></div>
+        </div>
+        <div class="scard">
+          <h4>${t.c2n}</h4><p class="ctx">${t.c2c}</p>
+          <div class="meta">${t.c2m.map(m=>`<span class="tagm">${m}</span>`).join('')}</div>
+          <div><span class="btn nav" onclick="go('u3')">${c.practice}</span></div>
+        </div>
+      </div>
+      <div class="card" style="width:236px;">
+        <div class="label">${t.microT}</div>
+        ${[t.m1,t.m2,t.m3].map(m=>`<div class="box" style="padding:10px;margin-bottom:8px;cursor:pointer;" onclick="goLesson('${m.replace(/'/g,"")}')"><div style="font-size:13px;font-weight:600;margin-bottom:3px;">${m}</div><div class="legend" style="margin:0;">${t.microMeta}</div></div>`).join('')}
+      </div>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  u2:(t,c)=>`
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      ${t.filters.map((f,i)=>`<span class="pill ${i===0?'on':''}">${f}</span>`).join('')}
+      <span class="field" style="margin-left:auto;width:200px;">${t.search}</span>
+    </div>
+    <div class="grid3">
+      ${[1,2,3,4,5,6].map(i=>`
+      <div class="card">
+        <div class="ph" style="height:80px;margin-bottom:10px;">${t.img}</div>
+        <div class="bar m" style="margin-bottom:7px;"></div>
+        <div class="bar l" style="height:8px;margin-bottom:4px;"></div>
+        <div class="bar s" style="height:8px;margin-bottom:12px;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span class="pill">${i%2?t.dir:t.plant}</span>
+          <span class="btn pri" onclick="go('u3')">${t.start}</span>
+        </div>
+      </div>`).join('')}
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  u3:(t,c)=>`
+    <div class="row">
+      <div class="card col">
+        <div class="label">${t.camL}</div>
+        <div class="self" style="min-height:200px;">${t.camL}<div class="reclamp" style="background:rgba(0,0,0,.3);"><i class="recdot" style="background:#3b6d11;"></i> ${t.camOk}</div></div>
+        <div style="margin-top:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>${t.mic}</span><span style="color:#3b6d11;">${t.micOk}</span></div>
+          <div class="meter"><i style="width:60%;background:#3b6d11;"></i></div>
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin:12px 0 6px;"><span>${t.light}</span><span style="color:#b07d00;">${t.lightW}</span></div>
+          <div class="meter"><i style="width:45%;background:#ba7517;"></i></div>
+        </div>
+      </div>
+      <div class="card col">
+        <div class="label">${t.consentL}</div>
+        <div class="area" style="min-height:110px;">${t.legal}</div>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;font-size:12px;cursor:pointer;"><input type="checkbox" class="consent"> <span>${t.chk1}</span></label>
+        <label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:12px;cursor:pointer;"><input type="checkbox" class="consent"> <span>${t.chk2}</span></label>
+        <div style="margin-top:16px;display:flex;gap:10px;"><span class="btn pri disabled" id="beginBtn">${t.beginBtn}</span><span class="btn ghost" onclick="go('u2')">${t.cancel}</span></div>
+        <div class="legend">${t.sesLang}</div>
+      </div>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  u4:(t,c)=>`
+    <div class="grid2" style="margin-bottom:14px;">
+      <div class="vid"><span class="tag">${t.interviewer}</span>${t.interviewerV}</div>
+      <div class="self"><div class="reclamp"><i class="recdot"></i> REC 02:14</div>${t.selfV}</div>
+    </div>
+    <div class="card" style="margin-bottom:14px;border-left:3px solid var(--accent2);">
+      <div class="label">${t.qL}</div>
+      <div style="font-size:16px;line-height:1.5;color:var(--ink);font-weight:500;">“${t.qEx}”</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <span class="btn">${t.pause}</span><span class="btn ghost">${t.repeat}</span>
+      <div class="meter col" style="max-width:320px;"><i style="width:38%;"></i></div>
+      <span style="font-size:12px;color:var(--muted);">${t.qn}</span>
+      <span class="btn pri" style="margin-left:auto;" onclick="go('u5')">${t.finish}</span>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  u5:(t,c)=>`
+    <div class="card" style="text-align:center;padding:40px;">
+      <div class="ph" style="height:60px;width:60px;border-radius:50%;margin:0 auto 18px;">◷</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:6px;">${t.head}</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:22px;">${t.small}</div>
+      <div style="max-width:380px;margin:0 auto;text-align:left;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>${t.p1}</span><span style="color:#3b6d11;">✓</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>${t.p2}</span><span style="color:#3b6d11;">✓</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px;"><span>${t.p3}</span><span style="color:var(--muted);">…</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;"><span>${t.p4}</span><span style="color:var(--muted);">·</span></div>
+      </div>
+      <div style="margin-top:22px;"><span class="btn pri" onclick="go('u6')">→</span></div>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  u6:(t,c)=>`
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div><div class="label" style="margin:0;">${t.globalL}</div><div style="font-size:13px;color:var(--muted);">${t.scenLine}</div></div>
+        <div style="text-align:center;"><div style="font-size:32px;font-weight:700;color:var(--accent);">74</div><div style="font-size:11px;color:var(--muted);">/100</div></div>
+      </div>
+      <div class="label">${t.good}</div>${bars(2)}<div class="bar m" style="margin-bottom:16px;"></div>
+      <div class="label">${t.improve}</div><div class="bar l" style="margin-bottom:6px;"></div><div class="bar m"></div>
+      <div class="box soft" style="padding:10px;margin-top:10px;font-size:12px;color:var(--muted);">${t.quote}</div>
+    </div>
+    <div class="label">${t.detail}</div>
+    <div class="grid4" style="margin-bottom:6px;">
+      ${t.areas.map((n,i)=>{const v=[70,81,79,58][i];return `<div class="areaScore"><div class="top"><span class="name">${n}</span><span class="sc">${v}</span></div><div class="meter"><i style="width:${v}%;"></i></div></div>`;}).join('')}
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px;"><span class="btn ghost">${t.watch}</span><span class="btn pri" onclick="go('u3')">${t.redo}</span></div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  u7:(t,c)=>`
+    <div class="row" style="margin-bottom:14px;align-items:stretch;">
+      <div class="card" style="flex:1.45;min-width:0;">
+        <div class="label">${t.trendL}</div>
+        ${buildChart()}
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;">
+          ${t.series.map((s,i)=>`<span style="font-size:11px;color:var(--muted);"><span style="display:inline-block;width:11px;height:11px;border-radius:2px;background:${CHARTCOLORS[i]};margin-right:5px;vertical-align:-1px;"></span>${s}</span>`).join('')}
+        </div>
+      </div>
+      <div class="card" style="flex:1;min-width:0;">
+        <div class="label">${t.tblTitle}</div>
+        <table class="wf" style="margin-top:8px;">
+          <tr>${t.tblCols.map((h,i)=>`<th${i?' style="text-align:center;"':''}>${h}</th>`).join('')}</tr>
+          ${t.series.map((s,i)=>{const d=CHARTDATA[i];const cur=d[d.length-1];const ch=cur-d[0];return `<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${CHARTCOLORS[i]};margin-right:7px;vertical-align:0;"></span>${s}</td><td style="text-align:center;font-weight:600;">${cur}</td><td style="text-align:center;color:#3b6d11;font-weight:600;">▲ +${ch}</td></tr>`;}).join('')}
+        </table>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card">
+        <div class="label">${t.recoTitle}</div>
+        ${t.recos.map(r=>`<div class="box" style="padding:11px;margin-bottom:8px;"><div style="font-size:13px;font-weight:600;margin-bottom:3px;">${r.t}</div><div class="legend" style="margin:0 0 8px;">${r.d}</div><span class="btn" onclick="goLesson('${r.t.replace(/'/g,'')}')">${c.openLesson}</span></div>`).join('')}
+      </div>
+      <div class="card">
+        <div class="label">${t.calTitle}</div>
+        <div class="legend" style="margin:-2px 0 10px;">${t.calHelp}</div>
+        <div class="calhead">
+          <span class="btn ghost" id="calPrev" style="padding:3px 10px;">‹</span>
+          <span id="calMonth" style="font-size:13px;font-weight:600;text-transform:capitalize;"></span>
+          <span class="btn ghost" id="calNext" style="padding:3px 10px;">›</span>
+        </div>
+        <div class="calgrid">${t.weekdays.map(w=>`<div class="dow">${w}</div>`).join('')}</div>
+        <div class="calgrid" id="calGrid" style="margin-top:4px;"></div>
+        <div style="margin-top:13px;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:12px;color:var(--muted);">${t.nextLabel} <b id="calSel" style="color:var(--accent2);"></b></span>
+          <span class="btn pri">${t.calBtn}</span>
+        </div>
+      </div>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  a1:(t,c)=>`
+    <div class="grid4" style="margin-bottom:16px;">${t.st.map((k,i)=>`<div class="stat"><div class="k">${k}</div><div class="v">${[6,38,152,71][i]}</div></div>`).join('')}</div>
+    <div class="row" style="margin-bottom:8px;"><div class="label" style="margin:0;">${t.themesL}</div><span class="btn pri" style="margin-left:auto;">${t.newT}</span></div>
+    <table class="wf"><tr>${t.th.map(h=>`<th>${h}</th>`).join('')}</tr>${t.rows.map(r=>`<tr>${r.map(x=>`<td>${x}</td>`).join('')}<td><span class="btn">${t.edit}</span></td></tr>`).join('')}</table>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  a2:(t,c)=>`
+    <div class="row">
+      <div class="col">
+        <div class="label">${t.nameL}</div><div class="field" style="margin-bottom:14px;">${t.nameV}</div>
+        <div class="label">${t.ctxL}</div><div class="area" style="margin-bottom:14px;">${t.ctxV}</div>
+        <div class="label">${t.opticL}</div><div style="display:flex;gap:8px;margin-bottom:14px;">${t.optics.map((o,i)=>`<span class="pill ${i===0?'on':''}">${o}</span>`).join('')}</div>
+        <div class="label">${t.pubL}</div><div style="display:flex;gap:8px;">${t.pubs.map((o,i)=>`<span class="pill ${i===0?'on':''}">${o}</span>`).join('')}</div>
+      </div>
+      <div class="col">
+        <div class="label">${t.keyL}</div>
+        <div class="box" style="padding:8px;margin-bottom:8px;display:flex;justify-content:space-between;"><span class="bar m"></span><span style="color:var(--muted);">×</span></div>
+        <div class="box" style="padding:8px;margin-bottom:8px;display:flex;justify-content:space-between;"><span class="bar s"></span><span style="color:var(--muted);">×</span></div>
+        <span class="btn ghost" style="margin-bottom:16px;">${t.addMsg}</span>
+        <div class="label">${t.redL}</div>
+        <div class="box" style="padding:8px;margin-bottom:8px;border-color:#e0a3a3;display:flex;justify-content:space-between;"><span class="bar m"></span><span style="color:var(--muted);">×</span></div>
+        <span class="btn ghost">${t.addRed}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px;"><span class="btn pri">${t.save}</span><span class="btn ghost">${t.preview}</span></div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  a3:(t,c)=>`
+    <div class="card" style="margin-bottom:14px;">
+      <div class="label">${t.q1}</div>
+      <label style="display:block;margin:10px 0;"><input type="radio" name="r" checked> ${t.opt1}</label>
+      <label style="display:block;margin:10px 0;"><input type="radio" name="r"> ${t.opt2}</label>
+    </div>
+    <div class="card" style="margin-bottom:14px;">
+      <div class="label">${t.termL}</div>
+      <div style="display:flex;gap:8px;margin-top:8px;">${t.terms.map((x,i)=>`<span class="pill ${i===1?'on':''}">${x}</span>`).join('')}</div>
+      <div class="legend">${t.termLeg}</div>
+    </div>
+    <div class="card"><div class="label">${t.delL}</div><table class="wf" style="margin-top:8px;"><tr>${t.th.map(h=>`<th>${h}</th>`).join('')}</tr><tr><td>${t.delRow[0]}</td><td>${t.delRow[1]}</td><td><span class="btn">${t.process}</span></td></tr></table></div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  m1:(t,c)=>`
+    <div class="grid4" style="margin-bottom:16px;">${t.st.map((k,i)=>`<div class="stat"><div class="k">${k}</div><div class="v">${['9','640','23','88%'][i]}</div></div>`).join('')}</div>
+    <div class="row">
+      <div class="card col"><div class="label">${t.verL}</div><div class="bar m" style="margin:10px 0;"></div><div class="legend">${t.verLeg}</div><div style="margin-top:12px;"><span class="btn" onclick="go('m2')">${t.openRub}</span></div></div>
+      <div class="card col"><div class="label">${t.distL}</div><div class="ph" style="height:90px;">${t.hist}</div></div>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  m2:(t,c)=>`
+    <div class="label">${t.areasL}</div>
+    <table class="wf" style="margin-bottom:16px;"><tr>${t.th.map(h=>`<th>${h}</th>`).join('')}</tr>${t.rows.map(r=>`<tr>${r.map(x=>`<td>${x}</td>`).join('')}</tr>`).join('')}</table>
+    <div class="row">
+      <div class="card col"><div class="label">${t.descL}</div><div class="area" style="min-height:90px;">${t.descV}</div></div>
+      <div class="card" style="width:230px;"><div class="label">${t.multiL}</div><div style="display:flex;gap:6px;flex-wrap:wrap;"><span class="pill on">ES</span><span class="pill on">EN</span><span class="pill">PT</span></div><div class="legend">${t.multiLeg}</div></div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:18px;"><span class="btn pri">${t.publish}</span><span class="btn ghost">${t.draft}</span></div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  m3:(t,c)=>`
+    <div class="row">
+      <div style="width:200px;flex-shrink:0;">
+        <div class="label">${t.queueL}</div>
+        <div class="box" style="padding:9px;margin-bottom:7px;border-left:3px solid var(--accent2);"><div class="bar s" style="margin-bottom:5px;"></div><span class="legend">${t.q1}</span></div>
+        <div class="box" style="padding:9px;margin-bottom:7px;"><div class="bar s" style="margin-bottom:5px;"></div><span class="legend">${t.q2}</span></div>
+        <div class="box" style="padding:9px;"><div class="bar s" style="margin-bottom:5px;"></div><span class="legend">${t.q3}</span></div>
+      </div>
+      <div class="card col">
+        <div class="label">${t.caseL}</div>
+        <div class="grid2" style="margin:8px 0 12px;">
+          <div class="vid" style="min-height:120px;">${t.rec}</div>
+          <div><div class="legend">${t.proposal}</div>
+            ${t.areas.map((n,i)=>{const v=[70,81,79,58][i];return `<div style="display:flex;justify-content:space-between;font-size:12px;margin:5px 0;"><span>${n}</span><span><b>${v}</b> &nbsp;<input type="text" value="${v}" style="width:42px;border:1px solid var(--line);border-radius:4px;padding:2px 4px;background:var(--panel);color:var(--ink);"></span></div>`;}).join('')}
+          </div>
+        </div>
+        <div class="label">${t.commentL}</div><div class="area" style="min-height:50px;"></div>
+        <div style="display:flex;gap:10px;margin-top:12px;"><span class="btn pri">${t.confirm}</span><span class="btn ghost">${t.skip}</span></div>
+      </div>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`,
+  lesson:(t,c,extra)=>`
+    <div style="margin-bottom:12px;"><span class="btn ghost" onclick="go('u1')">${c.back}</span></div>
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h4 style="margin:0;font-size:16px;">${extra}</h4><span class="tagm">${t.mins}</span></div>
+      <div class="label">${t.objL}</div><p class="ctx" style="margin-bottom:14px;color:var(--muted);font-size:12px;">${t.obj}</p>
+      <div class="ph" style="height:150px;margin-bottom:14px;">${t.vidL}</div>
+      <div class="label">${t.exL}</div><div class="area" style="margin-bottom:16px;">${t.exV}</div>
+      <span class="btn pri" onclick="go('u2')">${t.cta}</span>
+    </div>
+    <div class="note"><b>${c.noteUX}</b> ${t.note}</div>`
+};
+
+/* ============ render + state ============ */
+let lang = 'es';
+let cur = 'u1';
+let lessonName = '';
+const order = ["u1","u2","u3","u4","u5","u6","u7","a1","a2","a3","m1","m2","m3"];
+/* ===== auth: usuarios de prueba (uno por rol) y mapa de roles ===== */
+const TEST_USERS = [
+  {role:'user',   initials:'AT', name:'Ana Torres',  email:'ana@visum.com',     pass:'demo1234'},
+  {role:'admin',  initials:'CR', name:'Carlos Ruiz',  email:'carlos@visum.com',  pass:'demo1234'},
+  {role:'master', initials:'MV', name:'Marta Vidal',  email:'marta@voxready.io', pass:'demo1234'}
+];
+const ROLE_RANGE = { user:[0,7], admin:[7,10], master:[10,13] }; // índices en `order`/`nav`
+const ROLE_RIDX  = { user:0, admin:1, master:2 };                 // índice en `roles`
+const ROLE_HOME  = { user:'u1', admin:'a1', master:'m1' };        // pantalla inicial por rol
+let session = null;
+const main = document.getElementById('main');
+const navWrap = document.getElementById('navWrap');
+const loginView = document.getElementById('loginView');
+const appView = document.getElementById('appView');
+const now = new Date();
+const calState = { y: now.getFullYear(), m: now.getMonth(), sel: null };
+
+function buildNav(){
+  const d = I[lang];
+  if(!session){ navWrap.innerHTML=''; return; }
+  const [a,b] = ROLE_RANGE[session.role];
+  const label = d.roles[ROLE_RIDX[session.role]];
+  let html = `<div class="role">${label}</div>`;
+  for(let i=a;i<b;i++){
+    html += `<div class="navitem" data-s="${order[i]}"><span class="n">${i-a+1}</span> ${d.nav[i]}</div>`;
+  }
+  navWrap.innerHTML = html;
+  navWrap.querySelectorAll('.navitem').forEach(it=>it.addEventListener('click',()=>go(it.dataset.s)));
+}
+function go(id){ cur=id; render(); }
+
+/* ===== auth: login / logout / pantalla de login ===== */
+function updateUserChip(){
+  if(!session) return;
+  const d = I[lang], chip = document.getElementById('userChip');
+  chip.style.display = 'flex';
+  document.getElementById('uAva').textContent = session.initials;
+  document.getElementById('uName').textContent = session.name;
+  document.getElementById('uRole').textContent = d.roles[ROLE_RIDX[session.role]];
+  document.getElementById('logoutLbl').textContent = d.login.logout;
+}
+function login(u){
+  session = u;
+  cur = ROLE_HOME[u.role];
+  loginView.style.display = 'none';
+  appView.style.display = 'flex';
+  updateUserChip();
+  buildNav();
+  render();
+}
+function logout(){
+  session = null;
+  appView.style.display = 'none';
+  document.getElementById('userChip').style.display = 'none';
+  loginView.style.display = 'flex';
+  renderLogin();
+}
+function submitLogin(){
+  const email = (document.getElementById('loginEmail').value || '').trim().toLowerCase();
+  const u = TEST_USERS.find(x => x.email.toLowerCase() === email);
+  if(u){ login(u); }
+  else { document.getElementById('loginErr').textContent = I[lang].login.err; }
+}
+function renderLogin(){
+  const d = I[lang], lg = d.login;
+  loginView.innerHTML = `
+    <div class="login-card">
+      <div class="login-logo"><span class="brandlogo-wrap"><img src="VoxReady_logo.png" alt="VoxReady" style="height:40px;display:block;"></span></div>
+      <h1 class="login-title">${lg.title}</h1>
+      <p class="login-sub">${lg.sub}</p>
+      <div class="login-field"><label>${lg.emailL}</label><input class="login-input" id="loginEmail" type="email" autocomplete="username" placeholder="${lg.emailPh}"></div>
+      <div class="login-field"><label>${lg.passL}</label><input class="login-input" id="loginPass" type="password" autocomplete="current-password" placeholder="${lg.passPh}"></div>
+      <button class="login-btn" id="loginSubmit">${lg.signIn}</button>
+      <p class="login-err" id="loginErr"></p>
+      <div class="login-divider">${lg.testL}</div>
+      ${TEST_USERS.map((u,i)=>`
+        <button class="tu" data-i="${i}">
+          <span class="tuava">${u.initials}</span>
+          <span class="tumeta"><span class="tuname">${u.name}</span><span class="turole">${d.roles[ROLE_RIDX[u.role]]} · ${u.email}</span></span>
+          <span class="tugo">→</span>
+        </button>`).join('')}
+    </div>`;
+  loginView.querySelectorAll('.tu').forEach(b => b.addEventListener('click', () => login(TEST_USERS[+b.dataset.i])));
+  document.getElementById('loginSubmit').addEventListener('click', submitLogin);
+  document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') submitLogin(); });
+}
+function goLesson(name){ lessonName=name; cur='lesson'; render(); }
+
+function wireConsent(){
+  const cbs=[...document.querySelectorAll('.consent')];
+  const btn=document.getElementById('beginBtn');
+  if(!btn) return;
+  function upd(){ btn.classList.toggle('disabled', !cbs.every(c=>c.checked)); }
+  cbs.forEach(c=>c.addEventListener('change',upd));
+  btn.addEventListener('click',()=>{ if(cbs.every(c=>c.checked)) go('u4'); });
+  upd();
+}
+
+function drawCal(){
+  const d=I[lang].L.u7;
+  const first=new Date(calState.y,calState.m,1);
+  const offset=(first.getDay()+6)%7;
+  const days=new Date(calState.y,calState.m+1,0).getDate();
+  let cells='';
+  for(let i=0;i<offset;i++) cells+='<div></div>';
+  for(let day=1;day<=days;day++){
+    const sel=calState.sel && calState.sel.y===calState.y && calState.sel.m===calState.m && calState.sel.day===day;
+    cells+=`<div class="calday${sel?' sel':''}" data-d="${day}">${day}</div>`;
+  }
+  const grid=document.getElementById('calGrid'); if(!grid) return;
+  grid.innerHTML=cells;
+  document.getElementById('calMonth').textContent=d.months[calState.m]+' '+calState.y;
+  const lbl=document.getElementById('calSel');
+  lbl.textContent= calState.sel ? (calState.sel.day+' '+d.months[calState.sel.m]) : d.calNone;
+  grid.querySelectorAll('.calday').forEach(c=>c.addEventListener('click',()=>{
+    calState.sel={y:calState.y,m:calState.m,day:+c.dataset.d}; drawCal();
+  }));
+}
+function wireCalendar(){
+  const prev=document.getElementById('calPrev'), next=document.getElementById('calNext');
+  if(!prev) return;
+  prev.addEventListener('click',()=>{ calState.m--; if(calState.m<0){calState.m=11;calState.y--;} drawCal(); });
+  next.addEventListener('click',()=>{ calState.m++; if(calState.m>11){calState.m=0;calState.y++;} drawCal(); });
+  drawCal();
+}
+
+function render(){
+  const d = I[lang];
+  const isLesson = cur==='lesson';
+  const t = d.L[cur];
+  const url = {u1:"app.voxready.io/inicio",u2:"app.voxready.io/escenarios",u3:"app.voxready.io/sesion/preparar",u4:"app.voxready.io/sesion/en-vivo",u5:"app.voxready.io/sesion/procesando",u6:"app.voxready.io/informe/8842",u7:"app.voxready.io/progreso",a1:"admin.voxready.io/panel",a2:"admin.voxready.io/tema",a3:"admin.voxready.io/retencion",m1:"master.voxready.io/panel",m2:"master.voxready.io/rubrica",m3:"master.voxready.io/etiquetado",lesson:"app.voxready.io/leccion"}[cur];
+  const body = isLesson ? TPL.lesson(t,d,lessonName) : TPL[cur](t,d);
+  main.innerHTML = `
+    <div class="crumbs">${t.crumbs}</div>
+    <h2 class="screen-title">${isLesson?lessonName:t.title}</h2>
+    <p class="screen-sub">${t.sub}</p>
+    <div class="chrome">
+      <div class="chrome-bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="urlbar">${url}</span></div>
+      <div class="canvas">${body}</div>
+    </div>`;
+  navWrap.querySelectorAll('.navitem').forEach(it=>it.classList.toggle('active', it.dataset.s===cur));
+  if(cur==='u3') wireConsent();
+  if(cur==='u7') wireCalendar();
+  window.scrollTo(0,0);
+}
+function applyLang(){
+  const d = I[lang];
+  document.documentElement.lang = lang;
+  document.getElementById('tbTitle').textContent = d.tbTitle;
+  document.getElementById('brandP').textContent = d.brandP;
+  document.getElementById('palLabel').childNodes[0].textContent = d.palette+' ';
+  document.getElementById('themeBtn').title = d.theme;
+  if(session){ updateUserChip(); buildNav(); render(); }
+  else { renderLogin(); }
+}
+
+document.getElementById('lang').addEventListener('change',e=>{ lang=e.target.value; applyLang(); });
+document.getElementById('logoutBtn').addEventListener('click', logout);
+const bodyEl = document.body, themeBtn = document.getElementById('themeBtn');
+themeBtn.addEventListener('click',()=>{
+  const dark = bodyEl.dataset.theme==='dark';
+  bodyEl.dataset.theme = dark ? 'light' : 'dark';
+  themeBtn.textContent = dark ? '🌙' : '☀️';
+});
+document.getElementById('swatches').addEventListener('click',e=>{
+  const sw = e.target.closest('.sw'); if(!sw) return;
+  bodyEl.dataset.palette = sw.dataset.p;
+  document.querySelectorAll('.sw').forEach(x=>x.classList.toggle('on', x===sw));
+});
+applyLang();
+</script>
+</body>
+</html>
