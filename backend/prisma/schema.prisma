@@ -1,0 +1,64 @@
+// Configuración base
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 1. Cliente (Tenant) - La raíz del aislamiento de datos
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  // Relaciones: Un cliente tiene muchos usuarios, temas y sesiones
+  users     User[]
+  themes    Theme[]
+  sessions  Session[]
+}
+
+// 2. Usuario (Vocero, Admin, Maestro)
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  role      String   @default("VOCERO")
+
+  // Relación multi-tenant: Cada usuario pertenece a un Tenant
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  sessions  Session[]
+}
+
+// 3. Tema (El escenario de crisis configurado por el Admin)
+model Theme {
+  id          String   @id @default(uuid())
+  title       String
+  context     String   @db.Text
+  keyMessages String   @db.Text
+  
+  // Relación multi-tenant
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  sessions    Session[]
+}
+
+// 4. Sesión (La práctica en vivo del vocero)
+model Session {
+  id        String   @id @default(uuid())
+  status    String   @default("CREATED") // Puede ser CREATED, RECORDING, COMPLETED
+  createdAt DateTime @default(now())
+
+  // Relaciones: Quién la hizo, qué tema usó y a qué cliente pertenece
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  themeId   String
+  theme     Theme    @relation(fields: [themeId], references: [id])
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
