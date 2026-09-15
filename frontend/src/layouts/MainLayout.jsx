@@ -66,6 +66,7 @@ export default function MainLayout() {
       <div className="flex flex-1">
         
         {/* Sidebar */}
+        {/* Sidebar */}
         <nav className="w-64 bg-[var(--sidebar)] border-r border-[var(--line)] p-4 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto hidden md:block">
           <div className="border-b border-[var(--line)] pb-3 mb-3">
             <h1 className="font-bold text-lg flex items-center gap-2">
@@ -78,14 +79,65 @@ export default function MainLayout() {
             {d.roles[roleIndex]}
           </div>
           
-          {/* Navegación activa dinámica */}
-          <Link 
-            to={`/${user.role === 'user' ? 'vocero' : user.role === 'admin' ? 'admin' : 'maestro'}`}
-            className="flex items-center gap-2 px-4 py-2 text-sm text-[var(--accent)] bg-[var(--accentsoft)] border-l-4 border-[var(--accent)] font-semibold cursor-pointer transition-colors"
-          >
-            <span className="w-5 h-5 rounded-full bg-[var(--accent)] text-white text-[10px] flex items-center justify-center shrink-0">1</span>
-            {user.role === 'user' ? d.nav[0] : user.role === 'admin' ? d.nav[7] : d.nav[10]}
-          </Link>
+          {/* Menú del Vocero */}
+          {user.role === 'user' && (
+            <div className="flex flex-col gap-1">
+              <Link to="/vocero" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/vocero' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/vocero' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>1</span>
+                {d.nav[0]}
+              </Link>
+              <Link to="/vocero/escenarios" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/vocero/escenarios' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/vocero/escenarios' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>2</span>
+                {d.nav[1]}
+              </Link>
+              
+              {/* <-- NUEVO LINK AQUI --> */}
+              <Link to="/vocero/preparar" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/preparar') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/preparar') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>3</span>
+                {d.nav[2]}
+              </Link>
+
+              {/* <-- NUEVO LINK: SESIÓN EN VIVO --> */}
+              <Link to="/vocero/sesion" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/sesion') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/sesion') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>4</span>
+                {d.nav[3]}
+              </Link>
+
+              {/* <-- NUEVO LINK: ANALIZANDO --> */}
+              <Link to="/vocero/analizando" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/analizando') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/analizando') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>5</span>
+                {d.nav[4]}
+              </Link>
+
+              {/* <-- NUEVO LINK: INFORME TIPO COACH --> */}
+              <Link to="/vocero/informe" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/informe') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/informe') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>6</span>
+                {d.nav[5]}
+              </Link>
+
+              {/* <-- NUEVO LINK: MI PROGRESO --> */}
+              <Link to="/vocero/progreso" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/progreso') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/progreso') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>7</span>
+                {d.nav[6]}
+              </Link>
+            </div>
+          )}
+
+          {/* Menú del Admin */}
+          {user.role === 'admin' && (
+            <Link to="/admin" className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--accent)] bg-[var(--accentsoft)] border-l-4 border-[var(--accent)] font-semibold transition-colors">
+              <span className="w-5 h-5 rounded-full bg-[var(--accent)] text-white text-[10px] flex items-center justify-center shrink-0">1</span>
+              {d.nav[7]}
+            </Link>
+          )}
+
+          {/* Menú del Maestro */}
+          {user.role === 'master' && (
+            <Link to="/maestro" className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--accent)] bg-[var(--accentsoft)] border-l-4 border-[var(--accent)] font-semibold transition-colors">
+              <span className="w-5 h-5 rounded-full bg-[var(--accent)] text-white text-[10px] flex items-center justify-center shrink-0">1</span>
+              {d.nav[10]}
+            </Link>
+          )}
         </nav>
 
         {/* Contenido principal */}
