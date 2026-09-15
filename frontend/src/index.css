@@ -15,9 +15,9 @@
   --soft: #f9fafb;
   --stat: #f8fafc;
   
-  --accent: #2f9c83;
-  --accent2: #17354F;
-  --accentsoft: #eaf5f2;
+  --accent: #f97316;          /* Naranjo principal (Orange 500) */
+  --accent2: #ea580c;         /* Naranjo secundario más profundo (Orange 600) */
+  --accentsoft: #ffedd5;      /* Fondo suave naranjo pastel */
   
   --barfill: #e2e8f0;
   --chrome2: #f1f5f9;
@@ -26,29 +26,29 @@
   --notetext: #92400e;
 }
 
-/* Variables para Modo Oscuro */
+/* Variables para Modo Oscuro (Negros y Grises Neutros con acento Naranjo) */
 .dark, [data-theme="dark"] {
-  --bg: #0f172a;
-  --ink: #f8fafc;
-  --panel: #1e293b;
-  --sidebar: #1e293b;
-  --topbar: #1e293b;
-  --line: #334155;
-  --line2: #475569;
-  --muted: #94a3b8;
-  --soft: #0f172a;
-  --stat: #0f172a;
+  --bg: #000000;          /* Fondo general negro puro */
+  --ink: #ffffff;         /* Texto principal blanco puro */
+  --panel: #0d0d0d;       /* Paneles en negro grafito muy sutil */
+  --sidebar: #0d0d0d;     /* Sidebar a juego */
+  --topbar: #0d0d0d;      /* Topbar a juego */
+  --line: #262626;        /* Bordes gris oscuro elegante */
+  --line2: #404040;       /* Bordes secundarios en gris medio */
+  --muted: #a3a3a3;       /* Texto secundario gris claro legible */
+  --soft: #171717;        /* Fondos alternativos / hover en gris muy oscuro */
+  --stat: #141414;        /* Tarjetas de estadísticas */
   
-  /* Ajustamos los acentos para que resalten mejor en oscuro */
-  --accent: #34d399;
-  --accent2: #38bdf8;
-  --accentsoft: #064e3b;
+  /* Acentos en Naranjo */
+  --accent: #fb923c;      /* Naranjo vibrante para modo oscuro (Orange 400) */
+  --accent2: #f97316;     /* Naranjo de acción (Orange 500) */
+  --accentsoft: rgba(249, 115, 22, 0.15); /* Fondo suave translúcido naranjo */
   
-  --barfill: #334155;
-  --chrome2: #0f172a;
-  --note: #422006;
-  --noteline: #78350f;
-  --notetext: #fde68a;
+  --barfill: #262626;
+  --chrome2: #0a0a0a;
+  --note: #1c1917;
+  --noteline: #44403c;
+  --notetext: #f5f5f4;
 }
 
 /* Transiciones globales para un efecto suave al cambiar */
