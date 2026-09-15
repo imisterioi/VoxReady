@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import MainLayout from './layouts/MainLayout';
 import Login from './pages/Login';
 import VoceroHome from './pages/VoceroHome';
@@ -15,10 +16,22 @@ import EditorTema from './pages/EditorTema';
 import EditorRubrica from './pages/EditorRubrica'; 
 import ColaEtiquetado from './pages/ColaEtiquetado'; 
 import Microleccion from './pages/Microleccion'; 
+import NotFound from './pages/NotFound';
 
 function App() {
   return (
     <BrowserRouter>
+      <Toaster 
+          position="bottom-right"
+          toastOptions={{
+            style: {
+              background: 'var(--panel)',
+              color: 'var(--ink)',
+              border: '1px solid var(--line)',
+              fontSize: '12px',
+            },
+          }}
+        />
       <Routes>
         {/* Ruta del Login (No tiene el menú lateral, ocupa toda la pantalla) */}
         <Route path="/login" element={<Login />} />
@@ -47,6 +60,9 @@ function App() {
           <Route path="maestro" element={<MaestroHome />} />
           <Route path="maestro/rubrica" element={<EditorRubrica />} /> 
           <Route path="maestro/etiquetado" element={<ColaEtiquetado />} />
+
+        {/* <-- 2. Ruta comodín 404 (atrapa cualquier URL inválida) */}
+          <Route path="*" element={<NotFound />} />
 
 
         </Route>

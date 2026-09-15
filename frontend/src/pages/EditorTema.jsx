@@ -1,8 +1,14 @@
 import I from '../data/dictionary';
+import toast from 'react-hot-toast';  
 
 export default function EditorTema() {
   const d = I.es;
   const t = d.L.a2;
+
+  // 1. Añade esta función aquí dentro de tu componente
+  const handleSave = () => {
+    toast.success('¡Tema guardado con éxito!');
+  };
 
   return (
     <div className="animate-fade-in pb-10">
@@ -87,7 +93,11 @@ export default function EditorTema() {
 
           {/* Botones */}
           <div className="flex gap-3 mt-6">
-            <button className="border border-[var(--accent2)] bg-[var(--accent2)] rounded-md px-5 py-2 text-xs text-white font-semibold hover:brightness-105 transition-all">
+            {/* 2. Le añadimos onClick={handleSave} a este botón */}
+            <button 
+              onClick={handleSave}
+              className="border border-[var(--accent2)] bg-[var(--accent2)] rounded-md px-5 py-2 text-xs text-white font-semibold hover:brightness-105 transition-all"
+            >
               {t.save}
             </button>
             <button className="border border-[var(--line2)] bg-transparent px-5 py-2 rounded-md text-xs font-semibold text-[var(--ink)] hover:bg-[var(--soft)] transition-colors">
