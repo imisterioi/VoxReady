@@ -125,18 +125,38 @@ export default function MainLayout() {
 
           {/* Menú del Admin */}
           {user.role === 'admin' && (
-            <Link to="/admin" className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--accent)] bg-[var(--accentsoft)] border-l-4 border-[var(--accent)] font-semibold transition-colors">
-              <span className="w-5 h-5 rounded-full bg-[var(--accent)] text-white text-[10px] flex items-center justify-center shrink-0">1</span>
-              {d.nav[7]}
-            </Link>
+            <div className="flex flex-col gap-1">
+              <Link to="/admin" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/admin' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/admin' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>1</span>
+                {d.nav[7]}
+              </Link>
+              <Link to="/admin/tema" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/admin/tema') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/admin/tema') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>2</span>
+                {d.nav[8]}
+              </Link>
+              <Link to="/admin/retencion" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/admin/retencion') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/admin/retencion') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>3</span>
+                {d.nav[9]}
+              </Link>
+            </div>
           )}
 
           {/* Menú del Maestro */}
           {user.role === 'master' && (
-            <Link to="/maestro" className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--accent)] bg-[var(--accentsoft)] border-l-4 border-[var(--accent)] font-semibold transition-colors">
-              <span className="w-5 h-5 rounded-full bg-[var(--accent)] text-white text-[10px] flex items-center justify-center shrink-0">1</span>
-              {d.nav[10]}
-            </Link>
+            <div className="flex flex-col gap-1">
+              <Link to="/maestro" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/maestro' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/maestro' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>1</span>
+                {d.nav[10]}
+              </Link>
+              <Link to="/maestro/rubrica" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/maestro/rubrica') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/maestro/rubrica') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>2</span>
+                {d.nav[11]}
+              </Link>
+              <Link to="/maestro/etiquetado" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/maestro/etiquetado') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
+                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/maestro/etiquetado') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>3</span>
+                {d.nav[12]}
+              </Link>
+            </div>
           )}
         </nav>
 

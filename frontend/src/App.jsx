@@ -10,6 +10,11 @@ import SesionPractica from './pages/SesionPractica';
 import Analizando from './pages/Analizando';
 import InformeCoach from './pages/InformeCoach';
 import MiProgreso from './pages/MiProgreso';
+import PoliticaRetencion from './pages/PoliticaRetencion';
+import EditorTema from './pages/EditorTema';
+import EditorRubrica from './pages/EditorRubrica'; 
+import ColaEtiquetado from './pages/ColaEtiquetado'; 
+import Microleccion from './pages/Microleccion'; 
 
 function App() {
   return (
@@ -31,12 +36,17 @@ function App() {
           <Route path="vocero/analizando" element={<Analizando />} />
           <Route path="vocero/informe" element={<InformeCoach />} />
           <Route path="vocero/progreso" element={<MiProgreso />} />
+          <Route path="vocero/leccion" element={<Microleccion />} />
 
         {/* Rutas del Admin */}
           <Route path="admin" element={<AdminHome />} />
+          <Route path="admin/tema" element={<EditorTema />} /> {/* <-- 3. Ruta 1 */}
+          <Route path="admin/retencion" element={<PoliticaRetencion />} /> {/* <-- 4. Ruta 2 */}
 
         {/* Rutas del Maestro */}
           <Route path="maestro" element={<MaestroHome />} />
+          <Route path="maestro/rubrica" element={<EditorRubrica />} /> 
+          <Route path="maestro/etiquetado" element={<ColaEtiquetado />} />
 
 
         </Route>
