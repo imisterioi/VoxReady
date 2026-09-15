@@ -1,3 +1,30 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --accent: #17354F; --accentsoft: #e4eaf1; --accent2: #DB6427;
+    --bg: #f4f4f2; --sidebar: #fbfbfa; --panel: #ffffff; --ink: #22303c; 
+    --muted: #8a8a8a; --line: #cfcfcf; --line2: #b5b5b5; --soft: #eef0f2; 
+    --barfill: #e2e2df; --stat: #fafafa; --chrome2: #edeef0; 
+    --note: #fff5ec; --noteline: #f0c49e; --notetext: #9c5320;
+    --topbar: #ffffff;
+  }
+  
+  [data-theme="dark"] {
+    --bg: #15191d; --sidebar: #1b2128; --panel: #222a31; --ink: #e7eaed; 
+    --muted: #9aa3ab; --line: #374049; --line2: #475159; --soft: #2a333b; 
+    --barfill: #3a444d; --stat: #262f37; --chrome2: #2a333b; 
+    --note: #2f2719; --noteline: #5e4a26; --notetext: #e3b483;
+    --topbar: #1b2128; --accentsoft: #26384a;
+  }
+  
+  /* Puedes agregar las otras paletas del wireframe aquí después */
+  
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: 'Poppins', sans-serif;
+  }
+}
