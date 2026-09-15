@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
 import { TEST_USERS } from '../data/mockData';
@@ -7,15 +7,23 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  
-  // Usamos el diccionario en español
-  const d = I.es; 
+  const d = I.es;
+
+  // Leer el tema al cargar el Login para mantener la consistencia
+  useEffect(() => {
+    const isDark = localStorage.getItem('voxready_theme') === 'dark';
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add('dark');
+      root.setAttribute('data-theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      root.setAttribute('data-theme', 'light');
+    }
+  }, []);
 
   const handleLogin = (user) => {
-    // Guardamos el usuario temporalmente en el navegador para simular la sesión
     localStorage.setItem('voxready_user', JSON.stringify(user));
-    
-    // Redirigimos según el rol del usuario
     if (user.role === 'user') navigate('/vocero');
     if (user.role === 'admin') navigate('/admin');
     if (user.role === 'master') navigate('/maestro');
@@ -31,17 +39,16 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-5 bg-[var(--bg)] text-[var(--ink)]">
-      <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--line)] rounded-2xl p-8 shadow-lg">
+    <div className="min-h-screen flex items-center justify-center p-5 bg-[var(--bg)] text-[var(--ink)] transition-colors duration-200">
+      <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--line)] rounded-2xl p-8 shadow-lg transition-colors duration-200">
         
         <div className="flex justify-center mb-5">
           <span className="bg-white rounded-lg p-2 shadow-sm border border-gray-100">
-            {/* Si no tienes el logo aún, se verá el texto alternativo */}
             <img src="/VoxReady_logo.png" alt="VoxReady" className="h-10 block" />
           </span>
         </div>
         
-        <h1 className="text-xl font-semibold text-center mb-1">{d.login.title}</h1>
+        <h1 className="text-xl font-semibold text-center mb-1 text-[var(--ink)]">{d.login.title}</h1>
         <p className="text-sm text-[var(--muted)] text-center mb-6">{d.login.sub}</p>
 
         <div className="mb-4">
@@ -49,7 +56,7 @@ export default function Login() {
             {d.login.emailL}
           </label>
           <input
-            className="w-full h-10 border border-[var(--line)] rounded-lg bg-[var(--panel)] text-[13px] px-3 focus:outline-none focus:border-[var(--accent)]"
+            className="w-full h-10 border border-[var(--line)] rounded-lg bg-[var(--panel)] text-[var(--ink)] text-[13px] px-3 focus:outline-none focus:border-[var(--accent)] transition-colors"
             type="email"
             placeholder={d.login.emailPh}
             value={email}
@@ -63,7 +70,7 @@ export default function Login() {
             {d.login.passL}
           </label>
           <input
-            className="w-full h-10 border border-[var(--line)] rounded-lg bg-[var(--panel)] text-[13px] px-3 focus:outline-none focus:border-[var(--accent)]"
+            className="w-full h-10 border border-[var(--line)] rounded-lg bg-[var(--panel)] text-[var(--ink)] text-[13px] px-3 focus:outline-none focus:border-[var(--accent)] transition-colors"
             type="password"
             placeholder={d.login.passPh}
           />
@@ -76,7 +83,7 @@ export default function Login() {
           {d.login.signIn}
         </button>
 
-        <p className="text-xs text-red-600 mt-2 min-h-[16px] text-center">{error}</p>
+        <p className="text-xs text-red-500 mt-2 min-h-[16px] text-center">{error}</p>
 
         <div className="flex items-center gap-2 my-5 text-[var(--muted)] text-[11px] uppercase tracking-wider before:flex-1 before:h-px before:bg-[var(--line)] after:flex-1 after:h-px after:bg-[var(--line)]">
           {d.login.testL}

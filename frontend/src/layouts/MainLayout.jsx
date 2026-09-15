@@ -4,11 +4,17 @@ import I from '../data/dictionary';
 
 export default function MainLayout() {
   const [user, setUser] = useState(null);
+  
+  // 1. Estado del tema leyendo el almacenamiento del navegador
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('voxready_theme') === 'dark';
+  });
+
   const navigate = useNavigate();
   const location = useLocation();
   const d = I.es;
 
-  // Verificar si hay sesión al cargar el layout
+  // Verificar sesión
   useEffect(() => {
     const storedUser = localStorage.getItem('voxready_user');
     if (!storedUser) {
@@ -18,33 +24,52 @@ export default function MainLayout() {
     }
   }, [navigate]);
 
+  // 2. Efecto para inyectar la clase dark en el HTML
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add('dark');
+      root.setAttribute('data-theme', 'dark');
+      localStorage.setItem('voxready_theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      root.setAttribute('data-theme', 'light');
+      localStorage.setItem('voxready_theme', 'light');
+    }
+  }, [isDark]);
+
   const handleLogout = () => {
     localStorage.removeItem('voxready_user');
     navigate('/login');
   };
 
-  // Si no hay usuario aún (está cargando o redirigiendo), no renderizamos nada para evitar parpadeos
+  const toggleTheme = () => setIsDark(!isDark);
+
   if (!user) return null;
 
-  // Determinar el índice del rol para los textos
   const roleIndex = user.role === 'user' ? 0 : user.role === 'admin' ? 1 : 2;
 
   return (
-    <div className="flex flex-col min-h-screen bg-[var(--bg)] text-[var(--ink)]">
+    <div className="flex flex-col min-h-screen bg-[var(--bg)] text-[var(--ink)] transition-colors duration-200">
       
       {/* Topbar */}
-      <header className="sticky top-0 z-30 flex items-center h-14 px-4 bg-[var(--topbar)] border-b border-[var(--line)]">
+      <header className="sticky top-0 z-30 flex items-center h-14 px-4 bg-[var(--topbar)] border-b border-[var(--line)] transition-colors duration-200">
         <span className="text-sm text-[var(--muted)]">VoxReady — Prototipo React</span>
         
         <div className="ml-auto flex items-center gap-4">
-          {/* <select className="h-8 border border-[var(--line)] rounded-md bg-[var(--panel)] text-xs px-2 focus:outline-none">
+          <select className="h-8 border border-[var(--line)] rounded-md bg-[var(--panel)] text-[var(--ink)] text-xs px-2 focus:outline-none transition-colors duration-200">
             <option value="es">Español</option>
-          </select> */}
-          <button className="h-8 w-8 border border-[var(--line)] rounded-md flex items-center justify-center hover:bg-[var(--soft)] transition-colors">
-            🌙
+          </select>
+          
+          {/* Botón del Tema */}
+          <button 
+            onClick={toggleTheme}
+            title={d.theme}
+            className="h-8 w-8 border border-[var(--line)] rounded-md flex items-center justify-center hover:bg-[var(--soft)] transition-colors text-sm"
+          >
+            {isDark ? '☀️' : '🌙'}
           </button>
           
-          {/* Ficha del usuario (User Chip) */}
           <div className="flex items-center gap-3 ml-2 pl-4 border-l border-[var(--line)]">
             <div className="w-8 h-8 rounded-full bg-[var(--accent)] text-white text-xs font-bold flex items-center justify-center shrink-0">
               {user.initials}
@@ -66,8 +91,7 @@ export default function MainLayout() {
       <div className="flex flex-1">
         
         {/* Sidebar */}
-        {/* Sidebar */}
-        <nav className="w-64 bg-[var(--sidebar)] border-r border-[var(--line)] p-4 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto hidden md:block">
+        <nav className="w-64 bg-[var(--sidebar)] border-r border-[var(--line)] p-4 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto hidden md:block transition-colors duration-200">
           <div className="border-b border-[var(--line)] pb-3 mb-3">
             <h1 className="font-bold text-lg flex items-center gap-2">
               <img src="/VoxReady_logo.png" alt="VoxReady" className="h-6" onError={(e) => e.target.style.display='none'} />
