@@ -54,7 +54,7 @@ export default function EditorRubrica() {
               </div>
             </div>
 
-            {/* Multiidioma */}
+            {/* Multiidioma
             <div className="flex-1 border border-[var(--line)] rounded-lg p-5 bg-[var(--panel)]">
               <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.multiL}</div>
               <div className="flex gap-2 flex-wrap mb-3">
@@ -63,7 +63,7 @@ export default function EditorRubrica() {
                 <span className="border rounded-full px-3 py-1 text-[11px] bg-[var(--panel)] border-[var(--line2)] text-[var(--ink)]">PT</span>
               </div>
               <div className="text-xs text-[var(--muted)]">{t.multiLeg}</div>
-            </div>
+            </div> */}
           </div>
 
           {/* Botones */}

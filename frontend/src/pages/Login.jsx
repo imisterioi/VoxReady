@@ -9,18 +9,26 @@ export default function Login() {
   const navigate = useNavigate();
   const d = I.es;
 
-  // Leer el tema al cargar el Login para mantener la consistencia
+  // 1. Estado del tema leyendo el almacenamiento del navegador
+  const [isDark, setIsDark] = useState(() => {
+    return localStorage.getItem('voxready_theme') === 'dark';
+  });
+
+  // 2. Efecto para inyectar la clase dark dinámicamente
   useEffect(() => {
-    const isDark = localStorage.getItem('voxready_theme') === 'dark';
     const root = document.documentElement;
     if (isDark) {
       root.classList.add('dark');
       root.setAttribute('data-theme', 'dark');
+      localStorage.setItem('voxready_theme', 'dark');
     } else {
       root.classList.remove('dark');
       root.setAttribute('data-theme', 'light');
+      localStorage.setItem('voxready_theme', 'light');
     }
-  }, []);
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark(!isDark);
 
   const handleLogin = (user) => {
     localStorage.setItem('voxready_user', JSON.stringify(user));
@@ -39,7 +47,17 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-5 bg-[var(--bg)] text-[var(--ink)] transition-colors duration-200">
+    <div className="min-h-screen flex items-center justify-center p-5 bg-[var(--bg)] text-[var(--ink)] transition-colors duration-200 relative">
+      
+      {/* Botón flotante para cambiar el tema en el Login */}
+      <button 
+        onClick={toggleTheme}
+        title={d.theme}
+        className="absolute top-5 right-5 h-10 w-10 border border-[var(--line)] rounded-full flex items-center justify-center bg-[var(--panel)] hover:bg-[var(--soft)] transition-colors text-lg shadow-sm"
+      >
+        {isDark ? '☀️' : '🌙'}
+      </button>
+
       <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--line)] rounded-2xl p-8 shadow-lg transition-colors duration-200">
         
         <div className="flex justify-center mb-5">

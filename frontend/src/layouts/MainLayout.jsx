@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion'; // <-- NUEVOS IMPORTS
 import I from '../data/dictionary';
 
 export default function MainLayout() {
   const [user, setUser] = useState(null);
-  
-  // 1. Estado del tema leyendo el almacenamiento del navegador
   const [isDark, setIsDark] = useState(() => {
     return localStorage.getItem('voxready_theme') === 'dark';
   });
@@ -14,17 +13,12 @@ export default function MainLayout() {
   const location = useLocation();
   const d = I.es;
 
-  // Verificar sesión
   useEffect(() => {
     const storedUser = localStorage.getItem('voxready_user');
-    if (!storedUser) {
-      navigate('/login');
-    } else {
-      setUser(JSON.parse(storedUser));
-    }
+    if (!storedUser) navigate('/login');
+    else setUser(JSON.parse(storedUser));
   }, [navigate]);
 
-  // 2. Efecto para inyectar la clase dark en el HTML
   useEffect(() => {
     const root = document.documentElement;
     if (isDark) {
@@ -61,12 +55,7 @@ export default function MainLayout() {
             <option value="es">Español</option>
           </select>
           
-          {/* Botón del Tema */}
-          <button 
-            onClick={toggleTheme}
-            title={d.theme}
-            className="h-8 w-8 border border-[var(--line)] rounded-md flex items-center justify-center hover:bg-[var(--soft)] transition-colors text-sm"
-          >
+          <button onClick={toggleTheme} title={d.theme} className="h-8 w-8 border border-[var(--line)] rounded-md flex items-center justify-center hover:bg-[var(--soft)] transition-colors text-sm">
             {isDark ? '☀️' : '🌙'}
           </button>
           
@@ -78,17 +67,14 @@ export default function MainLayout() {
               <span className="text-xs font-bold text-[var(--ink)]">{user.name}</span>
               <span className="text-[10px] text-[var(--muted)]">{d.roles[roleIndex]}</span>
             </div>
-            <button 
-              onClick={handleLogout}
-              className="ml-2 h-8 px-3 border border-[var(--line2)] rounded-md bg-[var(--panel)] text-[var(--ink)] text-xs hover:bg-[var(--soft)] transition-colors flex items-center gap-2"
-            >
+            <button onClick={handleLogout} className="ml-2 h-8 px-3 border border-[var(--line2)] rounded-md bg-[var(--panel)] text-[var(--ink)] text-xs hover:bg-[var(--soft)] transition-colors flex items-center gap-2">
               ⎋ <span className="hidden sm:inline">{d.login.logout}</span>
             </button>
           </div>
         </div>
       </header>
 
-      <div className="flex flex-1">
+      <div className="flex flex-1 overflow-hidden">
         
         {/* Sidebar */}
         <nav className="w-64 bg-[var(--sidebar)] border-r border-[var(--line)] p-4 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto hidden md:block transition-colors duration-200">
@@ -114,32 +100,22 @@ export default function MainLayout() {
                 <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/vocero/escenarios' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>2</span>
                 {d.nav[1]}
               </Link>
-              
-              {/* <-- NUEVO LINK AQUI --> */}
               <Link to="/vocero/preparar" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/preparar') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
                 <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/preparar') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>3</span>
                 {d.nav[2]}
               </Link>
-
-              {/* <-- NUEVO LINK: SESIÓN EN VIVO --> */}
               <Link to="/vocero/sesion" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/sesion') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
                 <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/sesion') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>4</span>
                 {d.nav[3]}
               </Link>
-
-              {/* <-- NUEVO LINK: ANALIZANDO --> */}
               <Link to="/vocero/analizando" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/analizando') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
                 <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/analizando') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>5</span>
                 {d.nav[4]}
               </Link>
-
-              {/* <-- NUEVO LINK: INFORME TIPO COACH --> */}
               <Link to="/vocero/informe" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/informe') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
                 <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/informe') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>6</span>
                 {d.nav[5]}
               </Link>
-
-              {/* <-- NUEVO LINK: MI PROGRESO --> */}
               <Link to="/vocero/progreso" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/progreso') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
                 <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/progreso') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>7</span>
                 {d.nav[6]}
@@ -184,9 +160,21 @@ export default function MainLayout() {
           )}
         </nav>
 
-        {/* Contenido principal */}
-        <main className="flex-1 p-6 md:p-8 overflow-x-hidden">
-          <Outlet />
+        {/* CONTENIDO PRINCIPAL ANIMADO CON FRAMER MOTION */}
+        <main className="flex-1 p-6 md:p-8 overflow-x-hidden relative h-[calc(100vh-56px)] overflow-y-auto">
+          {/* AnimatePresence permite animar componentes que se desmontan del DOM */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 15 }}    // Estado inicial: invisible y ligeramente desplazado hacia abajo
+              animate={{ opacity: 1, y: 0 }}     // Estado final: visible y en su posición original
+              exit={{ opacity: 0, y: -15 }}      // Estado de salida: invisible y se desplaza hacia arriba
+              transition={{ duration: 0.25, ease: "easeOut" }} // Duración de la animación (0.25s)
+              className="h-full"
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
         
       </div>
