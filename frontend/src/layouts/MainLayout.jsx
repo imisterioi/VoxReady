@@ -51,9 +51,7 @@ export default function MainLayout() {
         <span className="text-sm text-[var(--muted)]">VoxReady — Prototipo React</span>
         
         <div className="ml-auto flex items-center gap-4">
-          <select className="h-8 border border-[var(--line)] rounded-md bg-[var(--panel)] text-[var(--ink)] text-xs px-2 focus:outline-none transition-colors duration-200">
-            <option value="es">Español</option>
-          </select>
+  
           
           <button onClick={toggleTheme} title={d.theme} className="h-8 w-8 border border-[var(--line)] rounded-md flex items-center justify-center hover:bg-[var(--soft)] transition-colors text-sm">
             {isDark ? '☀️' : '🌙'}
