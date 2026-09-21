@@ -1,0 +1,29 @@
+Quien va a administrar a los clientes? (aun pendiente)
+
+Qué es linea roja? (algo que el vocero no debe decir)
+
+A qué se refiere que evita revisiones inservibles? que aunque el usuario pueda continuar con la sesion, no se va a guardar? (probablemente)
+
+Dudas sobre compatibilidad: no preocuparse y mantener para el minimo o mvp.
+
+Estas "entrevistas" que tienen los voceros luego de el entrenamiento, suelen ser en persona? através de video, solo por voz, etc? probablemente seria en todas asi que habria que incluir el cuerpo completo en el analisis de video, no solo de cintura para arriba.
+
+
+Deben haber estos niveles de dificultad en los escenarios
+Niveles de dificultad(presion):
+baja
+media
+alta
+crisis
+
+El desempeño del vocero se evalua conforme al escenario que esta enfrentando(nivel de presion)
+
+Deberia existir una regla critca o una directriz que permita añadir una evaluacion humana antes del informe final(que alguien externo pueda avaluar el desempeño del vocero)
+
+Las estadisticas a evaluar tendran mayor o menor peso dependiendo del escenario
+
+Hay 2 escenarios donde se podría comercializar la platarforma: 1:Media pening(?) analogico o presencial, donde se hace todo es proceso de practica de manera presencial elaborado por personas(sesiones de 4 o 5 horas), debido al tiempo y la duracion de este metodo, se propone que la plataforma se use con el proposito de reforzar lo aprendido en esas sesiones e irlo ajustando dependiendo del caso. El segundo escenario es lo mismo que el anterior pero sin esa sesion inicial, esto partiria desde 0 con una evaluacion inicial, etc.
+
+Hay que definir muy bien los escenarios, ya que una estadistica podria verse muy perjudicada o beneficiada dependiendo del escenario.
+
+Hay que añadir exigencias que no esten pre hechas que puedan ser modificables y que esten disponibles para cualquier vocero(esto lo define otra persona como el controlador maestro), por ejemplo, si una persona tiene problemas de habla y el encargado busca que se valore mas el apartado visual a pesar de que el escenario exige un buen habla.
