@@ -4,9 +4,9 @@ Qué es linea roja? (algo que el vocero no debe decir)
 
 A qué se refiere que evita revisiones inservibles? que aunque el usuario pueda continuar con la sesion, no se va a guardar? (probablemente)
 
-Dudas sobre compatibilidad: no preocuparse y mantener para el minimo o mvp.
+Dudas sobre compatibilidad y escalabilidad: no preocuparse y mantener para el minimo o mvp.
 
-Estas "entrevistas" que tienen los voceros luego de el entrenamiento, suelen ser en persona? através de video, solo por voz, etc? probablemente seria en todas asi que habria que incluir el cuerpo completo en el analisis de video, no solo de cintura para arriba.
+Estas "entrevistas" que tienen los voceros luego del entrenamiento, suelen ser en persona? através de video, solo por voz, etc? probablemente seria en todas asi que habria que incluir el cuerpo completo en el analisis de video, no solo de cintura para arriba.
 
 
 Deben haber estos niveles de dificultad en los escenarios

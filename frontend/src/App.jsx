@@ -17,6 +17,7 @@ import EditorRubrica from './pages/EditorRubrica';
 import ColaEtiquetado from './pages/ColaEtiquetado'; 
 import Microleccion from './pages/Microleccion'; 
 import NotFound from './pages/NotFound';
+import MediaPipeTest from './pages/MediaPipeTest';
 
 function App() {
   return (
@@ -40,6 +41,9 @@ function App() {
         <Route path="/" element={<MainLayout />}>
           {/* Si alguien entra a la raíz "/", lo mandamos directo al login */}
           <Route index element={<Navigate to="/login" replace />} />
+
+          {/* Rutas del MediaPipe Test */}
+          <Route path="mediapipe-test" element={<MediaPipeTest />} />
           
         {/* Rutas del Vocero */}
           <Route path="vocero" element={<VoceroHome />} />
