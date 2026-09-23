@@ -25,14 +25,24 @@ function MediaPipeTest() {
     shoulders: 0,
     arms: 0,
     hands: 0,
-    });
-  
-   const noiseThresholdsRef = useRef({
+    torso: 0,
+    hips: 0,
+    legs: 0,
+    knees: 0,
+    feet: 0,
+  });
+
+  const noiseThresholdsRef = useRef({
     head: 0,
     shoulders: 0,
     arms: 0,
     hands: 0,
-    });
+    torso: 0,
+    hips: 0,
+    legs: 0,
+    knees: 0,
+    feet: 0,
+  });
 
   // Información de calibración
   const calibrationRef = useRef({
@@ -43,7 +53,8 @@ function MediaPipeTest() {
 
   const INITIAL_SMOOTHING = 0.10;
 
-  
+  const analysisSamplesRef = useRef([]);
+  const sessionStartTimeRef = useRef(null);
 
   const [loading, setLoading] = useState(true);
   const [cameraStarted, setCameraStarted] = useState(false);
@@ -55,10 +66,52 @@ function MediaPipeTest() {
 
   // Partes del cuerpo que vamos a analizar inicialmente
   const BODY_PARTS = {
-    head: [0],
-    shoulders: [11, 12],
-    arms: [13, 14],
-    hands: [15, 16],
+    head: [
+      0,  // nose
+      1, 2, 3,  // left eye
+      4, 5, 6,  // right eye
+      7, 8,      // ears
+      9, 10,     // mouth
+    ],
+
+    shoulders: [
+      11, 12,
+    ],
+
+    arms: [
+      13, 14,
+    ],
+
+    hands: [
+      15, 16,   // wrists
+      17, 18,   // pinkies
+      19, 20,   // index
+      21, 22,   // thumbs
+    ],
+
+    torso: [
+      11, 12,   // shoulders
+      23, 24,   // hips
+    ],
+
+    hips: [
+      23, 24,
+    ],
+
+    legs: [
+      25, 26,   // knees
+      27, 28,   // ankles
+    ],
+
+    knees: [
+      25, 26,
+    ],
+
+    feet: [
+      27, 28,   // ankles
+      29, 30,   // heels
+      31, 32,   // foot index
+    ],
   };
 
   // --------------------------------------------------
@@ -119,7 +172,7 @@ function MediaPipeTest() {
   // --------------------------------------------------
   // 2. Iniciar cámara
   // --------------------------------------------------
-
+  
   const startCamera = async () => {
     try {
       setError(null);
@@ -144,6 +197,9 @@ function MediaPipeTest() {
 
       setCameraStarted(true);
 
+      analysisSamplesRef.current = [];
+      sessionStartTimeRef.current = performance.now();
+
       // Reiniciamos información anterior
       previousLandmarksRef.current = null;
       smoothedLandmarksRef.current = null;
@@ -160,12 +216,22 @@ function MediaPipeTest() {
       shoulders: INITIAL_SMOOTHING,
       arms: INITIAL_SMOOTHING,
       hands: INITIAL_SMOOTHING,
+      torso: INITIAL_SMOOTHING,
+      hips: INITIAL_SMOOTHING,
+      legs: INITIAL_SMOOTHING,
+      knees: INITIAL_SMOOTHING,
+      feet: INITIAL_SMOOTHING,
       };
       noiseThresholdsRef.current = {
         head: 0,
         shoulders: 0,
         arms: 0,
         hands: 0,
+        torso:0,
+        hips:0,
+        legs:0,
+        knees:0,
+        feet:0,
         };
 
       setCalibrating(true);
@@ -284,50 +350,41 @@ function MediaPipeTest() {
   // 6. Finalizar calibración
   // --------------------------------------------------
 
-  const finishCalibration = () => {
-  const samples = calibrationRef.current.samples;
+    const finishCalibration = () => {
+    const samples = calibrationRef.current.samples;
 
-  if (samples.length === 0) {
-        return;
+    if (samples.length === 0) {
+      return;
     }
 
-    const totals = {
-        head: 0,
-        shoulders: 0,
-        arms: 0,
-        hands: 0,
-    };
+    const totals = {};
+
+    for (const part of Object.keys(BODY_PARTS)) {
+      totals[part] = 0;
+    }
 
     for (const sample of samples) {
-        totals.head += sample.head;
-        totals.shoulders += sample.shoulders;
-        totals.arms += sample.arms;
-        totals.hands += sample.hands;
+      for (const part of Object.keys(BODY_PARTS)) {
+        totals[part] += sample[part] ?? 0;
+      }
     }
 
-    const averages = {
-        head: totals.head / samples.length,
-        shoulders:
-        totals.shoulders / samples.length,
-        arms: totals.arms / samples.length,
-        hands: totals.hands / samples.length,
-    };
+    const averages = {};
 
-    // Margen para evitar considerar como movimiento
-    // pequeñas variaciones similares a las observadas
-    // durante la calibración.
+    for (const part of Object.keys(BODY_PARTS)) {
+      averages[part] = totals[part] / samples.length;
+    }
+
     const NOISE_MARGIN = 2;
 
-    const noiseThresholds = {
-        head: averages.head * NOISE_MARGIN,
-        shoulders:
-        averages.shoulders * NOISE_MARGIN,
-        arms: averages.arms * NOISE_MARGIN,
-        hands: averages.hands * NOISE_MARGIN,
-    };
+    const noiseThresholds = {};
 
-    noiseThresholdsRef.current =
-        noiseThresholds;
+    for (const part of Object.keys(BODY_PARTS)) {
+      noiseThresholds[part] =
+        averages[part] * NOISE_MARGIN;
+    }
+
+    noiseThresholdsRef.current = noiseThresholds;
 
     calibrationRef.current.active = false;
 
@@ -335,24 +392,14 @@ function MediaPipeTest() {
     setCalibrationProgress(1);
 
     setCalibrationResult({
-        averages,
-        noiseThresholds,
+      averages,
+      noiseThresholds,
     });
 
-    console.log(
-        "Calibración completada"
-    );
-
-    console.log(
-        "Movimiento promedio:",
-        averages
-    );
-
-    console.log(
-        "Umbrales de ruido:",
-        noiseThresholds
-    );
-    };
+    console.log("Calibración completada");
+    console.log("Movimiento promedio:", averages);
+    console.log("Umbrales de ruido:", noiseThresholds);
+  };
 
   // --------------------------------------------------
   // 7. Analizar cada frame
@@ -362,8 +409,6 @@ function MediaPipeTest() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const poseLandmarker = poseLandmarkerRef.current;
-
-    
 
     if (!video || !canvas || !poseLandmarker) {
       animationFrameRef.current =
@@ -423,8 +468,7 @@ function MediaPipeTest() {
       // Calibración
       // -------------------------------
 
-      const previous =
-        previousLandmarksRef.current;
+      const previous = previousLandmarksRef.current;
 
         if (previous) {
         const movement =
@@ -432,6 +476,12 @@ function MediaPipeTest() {
             landmarks,
             previous
             );
+        const elapsedTime = (performance.now() - sessionStartTimeRef.current) / 1000;
+
+        analysisSamplesRef.current.push({
+          time: elapsedTime,
+          ...movement,
+        });
 
         if (calibrationRef.current.active) {
             calibrationRef.current.samples.push(movement);
@@ -512,12 +562,30 @@ function MediaPipeTest() {
       requestAnimationFrame(detectPose);
   };
 
+  const generateAnalysisJSON = () => {
+    const data = {
+      duration:
+        (performance.now() - sessionStartTimeRef.current.startTime) / 1000,
+
+      samples: analysisSamplesRef.current,
+    };
+
+    const json = JSON.stringify(data, null, 2);
+
+    console.log(json);
+
+    return json;
+  };
+
   // --------------------------------------------------
   // 8. Interfaz
   // --------------------------------------------------
   
   return (
     <div>
+      <button onClick={generateAnalysisJSON}>
+        Generar JSON
+      </button>
       <h1>MediaPipe Pose Test</h1>
 
       {loading && (
@@ -579,6 +647,30 @@ function MediaPipeTest() {
             {calibrationResult.averages.hands.toFixed(5)}
             </p>
 
+            <p>
+            Torso:{" "}
+            {calibrationResult.averages.torso.toFixed(5)}
+            </p>
+
+            <p>
+            Caderas:{" "}
+            {calibrationResult.averages.hips.toFixed(5)}
+            </p>
+
+            <p>
+            Piernas:{" "}
+            {calibrationResult.averages.legs.toFixed(5)}
+            </p>
+
+            <p>
+            Rodillas:{" "}
+            {calibrationResult.averages.knees.toFixed(5)}
+            </p>
+            
+            <p>
+            Pies:{" "}
+            {calibrationResult.averages.feet.toFixed(5)}
+            </p>
             <h3>Umbral de ruido</h3>
 
             <p>
@@ -599,6 +691,31 @@ function MediaPipeTest() {
             <p>
             Manos:{" "}
             {calibrationResult.noiseThresholds.hands.toFixed(5)}
+            </p>
+
+            <p>
+            Torso:{" "}
+            {calibrationResult.noiseThresholds.torso.toFixed(5)}
+            </p>
+
+            <p>
+            Caderas:{" "}
+            {calibrationResult.noiseThresholds.hips.toFixed(5)}
+            </p>
+
+            <p>
+            Piernas:{" "}
+            {calibrationResult.noiseThresholds.legs.toFixed(5)}
+            </p>
+
+            <p>
+            Rodillas:{" "}
+            {calibrationResult.noiseThresholds.knees.toFixed(5)}
+            </p>
+
+            <p>
+            Pies:{" "}
+            {calibrationResult.noiseThresholds.feet.toFixed(5)}
             </p>
         </div>
         )}
