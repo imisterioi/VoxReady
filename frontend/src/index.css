@@ -2,58 +2,110 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Variables por defecto (Modo Claro) */
-:root, [data-theme="light"] {
-  --bg: #f3f4f6;
-  --ink: #111827;
-  --panel: #ffffff;
-  --sidebar: #ffffff;
-  --topbar: #ffffff;
-  --line: #e5e7eb;
-  --line2: #d1d5db;
-  --muted: #6b7280;
-  --soft: #f9fafb;
-  --stat: #f8fafc;
-  
-  --accent: #f97316;          /* Naranjo principal (Orange 500) */
-  --accent2: #ea580c;         /* Naranjo secundario más profundo (Orange 600) */
-  --accentsoft: #ffedd5;      /* Fondo suave naranjo pastel */
-  
-  --barfill: #e2e8f0;
-  --chrome2: #f1f5f9;
-  --note: #fffbeb;
-  --noteline: #fde68a;
-  --notetext: #92400e;
+/* ------------------------------------------------------------------
+   Tokens de diseño (canales RGB para poder usar opacidad en Tailwind)
+   Paleta basada en el logo: azul marino #17354F + naranjo #DB6427
+------------------------------------------------------------------- */
+:root {
+  --canvas: 248 248 246;
+  --surface: 255 255 255;
+  --subtle: 242 242 239;
+  --ink: 15 27 42;
+  --muted: 100 110 126;
+  --faint: 150 158 170;
+  --line: 231 230 225;
+  --line-strong: 212 210 203;
+
+  --primary: 15 27 42;
+  --primary-ink: 255 255 255;
+  --brand: 23 53 79;
+  --accent: 224 102 42;
+  --accent-soft: 252 238 229;
+
+  --success: 38 140 104;
+  --warning: 196 136 24;
+  --danger: 200 66 59;
+
+  /* Series de gráficos */
+  --c1: 23 53 79;
+  --c2: 224 102 42;
+  --c3: 44 143 122;
+  --c4: 148 160 178;
+
+  color-scheme: light;
 }
 
-/* Variables para Modo Oscuro (Negros y Grises Neutros con acento Naranjo) */
-.dark, [data-theme="dark"] {
-  --bg: #000000;          /* Fondo general negro puro */
-  --ink: #ffffff;         /* Texto principal blanco puro */
-  --panel: #0d0d0d;       /* Paneles en negro grafito muy sutil */
-  --sidebar: #0d0d0d;     /* Sidebar a juego */
-  --topbar: #0d0d0d;      /* Topbar a juego */
-  --line: #262626;        /* Bordes gris oscuro elegante */
-  --line2: #404040;       /* Bordes secundarios en gris medio */
-  --muted: #a3a3a3;       /* Texto secundario gris claro legible */
-  --soft: #171717;        /* Fondos alternativos / hover en gris muy oscuro */
-  --stat: #141414;        /* Tarjetas de estadísticas */
-  
-  /* Acentos en Naranjo */
-  --accent: #fb923c;      /* Naranjo vibrante para modo oscuro (Orange 400) */
-  --accent2: #f97316;     /* Naranjo de acción (Orange 500) */
-  --accentsoft: rgba(249, 115, 22, 0.15); /* Fondo suave translúcido naranjo */
-  
-  --barfill: #262626;
-  --chrome2: #0a0a0a;
-  --note: #1c1917;
-  --noteline: #44403c;
-  --notetext: #f5f5f4;
+.dark {
+  --canvas: 9 13 19;
+  --surface: 15 21 30;
+  --subtle: 22 30 41;
+  --ink: 236 240 245;
+  --muted: 142 153 170;
+  --faint: 98 110 128;
+  --line: 32 42 56;
+  --line-strong: 46 58 74;
+
+  --primary: 236 240 245;
+  --primary-ink: 9 13 19;
+  --brand: 143 179 217;
+  --accent: 240 128 70;
+  --accent-soft: 52 30 20;
+
+  --success: 76 196 150;
+  --warning: 230 176 70;
+  --danger: 240 110 100;
+
+  --c1: 127 167 209;
+  --c2: 240 128 70;
+  --c3: 76 194 162;
+  --c4: 120 132 150;
+
+  color-scheme: dark;
 }
 
-/* Transiciones globales para un efecto suave al cambiar */
-body {
-  background-color: var(--bg);
-  color: var(--ink);
-  transition: background-color 0.2s ease, color 0.2s ease;
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans;
+    font-feature-settings: "cv11", "ss01";
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  ::selection {
+    background: rgb(var(--accent) / 0.25);
+  }
+
+  :focus-visible {
+    outline: 2px solid rgb(var(--accent));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+}
+
+@layer components {
+  .input {
+    @apply w-full h-10 rounded-lg border border-line bg-surface px-3 text-sm text-ink placeholder:text-faint
+           transition-colors focus:outline-none focus:border-ink/40 focus:ring-4 focus:ring-ink/5;
+  }
+  .textarea {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm text-ink placeholder:text-faint leading-relaxed
+           transition-colors focus:outline-none focus:border-ink/40 focus:ring-4 focus:ring-ink/5 resize-y;
+  }
+  .label {
+    @apply block text-[13px] font-medium text-ink mb-1.5;
+  }
+  .eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.12em] text-muted;
+  }
+}
+
+/* Scrollbar discreto */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--line-strong)) transparent;
 }

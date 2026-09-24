@@ -1,100 +1,114 @@
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
+import Icon from '../components/Icon';
+import PracticeSteps from '../components/PracticeSteps';
+import { Badge, Button, Card, PageHeader, Progress, ScoreRing } from '../components/ui';
 
 export default function InformeCoach() {
-  const d = I.es;
-  const t = d.L.u6;
+  const t = I.es.L.u6;
   const navigate = useNavigate();
 
-  // Puntajes del wireframe original
   const areaScores = [70, 81, 79, 58];
+  const areaIcons = ['person', 'mic', 'message', 'users'];
+  const weakest = areaScores.indexOf(Math.min(...areaScores));
 
   return (
-    <div className="animate-fade-in pb-10">
-      <div className="text-xs text-[var(--muted)] mb-1">{t.crumbs}</div>
-      <h2 className="text-2xl font-bold mb-1 text-[var(--ink)]">{t.title}</h2>
-      <p className="text-sm text-[var(--muted)] mb-6">{t.sub}</p>
-
-      <div className="bg-[var(--panel)] border border-[var(--line2)] rounded-lg overflow-hidden shadow-sm">
-        
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--chrome2)] border-b border-[var(--line)]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <div className="flex-1 ml-2 bg-[var(--panel)] border border-[var(--line)] rounded-[5px] text-[11px] text-[var(--muted)] px-3 py-1">
-            app.voxready.io/informe/8842
-          </div>
-        </div>
-
-        <div className="p-5 md:p-6">
-          
-          {/* Tarjeta Superior: Narrativa y Puntaje Global */}
-          <div className="border border-[var(--line)] rounded-lg bg-[var(--panel)] p-5 mb-5">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold m-0">{t.globalL}</div>
-                <div className="text-[13px] text-[var(--muted)]">{t.scenLine}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-[var(--accent)] leading-none">74</div>
-                <div className="text-[11px] text-[var(--muted)]">/100</div>
-              </div>
-            </div>
-
-            {/* Placeholder de "Lo que hiciste bien" */}
-            <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-1.5">{t.good}</div>
-            <div className="h-2.5 bg-[var(--barfill)] rounded-sm w-[92%] mb-1.5"></div>
-            <div className="h-2.5 bg-[var(--barfill)] rounded-sm w-[92%] mb-4"></div>
-
-            {/* Placeholder de "Qué mejorar" */}
-            <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-1.5">{t.improve}</div>
-            <div className="h-2.5 bg-[var(--barfill)] rounded-sm w-[92%] mb-1.5"></div>
-            <div className="h-2.5 bg-[var(--barfill)] rounded-sm w-[75%] mb-4"></div>
-
-            {/* Cita del coach */}
-            <div className="bg-[var(--soft)] p-3 rounded-md text-xs text-[var(--muted)] italic border-l-4 border-[var(--accent2)]">
-              {t.quote}
-            </div>
-          </div>
-
-          {/* Tarjetas de Detalle por Área */}
-          <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.detail}</div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-            {t.areas.map((area, i) => (
-              <div key={i} className="border border-[var(--line)] rounded-lg p-3 bg-[var(--panel)] shadow-sm">
-                <div className="flex justify-between items-baseline mb-2">
-                  <span className="text-[13px] font-semibold text-[var(--ink)]">{area}</span>
-                  <span className="text-lg font-bold text-[var(--accent)]">{areaScores[i]}</span>
-                </div>
-                <div className="h-2.5 rounded-[5px] bg-[var(--barfill)] overflow-hidden">
-                  <div 
-                    className="h-full bg-[var(--accent)] rounded-r-[5px] transition-all duration-1000" 
-                    style={{ width: `${areaScores[i]}%` }}
-                  ></div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Botones de acción final */}
-          <div className="flex flex-wrap gap-3 mt-5">
-            <button className="border border-[var(--line2)] bg-transparent px-5 py-2 rounded-md text-xs font-semibold text-[var(--ink)] hover:bg-[var(--soft)] transition-colors">
+    <>
+      <PracticeSteps />
+      <PageHeader
+        eyebrow={`${t.scen} · ${t.date}`}
+        title={t.title}
+        actions={
+          <>
+            <Button variant="secondary" icon="play">
               {t.watch}
-            </button>
-            <button 
-              onClick={() => navigate('/vocero/preparar')}
-              className="border border-[var(--accent2)] bg-[var(--accent2)] rounded-md px-5 py-2 text-xs text-white font-semibold hover:brightness-105 transition-all"
-            >
+            </Button>
+            <Button variant="accent" icon="repeat" onClick={() => navigate('/vocero/preparar')}>
               {t.redo}
-            </button>
+            </Button>
+          </>
+        }
+      />
+
+      {/* Resumen coach */}
+      <Card className="p-0 overflow-hidden mb-6">
+        <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
+          <div className="flex flex-col items-center justify-center gap-4 p-8 border-b md:border-b-0 md:border-r border-line bg-subtle/40">
+            <ScoreRing value={74} />
+            <div className="text-center">
+              <div className="text-sm font-medium text-ink">{t.globalL}</div>
+              <div className="text-xs text-success mt-1">+6 vs. sesión anterior</div>
+            </div>
           </div>
 
-          <div className="mt-6 bg-[var(--note)] border border-[var(--noteline)] rounded-lg p-4 text-xs text-[var(--notetext)] leading-relaxed">
-            <b className="font-bold">{d.noteUX}</b> {t.note}
-          </div>
+          <div className="p-6 md:p-8">
+            <blockquote className="font-display font-medium text-[20px] md:text-[23px] leading-[1.45] tracking-[-0.015em] text-ink">“{t.quote}”</blockquote>
 
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="h-6 w-6 rounded-md bg-success/10 text-success flex items-center justify-center">
+                    <Icon name="check" size={13} strokeWidth={2.5} />
+                  </span>
+                  <span className="text-sm font-semibold text-ink">{t.good}</span>
+                </div>
+                <ul className="space-y-2">
+                  {t.goodItems.map((g) => (
+                    <li key={g} className="text-[13px] text-muted leading-relaxed pl-8">{g}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="h-6 w-6 rounded-md bg-accent-soft text-accent flex items-center justify-center">
+                    <Icon name="target" size={13} strokeWidth={2} />
+                  </span>
+                  <span className="text-sm font-semibold text-ink">{t.improve}</span>
+                </div>
+                <ul className="space-y-2">
+                  {t.improveItems.map((g) => (
+                    <li key={g} className="text-[13px] text-muted leading-relaxed pl-8">{g}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
+      </Card>
+
+      {/* Detalle por área */}
+      <h2 className="text-[15px] font-semibold text-ink mb-4">{t.detail}</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {t.areas.map((area, i) => (
+          <Card key={area} className="p-5">
+            <div className="flex items-center justify-between mb-5">
+              <span className="h-9 w-9 rounded-lg bg-subtle text-ink flex items-center justify-center">
+                <Icon name={areaIcons[i]} size={16} />
+              </span>
+              {i === weakest && <Badge tone="accent">A reforzar</Badge>}
+            </div>
+            <div className="text-[13px] text-muted">{area}</div>
+            <div className="text-[28px] font-semibold tracking-tight text-ink tabular-nums mt-1 mb-4">
+              {areaScores[i]}
+              <span className="text-sm text-faint font-normal"> /100</span>
+            </div>
+            <Progress value={areaScores[i]} tone={i === weakest ? 'accent' : 'ink'} />
+          </Card>
+        ))}
       </div>
-    </div>
+
+      <Card className="mt-6 flex flex-col sm:flex-row sm:items-center gap-4 bg-subtle/40 border-dashed">
+        <span className="h-10 w-10 rounded-xl bg-accent-soft text-accent flex items-center justify-center">
+          <Icon name="book" size={18} />
+        </span>
+        <div className="flex-1">
+          <div className="text-sm font-medium text-ink">Refuerza tu empatía</div>
+          <div className="text-[13px] text-muted">Una microlección de 4 minutos puede ayudarte antes de tu próxima práctica.</div>
+        </div>
+        <Button variant="secondary" to="/vocero/leccion" iconRight="arrowRight">
+          {I.es.openLesson}
+        </Button>
+      </Card>
+    </>
   );
 }

@@ -1,74 +1,83 @@
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
+import Icon from '../components/Icon';
+import PracticeSteps from '../components/PracticeSteps';
+import { Button, Card, cx } from '../components/ui';
 
 export default function Analizando() {
-  const d = I.es;
-  const t = d.L.u5;
+  const t = I.es.L.u5;
   const navigate = useNavigate();
+  const steps = [
+    { label: t.p1, icon: 'file' },
+    { label: t.p2, icon: 'mic' },
+    { label: t.p3, icon: 'person' },
+    { label: t.p4, icon: 'sparkles' },
+  ];
+
+  // Avance visual de los pasos (el análisis real es asíncrono en el backend)
+  const [current, setCurrent] = useState(0);
+  useEffect(() => {
+    if (current >= steps.length) return;
+    const id = setTimeout(() => setCurrent((c) => c + 1), 1400);
+    return () => clearTimeout(id);
+  }, [current, steps.length]);
+
+  const done = current >= steps.length;
 
   return (
-    <div className="animate-fade-in pb-10">
-      <div className="text-xs text-[var(--muted)] mb-1">{t.crumbs}</div>
-      <h2 className="text-2xl font-bold mb-1 text-[var(--ink)]">{t.title}</h2>
-      <p className="text-sm text-[var(--muted)] mb-6">{t.sub}</p>
+    <>
+      <PracticeSteps />
 
-      <div className="bg-[var(--panel)] border border-[var(--line2)] rounded-lg overflow-hidden shadow-sm">
-        
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--chrome2)] border-b border-[var(--line)]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <div className="flex-1 ml-2 bg-[var(--panel)] border border-[var(--line)] rounded-[5px] text-[11px] text-[var(--muted)] px-3 py-1">
-            app.voxready.io/sesion/procesando
+      <div className="flex justify-center">
+        <Card className="w-full max-w-xl p-8 md:p-12 text-center">
+          <div className="relative h-20 w-20 mx-auto mb-8">
+            {!done && <span className="absolute inset-0 rounded-full border-2 border-subtle border-t-accent animate-spin" />}
+            <span
+              className={cx(
+                'absolute rounded-full flex items-center justify-center transition-colors',
+                done ? 'inset-0 bg-success/10 text-success' : 'inset-2 bg-accent-soft text-accent',
+              )}
+            >
+              <Icon name={done ? 'check' : 'sparkles'} size={done ? 30 : 24} strokeWidth={done ? 2.5 : 1.75} />
+            </span>
           </div>
-        </div>
 
-        <div className="p-10 md:p-16 flex justify-center">
-          <div className="border border-[var(--line)] rounded-xl bg-[var(--panel)] p-10 text-center w-full max-w-lg shadow-sm">
-            
-            {/* Icono animado */}
-            <div className="h-16 w-16 border-4 border-[var(--line)] border-t-[var(--accent)] rounded-full animate-spin mx-auto mb-6"></div>
-            
-            <div className="text-lg font-bold mb-2">{t.head}</div>
-            <div className="text-[13px] text-[var(--muted)] mb-8">{t.small}</div>
-            
-            {/* Lista de pasos de análisis */}
-            <div className="text-left space-y-3">
-              <div className="flex justify-between text-xs items-center bg-[var(--stat)] p-3 rounded-lg border border-[var(--line)]">
-                <span className="font-medium text-[var(--ink)]">{t.p1}</span>
-                <span className="text-[#3b6d11] font-bold text-sm">✓</span>
-              </div>
-              <div className="flex justify-between text-xs items-center bg-[var(--stat)] p-3 rounded-lg border border-[var(--line)]">
-                <span className="font-medium text-[var(--ink)]">{t.p2}</span>
-                <span className="text-[#3b6d11] font-bold text-sm">✓</span>
-              </div>
-              <div className="flex justify-between text-xs items-center bg-[var(--stat)] p-3 rounded-lg border border-[var(--accent)] shadow-[0_0_0_1px_var(--accent)]">
-                <span className="font-bold text-[var(--accent)]">{t.p3}</span>
-                <span className="text-[var(--accent)] animate-pulse">…</span>
-              </div>
-              <div className="flex justify-between text-xs items-center p-3 rounded-lg border border-transparent opacity-60">
-                <span className="text-[var(--muted)]">{t.p4}</span>
-                <span className="text-[var(--muted)]">·</span>
-              </div>
-            </div>
+          <h1 className="font-display font-semibold text-[28px] leading-tight tracking-[-0.025em] text-ink">{done ? 'Tu informe está listo' : t.head}</h1>
+          <p className="text-sm text-muted mt-2">{done ? 'Revisa tus resultados y recomendaciones.' : t.small}</p>
 
-            {/* Botón para avanzar manualmente por ahora */}
-            <div className="mt-10">
-              <button 
-                onClick={() => navigate('/vocero/informe')}
-                className="bg-[var(--accent2)] border border-[var(--accent2)] rounded-md px-8 py-2.5 text-sm text-white font-bold hover:brightness-105 transition-all w-full sm:w-auto"
-              >
-                Ver Informe de Resultados →
-              </button>
-            </div>
-          </div>
-        </div>
+          <ul className="mt-10 space-y-1 text-left">
+            {steps.map((s, i) => {
+              const state = i < current ? 'done' : i === current ? 'active' : 'pending';
+              return (
+                <li
+                  key={s.label}
+                  className={cx(
+                    'flex items-center gap-4 rounded-xl px-4 h-14 transition-all',
+                    state === 'active' && 'bg-subtle',
+                    state === 'pending' && 'opacity-40',
+                  )}
+                >
+                  <span
+                    className={cx(
+                      'h-8 w-8 rounded-lg flex items-center justify-center',
+                      state === 'done' ? 'bg-success/10 text-success' : state === 'active' ? 'bg-accent-soft text-accent' : 'bg-subtle text-faint',
+                    )}
+                  >
+                    <Icon name={state === 'done' ? 'check' : s.icon} size={15} strokeWidth={state === 'done' ? 2.5 : 1.75} />
+                  </span>
+                  <span className={cx('text-sm flex-1', state === 'pending' ? 'text-muted' : 'text-ink font-medium')}>{s.label}</span>
+                  {state === 'active' && <span className="h-4 w-4 rounded-full border-2 border-line border-t-accent animate-spin" />}
+                </li>
+              );
+            })}
+          </ul>
 
-        <div className="m-5 md:m-6 mt-0 bg-[var(--note)] border border-[var(--noteline)] rounded-lg p-4 text-xs text-[var(--notetext)] leading-relaxed">
-          <b className="font-bold">{d.noteUX}</b> {t.note}
-        </div>
-
+          <Button variant={done ? 'accent' : 'primary'} size="lg" iconRight="arrowRight" className="mt-10 w-full sm:w-auto" onClick={() => navigate('/vocero/informe')}>
+            {t.cta}
+          </Button>
+        </Card>
       </div>
-    </div>
+    </>
   );
 }

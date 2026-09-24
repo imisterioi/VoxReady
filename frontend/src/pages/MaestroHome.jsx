@@ -1,62 +1,82 @@
 import I from '../data/dictionary';
+import Icon from '../components/Icon';
+import { Badge, Button, Card, CardHeader, PageHeader, Stat } from '../components/ui';
+
+// Distribución ilustrativa de puntajes globales (rangos de 10 puntos)
+const HISTOGRAM = [
+  { range: '30', count: 4 },
+  { range: '40', count: 11 },
+  { range: '50', count: 38 },
+  { range: '60', count: 96 },
+  { range: '70', count: 182 },
+  { range: '80', count: 214 },
+  { range: '90', count: 95 },
+];
 
 export default function MaestroHome() {
-  const d = I.es;
-  const t = d.L.m1;
-  const statValues = ['9', '640', '23', '88%']; // Valores del wireframe original
+  const t = I.es.L.m1;
+  const statValues = ['9', '640', '23', '88%'];
+  const statIcons = ['users', 'activity', 'tag', 'target'];
+  const max = Math.max(...HISTOGRAM.map((h) => h.count));
 
   return (
-    <div className="animate-fade-in pb-10">
-      <div className="text-xs text-[var(--muted)] mb-1">{t.crumbs}</div>
-      <h2 className="text-2xl font-bold mb-1 text-[var(--ink)]">{t.title}</h2>
-      <p className="text-sm text-[var(--muted)] mb-6">{t.sub}</p>
+    <>
+      <PageHeader
+        eyebrow={t.eyebrow}
+        title={t.title}
+        description={t.sub}
+        actions={
+          <Button to="/maestro/etiquetado" icon="tag">
+            Revisar cola
+          </Button>
+        }
+      />
 
-      <div className="bg-[var(--panel)] border border-[var(--line2)] rounded-lg overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--chrome2)] border-b border-[var(--line)]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <div className="flex-1 ml-2 bg-[var(--panel)] border border-[var(--line)] rounded-[5px] text-[11px] text-[var(--muted)] px-3 py-1">
-            master.voxready.io/panel
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        {t.st.map((k, i) => (
+          <Stat key={k} label={k} value={statValues[i]} icon={statIcons[i]} />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.6fr] gap-6">
+        {/* Versión del patrón */}
+        <Card className="flex flex-col">
+          <CardHeader title={t.verL} description={t.verLeg} />
+          <div className="flex items-baseline gap-3">
+            <span className="font-display font-semibold text-[56px] leading-none tracking-[-0.03em] text-ink">v0.4</span>
+            <Badge tone="success" icon="check">Vigente</Badge>
           </div>
-        </div>
+          <ul className="mt-6 space-y-2.5 text-[13px] text-muted">
+            <li className="flex items-center gap-2"><Icon name="clock" size={14} className="text-faint" /> Publicada el 18 jun 2026</li>
+            <li className="flex items-center gap-2"><Icon name="sliders" size={14} className="text-faint" /> 4 áreas · 12 criterios</li>
+            <li className="flex items-center gap-2"><Icon name="globe" size={14} className="text-faint" /> ES · EN · PT</li>
+          </ul>
+          <Button variant="secondary" to="/maestro/rubrica" iconRight="arrowRight" className="mt-8 w-full">
+            {t.openRub}
+          </Button>
+        </Card>
 
-        <div className="p-5 md:p-6">
-          {/* Estadísticas */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {t.st.map((k, i) => (
-              <div key={i} className="border border-[var(--line)] rounded-lg bg-[var(--stat)] p-4 text-center md:text-left">
-                <div className="text-[11px] text-[var(--muted)] mb-1">{k}</div>
-                <div className="text-2xl font-bold text-[var(--accent)]">{statValues[i]}</div>
+        {/* Histograma */}
+        <Card>
+          <CardHeader title={t.distL} description={t.distSub} />
+          <div className="flex items-end gap-3 h-48">
+            {HISTOGRAM.map((h) => (
+              <div key={h.range} className="group flex-1 flex flex-col items-center justify-end h-full">
+                <span className="text-[11px] text-muted tabular-nums mb-1.5 opacity-0 group-hover:opacity-100 transition-opacity">{h.count}</span>
+                <div
+                  className="w-full rounded-t-md bg-brand/80 group-hover:bg-accent transition-colors"
+                  style={{ height: `${(h.count / max) * 100}%` }}
+                />
               </div>
             ))}
           </div>
-
-          <div className="flex flex-col lg:flex-row gap-4 mb-6">
-            {/* Control de Versión */}
-            <div className="flex-[1] border border-[var(--line)] rounded-lg bg-[var(--panel)] p-5">
-              <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.verL}</div>
-              <div className="h-3 bg-[var(--barfill)] rounded-md w-3/4 mb-3"></div>
-              <div className="text-xs text-[var(--muted)] mb-4">{t.verLeg}</div>
-              <button className="border border-[var(--line2)] bg-[var(--panel)] px-4 py-2 rounded-md text-xs font-semibold hover:bg-[var(--soft)] transition-colors">
-                {t.openRub}
-              </button>
-            </div>
-
-            {/* Distribución Global (Placeholder visual) */}
-            <div className="flex-[1] border border-[var(--line)] rounded-lg bg-[var(--panel)] p-5">
-              <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.distL}</div>
-              <div className="h-[90px] rounded-md border border-dashed border-[var(--line2)] flex items-center justify-center text-xs text-[var(--muted)] bg-[var(--stat)]">
-                {t.hist}
-              </div>
-            </div>
+          <div className="flex gap-3 mt-2 pt-2 border-t border-line">
+            {HISTOGRAM.map((h) => (
+              <span key={h.range} className="flex-1 text-center text-[11px] text-faint tabular-nums">{h.range}</span>
+            ))}
           </div>
-
-          <div className="mt-5 bg-[var(--note)] border border-[var(--noteline)] rounded-lg p-4 text-xs text-[var(--notetext)] leading-relaxed">
-            <b className="font-bold">{d.noteUX}</b> {t.note}
-          </div>
-        </div>
+        </Card>
       </div>
-    </div>
+    </>
   );
 }

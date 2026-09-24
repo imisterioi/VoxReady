@@ -1,76 +1,67 @@
 import I from '../data/dictionary';
+import Icon from '../components/Icon';
+import { Badge, Button, Card, CardHeader, PageHeader, Stat, Table } from '../components/ui';
 
 export default function AdminHome() {
-  const d = I.es;
-  const t = d.L.a1;
-  const statValues = [6, 38, 152, 71]; // Valores hardcodeados del wireframe original
+  const t = I.es.L.a1;
+  const statValues = [6, 38, 152, 71];
+  const statIcons = ['file', 'users', 'activity', 'target'];
 
   return (
-    <div className="animate-fade-in pb-10">
-      <div className="text-xs text-[var(--muted)] mb-1">{t.crumbs}</div>
-      <h2 className="text-2xl font-bold mb-1 text-[var(--ink)]">{t.title}</h2>
-      <p className="text-sm text-[var(--muted)] mb-6">{t.sub}</p>
-
-      <div className="bg-[var(--panel)] border border-[var(--line2)] rounded-lg overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--chrome2)] border-b border-[var(--line)]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <div className="flex-1 ml-2 bg-[var(--panel)] border border-[var(--line)] rounded-[5px] text-[11px] text-[var(--muted)] px-3 py-1">
-            admin.voxready.io/panel
-          </div>
-        </div>
-
-        <div className="p-5 md:p-6">
-          {/* Estadísticas */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {t.st.map((k, i) => (
-              <div key={i} className="border border-[var(--line)] rounded-lg bg-[var(--stat)] p-4 text-center md:text-left">
-                <div className="text-[11px] text-[var(--muted)] mb-1">{k}</div>
-                <div className="text-2xl font-bold text-[var(--accent)]">{statValues[i]}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Tabla de Temas */}
-          <div className="flex items-center justify-between mb-3 mt-8">
-            <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold m-0">{t.themesL}</div>
-            <button className="bg-[var(--accent2)] text-white text-xs font-semibold px-4 py-1.5 rounded-md hover:brightness-105 transition-all">
+    <>
+      <PageHeader
+        eyebrow={t.eyebrow}
+        title={t.title}
+        description={t.sub}
+        actions={
+          <>
+            <Button variant="secondary" to="/admin/retencion" icon="lock">
+              Retención
+            </Button>
+            <Button to="/admin/tema" icon="plus">
               {t.newT}
-            </button>
-          </div>
+            </Button>
+          </>
+        }
+      />
 
-          <div className="overflow-x-auto border border-[var(--line)] rounded-lg">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-[var(--soft)] text-[var(--muted)]">
-                  {t.th.map((h, i) => (
-                    <th key={i} className="p-3 font-semibold border-b border-[var(--line)]">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {t.rows.map((row, i) => (
-                  <tr key={i} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--stat)] transition-colors">
-                    {row.map((cell, j) => (
-                      <td key={j} className="p-3 text-[var(--ink)]">{cell}</td>
-                    ))}
-                    <td className="p-3 text-right">
-                      <button className="border border-[var(--line2)] bg-[var(--panel)] px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-[var(--soft)] transition-colors">
-                        {t.edit}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-5 bg-[var(--note)] border border-[var(--noteline)] rounded-lg p-4 text-xs text-[var(--notetext)] leading-relaxed">
-            <b className="font-bold">{d.noteUX}</b> {t.note}
-          </div>
-        </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {t.st.map((k, i) => (
+          <Stat key={k} label={k} value={statValues[i]} icon={statIcons[i]} />
+        ))}
       </div>
-    </div>
+
+      <Card>
+        <CardHeader title={t.themesL} description={`${t.rows.length} temas disponibles para tus voceros`} />
+        <Table columns={t.th.map((h, i) => ({ label: h, align: i === t.th.length - 1 ? 'right' : 'left' }))}>
+          {t.rows.map((row) => (
+            <tr key={row[0]} className="group hover:bg-subtle/50 transition-colors">
+              <td className="py-4 px-6">
+                <div className="flex items-center gap-3">
+                  <span className="h-9 w-9 rounded-lg bg-subtle flex items-center justify-center text-muted">
+                    <Icon name="file" size={16} />
+                  </span>
+                  <span className="font-medium text-ink">{row[0]}</span>
+                </div>
+              </td>
+              <td className="py-4 px-6 text-muted">{row[1]}</td>
+              <td className="py-4 px-6">
+                <div className="flex gap-1">
+                  {row[2].split(', ').map((l) => (
+                    <Badge key={l} tone="outline">{l}</Badge>
+                  ))}
+                </div>
+              </td>
+              <td className="py-4 px-6 text-muted">{row[3]}</td>
+              <td className="py-4 px-6 text-right">
+                <Button variant="ghost" size="sm" to="/admin/tema" iconRight="chevronRight">
+                  {t.edit}
+                </Button>
+              </td>
+            </tr>
+          ))}
+        </Table>
+      </Card>
+    </>
   );
 }

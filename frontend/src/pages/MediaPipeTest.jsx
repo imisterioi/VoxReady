@@ -5,6 +5,9 @@ import {
   PoseLandmarker,
   DrawingUtils,
 } from "@mediapipe/tasks-vision";
+import toast from "react-hot-toast";
+import Icon from "../components/Icon";
+import { Button, Card, PageHeader, Progress } from "../components/ui";
 
 function MediaPipeTest() {
   const videoRef = useRef(null);
@@ -548,12 +551,15 @@ function MediaPipeTest() {
           smoothedLandmarks,
           {
             radius: 4,
+            color: "#F08046",
+            fillColor: "#ffffff",
           }
         );
 
         drawingUtils.drawConnectors(
           smoothedLandmarks,
-          PoseLandmarker.POSE_CONNECTIONS
+          PoseLandmarker.POSE_CONNECTIONS,
+          { color: "rgba(255, 255, 255, 0.7)", lineWidth: 2 }
         );
       }
     }
@@ -562,10 +568,12 @@ function MediaPipeTest() {
       requestAnimationFrame(detectPose);
   };
 
+
   const generateAnalysisJSON = () => {
     const data = {
-      duration:
-        (performance.now() - sessionStartTimeRef.current.startTime) / 1000,
+      duration: sessionStartTimeRef.current
+        ? (performance.now() - sessionStartTimeRef.current) / 1000
+        : 0,
 
       samples: analysisSamplesRef.current,
     };
@@ -574,183 +582,168 @@ function MediaPipeTest() {
 
     console.log(json);
 
+    // Descarga el JSON para poder revisarlo fuera de la consola
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mediapipe-analisis-${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast.success(`JSON generado (${data.samples.length} muestras)`);
+
     return json;
   };
 
   // --------------------------------------------------
   // 8. Interfaz
   // --------------------------------------------------
-  
-  return (
-    <div>
-      <button onClick={generateAnalysisJSON}>
-        Generar JSON
-      </button>
-      <h1>MediaPipe Pose Test</h1>
 
-      {loading && (
-        <p>Cargando MediaPipe...</p>
-      )}
+  const status = error
+    ? { label: "Error", tone: "danger" }
+    : loading
+      ? { label: "Cargando modelo…", tone: "neutral" }
+      : calibrating
+        ? { label: "Calibrando", tone: "warning" }
+        : cameraStarted
+          ? { label: "Analizando", tone: "success" }
+          : { label: "Listo", tone: "neutral" };
+
+  return (
+    <>
+      <Button variant="ghost" size="sm" icon="arrowLeft" to="/laboratorio" className="-ml-3 mb-8">
+        Laboratorio
+      </Button>
+
+      <PageHeader
+        eyebrow="Laboratorio · Visión por computador"
+        title="MediaPipe Pose"
+        description="Detección de 33 puntos corporales en tiempo real. Los primeros 30 segundos calibran el ruido de movimiento de cada zona del cuerpo."
+        actions={
+          <>
+            <Button variant="secondary" icon="download" onClick={generateAnalysisJSON} disabled={!cameraStarted}>
+              Generar JSON
+            </Button>
+            {!cameraStarted && (
+              <Button icon="camera" onClick={startCamera} disabled={loading}>
+                Iniciar cámara
+              </Button>
+            )}
+          </>
+        }
+      />
 
       {error && (
-        <p>{error}</p>
-      )}
-
-      {!cameraStarted && !loading && (
-        <button onClick={startCamera}>
-          Iniciar cámara
-        </button>
-      )}
-
-      {calibrating && (
-        <div>
-          <h2>Calibrando...</h2>
-
-          <p>
-            Mantente quieto durante{" "}
-            {CALIBRATION_DURATION / 1000} segundos.
-          </p>
-
-          <p>
-            Progreso:{" "}
-            {Math.round(
-              calibrationProgress * 100
-            )}
-            %
-          </p>
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+          <Icon name="alert" size={16} />
+          {error}
         </div>
       )}
 
-      {calibrationResult && (
-        <div>
-            <h2>Calibración completada</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.6fr_1fr] gap-6">
+        {/* Video + landmarks */}
+        <div className="relative aspect-video rounded-2xl overflow-hidden bg-[#0B1118] ring-1 ring-line">
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="absolute inset-0 w-full h-full object-contain"
+          />
+          <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
 
-            <h3>Movimiento promedio</h3>
+          {!cameraStarted && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-center">
+              {loading ? (
+                <>
+                  <span className="h-8 w-8 rounded-full border-2 border-white/10 border-t-white/70 animate-spin" />
+                  <span className="text-sm text-white/60">Cargando MediaPipe…</span>
+                </>
+              ) : (
+                <>
+                  <span className="h-14 w-14 rounded-full bg-white/5 flex items-center justify-center text-white/60">
+                    <Icon name="person" size={26} />
+                  </span>
+                  <span className="text-sm text-white/70">Colócate de cuerpo completo frente a la cámara</span>
+                  <Button variant="secondary" size="sm" icon="camera" onClick={startCamera}>
+                    Iniciar cámara
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
 
-            <p>
-            Cabeza:{" "}
-            {calibrationResult.averages.head.toFixed(5)}
-            </p>
-
-            <p>
-            Hombros:{" "}
-            {calibrationResult.averages.shoulders.toFixed(5)}
-            </p>
-
-            <p>
-            Brazos:{" "}
-            {calibrationResult.averages.arms.toFixed(5)}
-            </p>
-
-            <p>
-            Manos:{" "}
-            {calibrationResult.averages.hands.toFixed(5)}
-            </p>
-
-            <p>
-            Torso:{" "}
-            {calibrationResult.averages.torso.toFixed(5)}
-            </p>
-
-            <p>
-            Caderas:{" "}
-            {calibrationResult.averages.hips.toFixed(5)}
-            </p>
-
-            <p>
-            Piernas:{" "}
-            {calibrationResult.averages.legs.toFixed(5)}
-            </p>
-
-            <p>
-            Rodillas:{" "}
-            {calibrationResult.averages.knees.toFixed(5)}
-            </p>
-            
-            <p>
-            Pies:{" "}
-            {calibrationResult.averages.feet.toFixed(5)}
-            </p>
-            <h3>Umbral de ruido</h3>
-
-            <p>
-            Cabeza:{" "}
-            {calibrationResult.noiseThresholds.head.toFixed(5)}
-            </p>
-
-            <p>
-            Hombros:{" "}
-            {calibrationResult.noiseThresholds.shoulders.toFixed(5)}
-            </p>
-
-            <p>
-            Brazos:{" "}
-            {calibrationResult.noiseThresholds.arms.toFixed(5)}
-            </p>
-
-            <p>
-            Manos:{" "}
-            {calibrationResult.noiseThresholds.hands.toFixed(5)}
-            </p>
-
-            <p>
-            Torso:{" "}
-            {calibrationResult.noiseThresholds.torso.toFixed(5)}
-            </p>
-
-            <p>
-            Caderas:{" "}
-            {calibrationResult.noiseThresholds.hips.toFixed(5)}
-            </p>
-
-            <p>
-            Piernas:{" "}
-            {calibrationResult.noiseThresholds.legs.toFixed(5)}
-            </p>
-
-            <p>
-            Rodillas:{" "}
-            {calibrationResult.noiseThresholds.knees.toFixed(5)}
-            </p>
-
-            <p>
-            Pies:{" "}
-            {calibrationResult.noiseThresholds.feet.toFixed(5)}
-            </p>
+          <div className="absolute top-3 left-3">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur px-3 h-7 text-xs text-white">
+              <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status.tone]}`} />
+              {status.label}
+            </span>
+          </div>
         </div>
-        )}
 
-      <div
-        style={{
-          position: "relative",
-          width: "640px",
-          maxWidth: "100%",
-        }}
-      >
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          style={{
-            width: "100%",
-            display: "block",
-          }}
-        />
+        {/* Panel lateral */}
+        <div className="space-y-6">
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[15px] font-semibold text-ink">Calibración</h3>
+              <span className="text-xs text-muted tabular-nums">
+                {Math.round(calibrationProgress * 100)}%
+              </span>
+            </div>
+            <Progress value={calibrationProgress * 100} tone={calibrationResult ? "success" : "accent"} />
+            <p className="text-[13px] text-muted mt-3 leading-relaxed">
+              {calibrationResult
+                ? "Calibración completada. Los movimientos sobre el umbral se consideran significativos."
+                : calibrating
+                  ? `Mantente quieto durante ${CALIBRATION_DURATION / 1000} segundos.`
+                  : "Se inicia automáticamente al encender la cámara."}
+            </p>
+          </Card>
 
-        <canvas
-          ref={canvasRef}
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-          }}
-        />
+          <Card padded={false} className="overflow-hidden">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-6 px-5 py-3 border-b border-line text-xs text-muted">
+              <span>Zona</span>
+              <span className="text-right">Promedio</span>
+              <span className="text-right">Umbral</span>
+            </div>
+            <div className="divide-y divide-line">
+              {Object.keys(BODY_PARTS).map((part) => (
+                <div key={part} className="grid grid-cols-[1fr_auto_auto] gap-x-6 px-5 py-2.5 text-[13px]">
+                  <span className="text-ink">{PART_LABELS[part]}</span>
+                  <span className="text-right font-mono text-xs text-muted tabular-nums">
+                    {calibrationResult ? calibrationResult.averages[part].toFixed(5) : "—"}
+                  </span>
+                  <span className="text-right font-mono text-xs text-ink tabular-nums">
+                    {calibrationResult ? calibrationResult.noiseThresholds[part].toFixed(5) : "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
+
+const STATUS_DOT = {
+  danger: "bg-red-400",
+  neutral: "bg-white/60",
+  warning: "bg-amber-400",
+  success: "bg-emerald-400",
+};
+
+const PART_LABELS = {
+  head: "Cabeza",
+  shoulders: "Hombros",
+  arms: "Brazos",
+  hands: "Manos",
+  torso: "Torso",
+  hips: "Caderas",
+  legs: "Piernas",
+  knees: "Rodillas",
+  feet: "Pies",
+};
 
 export default MediaPipeTest;

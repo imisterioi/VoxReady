@@ -1,96 +1,86 @@
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
+import Icon from '../components/Icon';
+import PracticeSteps from '../components/PracticeSteps';
+import { Button } from '../components/ui';
 
 export default function SesionPractica() {
-  const d = I.es;
-  const t = d.L.u4;
+  const t = I.es.L.u4;
   const navigate = useNavigate();
 
   return (
-    <div className="animate-fade-in pb-10">
-      <div className="text-xs text-[var(--muted)] mb-1">{t.crumbs}</div>
-      <h2 className="text-2xl font-bold mb-1 text-[var(--ink)]">{t.title}</h2>
-      <p className="text-sm text-[var(--muted)] mb-6">{t.sub}</p>
+    <>
+      <PracticeSteps />
 
-      <div className="bg-[var(--panel)] border border-[var(--line2)] rounded-lg overflow-hidden shadow-sm">
-        
-        {/* Barra del navegador */}
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--chrome2)] border-b border-[var(--line)]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[#27c93f]"></span>
-          <div className="flex-1 ml-2 bg-[var(--panel)] border border-[var(--line)] rounded-[5px] text-[11px] text-[var(--muted)] px-3 py-1">
-            app.voxready.io/sesion/en-vivo
+      <div className="rounded-[28px] bg-[#0B1118] p-3 md:p-4 ring-1 ring-black/5 shadow-lift">
+        {/* Vista dividida 50/50 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Entrevistador IA */}
+          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-br from-[#16263A] to-[#0E1824] flex items-center justify-center">
+            <div className="relative">
+              <span className="absolute inset-0 rounded-full bg-[#E0662A]/30 animate-pulse-ring" />
+              <span className="relative h-24 w-24 rounded-full bg-gradient-to-br from-[#F08046] to-[#B84A18] flex items-center justify-center text-white shadow-2xl">
+                <Icon name="sparkles" size={34} strokeWidth={1.5} />
+              </span>
+            </div>
+            <div className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 h-7 text-white/90 text-xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#F08046]" />
+              {t.interviewer}
+            </div>
+            {/* Onda de voz */}
+            <div className="absolute bottom-5 inset-x-0 flex items-end justify-center gap-1 h-6">
+              {[40, 70, 100, 60, 85, 45, 90, 55, 75, 35, 65].map((h, i) => (
+                <span key={i} className="w-1 rounded-full bg-white/30" style={{ height: `${h}%` }} />
+              ))}
+            </div>
+          </div>
+
+          {/* Self-view */}
+          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-br from-[#1C242E] to-[#12181F] flex items-center justify-center">
+            <div className="flex flex-col items-center gap-3 text-white/40">
+              <Icon name="person" size={40} strokeWidth={1.25} />
+              <span className="text-xs">{t.selfV}</span>
+            </div>
+            <div className="absolute top-4 right-4 flex items-center gap-2 rounded-full bg-black/50 backdrop-blur px-3 h-7 text-white text-xs tabular-nums">
+              <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+              REC 02:14
+            </div>
           </div>
         </div>
 
-        <div className="p-5 md:p-6">
-          
-          {/* Vista Dividida 50/50 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-            
-            {/* IA Entrevistador */}
-            <div className="relative border border-[var(--line2)] rounded-lg min-h-[230px] md:min-h-[300px] bg-[#202830] flex items-center justify-center text-[13px] text-[#aab4bd] overflow-hidden shadow-inner">
-              <div className="absolute top-2 left-2.5 bg-white/10 text-white text-[11px] px-2.5 py-1 rounded-md backdrop-blur-sm">
-                {t.interviewer}
-              </div>
-              {t.interviewerV}
-            </div>
+        {/* Subtítulo en vivo */}
+        <div className="px-4 md:px-8 pt-8 pb-6 text-center">
+          <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-4">{t.qL}</div>
+          <p className="font-display font-medium text-[22px] md:text-[28px] leading-[1.35] tracking-[-0.015em] text-white max-w-3xl mx-auto">“{t.qEx}”</p>
+        </div>
 
-            {/* Usuario (Self-view) */}
-            <div className="relative border border-[var(--line2)] rounded-lg min-h-[230px] md:min-h-[300px] bg-[#323b43] flex items-center justify-center text-[13px] text-[#cdd4da] overflow-hidden shadow-inner">
-              <div className="absolute top-2 right-2.5 flex items-center gap-1.5 bg-black/50 px-2.5 py-1 rounded-md text-white text-[11px] backdrop-blur-sm animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-[#e24b4a]"></span>
-                REC 02:14
-              </div>
-              {t.selfV}
-            </div>
-            
-          </div>
-
-          {/* Subtítulos en vivo (Pregunta actual) */}
-          <div className="border border-[var(--line)] rounded-lg bg-[var(--panel)] p-4 md:p-5 mb-5 border-l-4 border-l-[var(--accent2)] shadow-sm">
-            <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-2">
-              {t.qL}
-            </div>
-            <div className="text-base md:text-lg leading-relaxed text-[var(--ink)] font-medium">
-              “{t.qEx}”
-            </div>
-          </div>
-
-          {/* Controles de la sesión */}
-          <div className="flex flex-wrap items-center gap-3">
-            <button className="border border-[var(--line2)] bg-[var(--panel)] px-4 py-2 rounded-md text-xs font-semibold hover:bg-[var(--soft)] transition-colors">
-              {t.pause}
+        {/* Controles */}
+        <div className="flex flex-col md:flex-row md:items-center gap-4 rounded-2xl bg-white/[0.04] p-3 md:p-4">
+          <div className="flex items-center gap-2">
+            <button className="h-11 px-4 rounded-xl bg-white/10 hover:bg-white/15 text-white text-sm font-medium inline-flex items-center gap-2 transition-colors">
+              <Icon name="pause" size={16} /> {t.pause}
             </button>
-            <button className="border border-transparent bg-transparent px-4 py-2 rounded-md text-xs text-[var(--ink)] font-semibold hover:bg-[var(--soft)] transition-colors">
-              {t.repeat}
-            </button>
-            
-            <div className="hidden md:block flex-1 max-w-xs mx-4">
-              <div className="h-2.5 rounded-[5px] bg-[var(--barfill)] overflow-hidden">
-                <div className="h-full bg-[var(--accent)] w-[38%] rounded-r-[5px]"></div>
-              </div>
-            </div>
-            
-            <span className="text-xs text-[var(--muted)] whitespace-nowrap">
-              {t.qn}
-            </span>
-            
-            <button 
-              onClick={() => navigate('/vocero/analizando')}
-              className="ml-auto border border-[var(--accent2)] bg-[var(--accent2)] rounded-md px-5 py-2 text-xs text-white font-semibold hover:brightness-105 transition-all"
-            >
-              {t.finish}
+            <button className="h-11 px-4 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-sm font-medium inline-flex items-center gap-2 transition-colors">
+              <Icon name="repeat" size={16} /> {t.repeat}
             </button>
           </div>
 
-          <div className="mt-6 bg-[var(--note)] border border-[var(--noteline)] rounded-lg p-4 text-xs text-[var(--notetext)] leading-relaxed">
-            <b className="font-bold">{d.noteUX}</b> {t.note}
+          <div className="flex items-center gap-3 md:flex-1 md:max-w-xs md:mx-auto">
+            <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full w-[38%] rounded-full bg-[#F08046]" />
+            </div>
+            <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">{t.qn}</span>
           </div>
 
+          <Button variant="accent" size="lg" onClick={() => navigate('/vocero/analizando')} className="md:ml-auto">
+            {t.finish}
+          </Button>
         </div>
       </div>
-    </div>
+
+      <p className="text-center text-xs text-faint mt-6 flex items-center justify-center gap-1.5">
+        <Icon name="info" size={13} /> {t.hint}
+      </p>
+    </>
   );
 }

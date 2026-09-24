@@ -1,83 +1,77 @@
+import { useState } from 'react';
+import toast from 'react-hot-toast';
 import I from '../data/dictionary';
+import Icon from '../components/Icon';
+import { Avatar, Badge, Button, Card, CardHeader, EmptyState, PageHeader, Radio, Segmented } from '../components/ui';
 
 export default function PoliticaRetencion() {
-  const d = I.es;
-  const t = d.L.a3;
+  const t = I.es.L.a3;
+  const [retention, setRetention] = useState('full');
+  const [term, setTerm] = useState(t.terms[1]);
+  const [requests, setRequests] = useState([{ user: t.delRow[0], date: t.delRow[1] }]);
+
+  const processRequest = (i) => {
+    setRequests(requests.filter((_, j) => j !== i));
+    toast.success('Solicitud procesada');
+  };
 
   return (
-    <div className="animate-fade-in pb-10">
-      <div className="text-xs text-[var(--muted)] mb-1">{t.crumbs}</div>
-      <h2 className="text-2xl font-bold mb-1 text-[var(--ink)]">{t.title}</h2>
-      <p className="text-sm text-[var(--muted)] mb-6">{t.sub}</p>
+    <>
+      <PageHeader eyebrow={t.eyebrow} title={t.title} description={t.sub} />
 
-      <div className="bg-[var(--panel)] border border-[var(--line2)] rounded-lg overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--chrome2)] border-b border-[var(--line)]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <div className="flex-1 ml-2 bg-[var(--panel)] border border-[var(--line)] rounded-[5px] text-[11px] text-[var(--muted)] px-3 py-1">
-            admin.voxready.io/retencion
-          </div>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_1fr] gap-6">
+        <div className="space-y-6">
+          <Card>
+            <CardHeader title={t.q1} />
+            <div className="space-y-3">
+              <Radio checked={retention === 'full'} onChange={() => setRetention('full')} title={t.opt1} description={t.opt1d} />
+              <Radio checked={retention === 'metrics'} onChange={() => setRetention('metrics')} title={t.opt2} description={t.opt2d} />
+            </div>
+          </Card>
+
+          <Card>
+            <CardHeader title={t.termL} />
+            <Segmented options={t.terms} value={term} onChange={setTerm} />
+            <p className="flex items-start gap-2 text-[13px] text-muted mt-4 leading-relaxed">
+              <Icon name="info" size={15} className="mt-0.5 text-faint" />
+              {t.termLeg}
+            </p>
+          </Card>
         </div>
 
-        <div className="p-5 md:p-6">
-          
-          <div className="border border-[var(--line)] rounded-lg bg-[var(--panel)] p-5 mb-4 shadow-sm">
-            <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.q1}</div>
-            <label className="flex items-center gap-2 mb-3 cursor-pointer text-sm">
-              <input type="radio" name="retention_type" className="accent-[var(--accent2)] w-4 h-4 cursor-pointer" defaultChecked />
-              <span>{t.opt1}</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer text-sm">
-              <input type="radio" name="retention_type" className="accent-[var(--accent2)] w-4 h-4 cursor-pointer" />
-              <span>{t.opt2}</span>
-            </label>
-          </div>
-
-          <div className="border border-[var(--line)] rounded-lg bg-[var(--panel)] p-5 mb-4 shadow-sm">
-            <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.termL}</div>
-            <div className="flex gap-2 flex-wrap mb-3">
-              {t.terms.map((x, i) => (
-                <span key={i} className={`border rounded-full px-3 py-1 text-[11px] cursor-pointer transition-colors ${i === 1 ? 'bg-[var(--accentsoft)] border-[var(--accent)] text-[var(--accent)] font-semibold' : 'bg-[var(--panel)] border-[var(--line2)] text-[var(--ink)] hover:bg-[var(--soft)]'}`}>
-                  {x}
-                </span>
+        <Card className="h-fit">
+          <CardHeader
+            title={t.delL}
+            action={<Badge tone={requests.length ? 'accent' : 'neutral'}>{requests.length} pendiente{requests.length === 1 ? '' : 's'}</Badge>}
+          />
+          {requests.length === 0 ? (
+            <EmptyState icon="check" title="Sin solicitudes pendientes" description="Todas las solicitudes de borrado fueron procesadas." />
+          ) : (
+            <ul className="divide-y divide-line -mx-6 border-t border-line">
+              {requests.map((r, i) => (
+                <li key={r.user} className="flex items-center gap-3 px-6 py-4">
+                  <Avatar initials="V" size="sm" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium text-ink">{r.user}</div>
+                    <div className="text-xs text-muted">{t.th[1]} el {r.date}</div>
+                  </div>
+                  <Button variant="danger" size="sm" icon="trash" onClick={() => processRequest(i)}>
+                    {t.process}
+                  </Button>
+                </li>
               ))}
-            </div>
-            <div className="text-xs text-[var(--muted)]">{t.termLeg}</div>
-          </div>
+            </ul>
+          )}
 
-          <div className="border border-[var(--line)] rounded-lg bg-[var(--panel)] p-5 shadow-sm">
-            <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.delL}</div>
-            <div className="overflow-x-auto border border-[var(--line)] rounded-lg">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead>
-                  <tr className="bg-[var(--soft)] text-[var(--muted)]">
-                    {t.th.map((h, i) => (
-                      <th key={i} className="p-3 font-semibold border-b border-[var(--line)]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--stat)] transition-colors">
-                    <td className="p-3 text-[var(--ink)]">{t.delRow[0]}</td>
-                    <td className="p-3 text-[var(--ink)]">{t.delRow[1]}</td>
-                    <td className="p-3 text-right">
-                      <button className="border border-[var(--line2)] bg-[var(--panel)] px-3 py-1.5 rounded-md text-xs font-semibold hover:bg-[var(--soft)] transition-colors">
-                        {t.process}
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div className="mt-6 rounded-xl bg-subtle/60 p-4 flex gap-3">
+            <Icon name="shield" size={18} className="text-muted mt-0.5" />
+            <p className="text-xs text-muted leading-relaxed">
+              Resumen: se conserva <b className="text-ink font-medium">{retention === 'full' ? 'video, audio y métricas' : 'solo métricas'}</b> durante{' '}
+              <b className="text-ink font-medium">{term.toLowerCase()}</b>.
+            </p>
           </div>
-
-          <div className="mt-6 bg-[var(--note)] border border-[var(--noteline)] rounded-lg p-4 text-xs text-[var(--notetext)] leading-relaxed">
-            <b className="font-bold">{d.noteUX}</b> {t.note}
-          </div>
-
-        </div>
+        </Card>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import MainLayout from './layouts/MainLayout';
@@ -13,39 +14,52 @@ import InformeCoach from './pages/InformeCoach';
 import MiProgreso from './pages/MiProgreso';
 import PoliticaRetencion from './pages/PoliticaRetencion';
 import EditorTema from './pages/EditorTema';
-import EditorRubrica from './pages/EditorRubrica'; 
-import ColaEtiquetado from './pages/ColaEtiquetado'; 
-import Microleccion from './pages/Microleccion'; 
+import EditorRubrica from './pages/EditorRubrica';
+import ColaEtiquetado from './pages/ColaEtiquetado';
+import Microleccion from './pages/Microleccion';
 import NotFound from './pages/NotFound';
-import MediaPipeTest from './pages/MediaPipeTest';
+import Laboratorio from './pages/Laboratorio';
+
+// MediaPipe es pesado: se carga solo al entrar a la prueba
+const MediaPipeTest = lazy(() => import('./pages/MediaPipeTest'));
 
 function App() {
   return (
     <BrowserRouter>
-      <Toaster 
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: 'var(--panel)',
-              color: 'var(--ink)',
-              border: '1px solid var(--line)',
-              fontSize: '12px',
-            },
-          }}
-        />
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: 'rgb(var(--surface))',
+            color: 'rgb(var(--ink))',
+            border: '1px solid rgb(var(--line))',
+            borderRadius: '12px',
+            fontSize: '13px',
+            boxShadow: '0 12px 32px -8px rgb(15 27 42 / 0.18)',
+          },
+          success: { iconTheme: { primary: 'rgb(var(--success))', secondary: 'rgb(var(--surface))' } },
+        }}
+      />
       <Routes>
-        {/* Ruta del Login (No tiene el menú lateral, ocupa toda la pantalla) */}
+        {/* Login: pantalla completa, sin navegación */}
         <Route path="/login" element={<Login />} />
 
-        {/* Rutas de la aplicación (Sí tienen el menú lateral del MainLayout) */}
+        {/* Rutas con la navegación principal */}
         <Route path="/" element={<MainLayout />}>
-          {/* Si alguien entra a la raíz "/", lo mandamos directo al login */}
           <Route index element={<Navigate to="/login" replace />} />
 
-          {/* Rutas del MediaPipe Test */}
-          <Route path="mediapipe-test" element={<MediaPipeTest />} />
-          
-        {/* Rutas del Vocero */}
+          {/* Laboratorio: pruebas técnicas (backend + MediaPipe) */}
+          <Route path="laboratorio" element={<Laboratorio />} />
+          <Route
+            path="mediapipe-test"
+            element={
+              <Suspense fallback={null}>
+                <MediaPipeTest />
+              </Suspense>
+            }
+          />
+
+          {/* Vocero */}
           <Route path="vocero" element={<VoceroHome />} />
           <Route path="vocero/escenarios" element={<ElegirEscenario />} />
           <Route path="vocero/preparar" element={<CheckTecnico />} />
@@ -55,20 +69,17 @@ function App() {
           <Route path="vocero/progreso" element={<MiProgreso />} />
           <Route path="vocero/leccion" element={<Microleccion />} />
 
-        {/* Rutas del Admin */}
+          {/* Admin del cliente */}
           <Route path="admin" element={<AdminHome />} />
-          <Route path="admin/tema" element={<EditorTema />} /> {/* <-- 3. Ruta 1 */}
-          <Route path="admin/retencion" element={<PoliticaRetencion />} /> {/* <-- 4. Ruta 2 */}
+          <Route path="admin/tema" element={<EditorTema />} />
+          <Route path="admin/retencion" element={<PoliticaRetencion />} />
 
-        {/* Rutas del Maestro */}
+          {/* Configurador maestro */}
           <Route path="maestro" element={<MaestroHome />} />
-          <Route path="maestro/rubrica" element={<EditorRubrica />} /> 
+          <Route path="maestro/rubrica" element={<EditorRubrica />} />
           <Route path="maestro/etiquetado" element={<ColaEtiquetado />} />
 
-        {/* <-- 2. Ruta comodín 404 (atrapa cualquier URL inválida) */}
           <Route path="*" element={<NotFound />} />
-
-
         </Route>
       </Routes>
     </BrowserRouter>

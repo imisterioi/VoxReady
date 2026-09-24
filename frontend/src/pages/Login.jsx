@@ -1,131 +1,140 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
-import { TEST_USERS } from '../data/mockData';
+import { TEST_USERS, roleIndex, homeFor } from '../data/mockData';
+import useTheme from '../hooks/useTheme';
+import Logo from '../components/Logo';
+import Icon from '../components/Icon';
+import { Avatar, Button, Field } from '../components/ui';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const { isDark, toggleTheme } = useTheme();
   const d = I.es;
-
-  // 1. Estado del tema leyendo el almacenamiento del navegador
-  const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem('voxready_theme') === 'dark';
-  });
-
-  // 2. Efecto para inyectar la clase dark dinámicamente
-  useEffect(() => {
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark');
-      root.setAttribute('data-theme', 'dark');
-      localStorage.setItem('voxready_theme', 'dark');
-    } else {
-      root.classList.remove('dark');
-      root.setAttribute('data-theme', 'light');
-      localStorage.setItem('voxready_theme', 'light');
-    }
-  }, [isDark]);
-
-  const toggleTheme = () => setIsDark(!isDark);
 
   const handleLogin = (user) => {
     localStorage.setItem('voxready_user', JSON.stringify(user));
-    if (user.role === 'user') navigate('/vocero');
-    if (user.role === 'admin') navigate('/admin');
-    if (user.role === 'master') navigate('/maestro');
+    navigate(homeFor(user.role));
   };
 
-  const submitLogin = () => {
-    const user = TEST_USERS.find(u => u.email.toLowerCase() === email.toLowerCase());
-    if (user) {
-      handleLogin(user);
-    } else {
-      setError(d.login.err);
-    }
+  const submitLogin = (e) => {
+    e.preventDefault();
+    const user = TEST_USERS.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (user) handleLogin(user);
+    else setError(d.login.err);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-5 bg-[var(--bg)] text-[var(--ink)] transition-colors duration-200 relative">
-      
-      {/* Botón flotante para cambiar el tema en el Login */}
-      <button 
-        onClick={toggleTheme}
-        title={d.theme}
-        className="absolute top-5 right-5 h-10 w-10 border border-[var(--line)] rounded-full flex items-center justify-center bg-[var(--panel)] hover:bg-[var(--soft)] transition-colors text-lg shadow-sm"
-      >
-        {isDark ? '☀️' : '🌙'}
-      </button>
+    <div className="h-dvh overflow-hidden grid lg:grid-cols-[1.05fr_1fr] bg-canvas">
+      {/* Panel de marca */}
+      <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-[#0E1F2F] text-white p-10">
+        <div
+          className="absolute inset-0 opacity-[0.07]"
+          style={{
+            backgroundImage:
+              'linear-gradient(rgb(255 255 255) 1px, transparent 1px), linear-gradient(90deg, rgb(255 255 255) 1px, transparent 1px)',
+            backgroundSize: '48px 48px',
+          }}
+        />
+        <div className="absolute -bottom-40 -right-40 h-[520px] w-[520px] rounded-full bg-[#E0662A] opacity-20 blur-[120px]" />
 
-      <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--line)] rounded-2xl p-8 shadow-lg transition-colors duration-200">
-        
-        <div className="flex justify-center mb-5">
-          <span className="bg-white rounded-lg p-2 shadow-sm border border-gray-100">
-            <img src="/VoxReady_logo.png" alt="VoxReady" className="h-10 block" />
-          </span>
-        </div>
-        
-        <h1 className="text-xl font-semibold text-center mb-1 text-[var(--ink)]">{d.login.title}</h1>
-        <p className="text-sm text-[var(--muted)] text-center mb-6">{d.login.sub}</p>
+        <Logo tone="inverse" className="relative" />
 
-        <div className="mb-4">
-          <label className="block text-[11px] text-[var(--muted)] uppercase tracking-wider font-semibold mb-1">
-            {d.login.emailL}
-          </label>
-          <input
-            className="w-full h-10 border border-[var(--line)] rounded-lg bg-[var(--panel)] text-[var(--ink)] text-[13px] px-3 focus:outline-none focus:border-[var(--accent)] transition-colors"
-            type="email"
-            placeholder={d.login.emailPh}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && submitLogin()}
-          />
+        <div className="relative max-w-md">
+          <h2 className="font-display font-semibold text-[44px] xl:text-[50px] leading-[1.12] tracking-[-0.03em]">{d.login.heroTitle}</h2>
+          <p className="text-white/60 text-[15px] leading-relaxed mt-5">{d.login.heroSub}</p>
+
+          <div className="mt-8 grid grid-cols-2 gap-3 max-w-sm">
+            {['Expresión', 'Tono de voz', 'Coherencia', 'Empatía'].map((a) => (
+              <div key={a} className="flex items-center gap-2 text-[13px] text-white/70">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#F08046]" />
+                {a}
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div className="mb-4">
-          <label className="block text-[11px] text-[var(--muted)] uppercase tracking-wider font-semibold mb-1">
-            {d.login.passL}
-          </label>
-          <input
-            className="w-full h-10 border border-[var(--line)] rounded-lg bg-[var(--panel)] text-[var(--ink)] text-[13px] px-3 focus:outline-none focus:border-[var(--accent)] transition-colors"
-            type="password"
-            placeholder={d.login.passPh}
-          />
-        </div>
+        <div className="relative text-xs text-white/40">© 2026 VoxReady</div>
+      </aside>
 
-        <button
-          className="w-full h-10 border-none rounded-lg bg-[var(--accent2)] text-white text-sm font-semibold cursor-pointer mt-2 hover:brightness-105 transition-all"
-          onClick={submitLogin}
-        >
-          {d.login.signIn}
-        </button>
-
-        <p className="text-xs text-red-500 mt-2 min-h-[16px] text-center">{error}</p>
-
-        <div className="flex items-center gap-2 my-5 text-[var(--muted)] text-[11px] uppercase tracking-wider before:flex-1 before:h-px before:bg-[var(--line)] after:flex-1 after:h-px after:bg-[var(--line)]">
-          {d.login.testL}
-        </div>
-
-        {TEST_USERS.map((u, i) => (
+      {/* Formulario */}
+      <section className="relative flex flex-col h-dvh">
+        <div className="flex items-center justify-between px-6 py-4 shrink-0">
+          <Logo className="lg:invisible" />
           <button
-            key={i}
-            onClick={() => handleLogin(u)}
-            className="flex items-center gap-3 w-full text-left border border-[var(--line)] rounded-xl bg-[var(--panel)] p-3 cursor-pointer mb-2 hover:border-[var(--accent)] hover:bg-[var(--accentsoft)] transition-colors"
+            onClick={toggleTheme}
+            title={d.theme}
+            aria-label={d.theme}
+            className="h-9 w-9 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-subtle transition-colors"
           >
-            <span className="w-8 h-8 rounded-full bg-[var(--accent)] text-white text-xs font-semibold flex items-center justify-center shrink-0">
-              {u.initials}
-            </span>
-            <span className="flex-1 min-w-0 flex flex-col">
-              <span className="text-[13px] font-semibold text-[var(--ink)]">{u.name}</span>
-              <span className="text-[11px] text-[var(--muted)]">
-                {d.roles[u.role === 'user' ? 0 : u.role === 'admin' ? 1 : 2]} · {u.email}
-              </span>
-            </span>
-            <span className="text-lg text-[var(--muted)]">→</span>
+            <Icon name={isDark ? 'sun' : 'moon'} size={17} />
           </button>
-        ))}
-      </div>
+        </div>
+
+        <div className="flex-1 min-h-0 flex items-center justify-center px-6 pb-10">
+          <div className="w-full max-w-[380px]">
+            <h1 className="font-display text-[28px] font-semibold tracking-[-0.025em] text-ink">{d.login.title}</h1>
+            <p className="text-sm text-muted mt-2 leading-relaxed">{d.login.sub}</p>
+
+            <form onSubmit={submitLogin} className="mt-6 space-y-3">
+              <Field label={d.login.emailL}>
+                <input
+                  className="input"
+                  type="email"
+                  placeholder={d.login.emailPh}
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    setError('');
+                  }}
+                  autoComplete="email"
+                />
+              </Field>
+              <Field label={d.login.passL}>
+                <input className="input" type="password" placeholder={d.login.passPh} autoComplete="current-password" />
+              </Field>
+
+              {error && (
+                <p className="flex items-center gap-2 text-[13px] text-danger">
+                  <Icon name="alert" size={14} />
+                  {error}
+                </p>
+              )}
+
+              <Button type="submit" className="w-full" size="lg">
+                {d.login.signIn}
+              </Button>
+            </form>
+
+            <div className="flex items-center gap-3 my-5 text-xs text-faint">
+              <span className="flex-1 h-px bg-line" />
+              {d.login.testL}
+              <span className="flex-1 h-px bg-line" />
+            </div>
+
+            <div className="space-y-2">
+              {TEST_USERS.map((u) => (
+                <button
+                  key={u.email}
+                  onClick={() => handleLogin(u)}
+                  className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-line bg-surface text-left hover:border-line-strong hover:shadow-soft transition-all"
+                >
+                  <Avatar initials={u.initials} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-sm font-medium text-ink">{u.name}</span>
+                    <span className="block text-xs text-muted truncate">
+                      {d.roles[roleIndex(u.role)]} · {u.email}
+                    </span>
+                  </span>
+                  <Icon name="arrowRight" size={16} className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

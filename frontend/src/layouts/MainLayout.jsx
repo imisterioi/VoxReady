@@ -1,13 +1,19 @@
-import { useEffect, useState } from 'react';
-import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion'; // <-- NUEVOS IMPORTS
+import { useEffect, useRef, useState } from 'react';
+import { Outlet, useNavigate, useLocation, NavLink, Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import I from '../data/dictionary';
+import { roleIndex, homeFor } from '../data/mockData';
+import useTheme from '../hooks/useTheme';
+import Logo from '../components/Logo';
+import Icon from '../components/Icon';
+import { Avatar, Button, cx } from '../components/ui';
 
 export default function MainLayout() {
   const [user, setUser] = useState(null);
-  const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem('voxready_theme') === 'dark';
-  });
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const { isDark, toggleTheme } = useTheme();
+  const menuRef = useRef(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -19,163 +25,197 @@ export default function MainLayout() {
     else setUser(JSON.parse(storedUser));
   }, [navigate]);
 
+  // Cierra menús al cambiar de ruta
   useEffect(() => {
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark');
-      root.setAttribute('data-theme', 'dark');
-      localStorage.setItem('voxready_theme', 'dark');
-    } else {
-      root.classList.remove('dark');
-      root.setAttribute('data-theme', 'light');
-      localStorage.setItem('voxready_theme', 'light');
-    }
-  }, [isDark]);
+    setMenuOpen(false);
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  // Cierra el menú de usuario al hacer clic fuera
+  useEffect(() => {
+    const onClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('voxready_user');
     navigate('/login');
   };
 
-  const toggleTheme = () => setIsDark(!isDark);
-
   if (!user) return null;
 
-  const roleIndex = user.role === 'user' ? 0 : user.role === 'admin' ? 1 : 2;
+  const links = [...(d.nav[user.role] || []), d.nav.lab];
+  const inPracticeFlow = ['/vocero/preparar', '/vocero/sesion', '/vocero/analizando', '/vocero/informe'].some((p) =>
+    location.pathname.startsWith(p),
+  );
+
+  const linkClass = ({ isActive }) =>
+    cx(
+      'relative inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-[13.5px] font-medium transition-colors',
+      isActive ? 'text-ink bg-subtle' : 'text-muted hover:text-ink',
+    );
 
   return (
-    <div className="flex flex-col min-h-screen bg-[var(--bg)] text-[var(--ink)] transition-colors duration-200">
-      
-      {/* Topbar */}
-      <header className="sticky top-0 z-30 flex items-center h-14 px-4 bg-[var(--topbar)] border-b border-[var(--line)] transition-colors duration-200">
-        <span className="text-sm text-[var(--muted)]">VoxReady — Prototipo React</span>
-        
-        <div className="ml-auto flex items-center gap-4">
-  
-          
-          <button onClick={toggleTheme} title={d.theme} className="h-8 w-8 border border-[var(--line)] rounded-md flex items-center justify-center hover:bg-[var(--soft)] transition-colors text-sm">
-            {isDark ? '☀️' : '🌙'}
-          </button>
-          
-          <div className="flex items-center gap-3 ml-2 pl-4 border-l border-[var(--line)]">
-            <div className="w-8 h-8 rounded-full bg-[var(--accent)] text-white text-xs font-bold flex items-center justify-center shrink-0">
-              {user.initials}
+    <div className="min-h-screen flex flex-col">
+      {/* Barra superior */}
+      <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-xl">
+        <div className="max-w-6xl mx-auto h-16 px-4 md:px-6 flex items-center gap-6">
+          <Link to={homeFor(user.role)} className="shrink-0" aria-label="VoxReady inicio">
+            <Logo />
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-1">
+            {links.map((l) => (
+              <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>
+                {l.label}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="ml-auto flex items-center gap-2">
+            {user.role === 'user' && !inPracticeFlow && (
+              <Button to="/vocero/escenarios" variant="accent" size="sm" icon="mic" className="hidden sm:inline-flex">
+                {d.practice}
+              </Button>
+            )}
+
+            <button
+              onClick={toggleTheme}
+              title={d.theme}
+              aria-label={d.theme}
+              className="h-9 w-9 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-subtle transition-colors"
+            >
+              <Icon name={isDark ? 'sun' : 'moon'} size={17} />
+            </button>
+
+            {/* Menú de usuario */}
+            <div className="relative hidden md:block" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex items-center gap-2 h-10 pl-1 pr-2 rounded-full hover:bg-subtle transition-colors"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+              >
+                <Avatar initials={user.initials} size="sm" />
+                <Icon name="chevronDown" size={14} className="text-muted" />
+              </button>
+              <AnimatePresence>
+                {menuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                    transition={{ duration: 0.12 }}
+                    className="absolute right-0 mt-2 w-64 rounded-xl border border-line bg-surface shadow-lift p-1.5 origin-top-right"
+                    role="menu"
+                  >
+                    <div className="flex items-center gap-3 p-3">
+                      <Avatar initials={user.initials} />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-ink truncate">{user.name}</div>
+                        <div className="text-xs text-muted truncate">{user.email}</div>
+                      </div>
+                    </div>
+                    <div className="px-3 pb-2">
+                      <span className="text-[11px] font-medium text-muted bg-subtle rounded-md px-2 py-1">
+                        {d.roles[roleIndex(user.role)]}
+                      </span>
+                    </div>
+                    <div className="h-px bg-line my-1" />
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2.5 px-3 h-9 rounded-lg text-sm text-muted hover:text-ink hover:bg-subtle transition-colors"
+                      role="menuitem"
+                    >
+                      <Icon name="logout" size={16} />
+                      {d.login.logout}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <div className="flex flex-col leading-tight hidden md:flex">
-              <span className="text-xs font-bold text-[var(--ink)]">{user.name}</span>
-              <span className="text-[10px] text-[var(--muted)]">{d.roles[roleIndex]}</span>
-            </div>
-            <button onClick={handleLogout} className="ml-2 h-8 px-3 border border-[var(--line2)] rounded-md bg-[var(--panel)] text-[var(--ink)] text-xs hover:bg-[var(--soft)] transition-colors flex items-center gap-2">
-              ⎋ <span className="hidden sm:inline">{d.login.logout}</span>
+
+            <button
+              onClick={() => setMobileOpen((v) => !v)}
+              className="md:hidden h-9 w-9 rounded-lg flex items-center justify-center text-ink hover:bg-subtle"
+              aria-label="Menú"
+            >
+              <Icon name={mobileOpen ? 'x' : 'menu'} size={20} />
             </button>
           </div>
         </div>
+
+        {/* Menú móvil */}
+        <AnimatePresence>
+          {mobileOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="md:hidden overflow-hidden border-t border-line bg-canvas"
+            >
+              <div className="px-4 py-4 flex flex-col gap-1">
+                <div className="flex items-center gap-3 px-2 pb-3 mb-2 border-b border-line">
+                  <Avatar initials={user.initials} />
+                  <div>
+                    <div className="text-sm font-medium">{user.name}</div>
+                    <div className="text-xs text-muted">{d.roles[roleIndex(user.role)]}</div>
+                  </div>
+                </div>
+                {links.map((l) => (
+                  <NavLink
+                    key={l.to}
+                    to={l.to}
+                    end={l.end}
+                    className={({ isActive }) =>
+                      cx('flex items-center gap-3 h-11 px-3 rounded-lg text-sm font-medium', isActive ? 'bg-subtle text-ink' : 'text-muted')
+                    }
+                  >
+                    <Icon name={l.icon} size={17} />
+                    {l.label}
+                  </NavLink>
+                ))}
+                {user.role === 'user' && (
+                  <Button to="/vocero/escenarios" variant="accent" icon="mic" className="mt-2">
+                    {d.practice}
+                  </Button>
+                )}
+                <button onClick={handleLogout} className="flex items-center gap-3 h-11 px-3 rounded-lg text-sm text-muted mt-1">
+                  <Icon name="logout" size={17} />
+                  {d.login.logout}
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        
-        {/* Sidebar */}
-        <nav className="w-64 bg-[var(--sidebar)] border-r border-[var(--line)] p-4 sticky top-14 h-[calc(100vh-56px)] overflow-y-auto hidden md:block transition-colors duration-200">
-          <div className="border-b border-[var(--line)] pb-3 mb-3">
-            <h1 className="font-bold text-lg flex items-center gap-2">
-              <img src="/VoxReady_logo.png" alt="VoxReady" className="h-6" onError={(e) => e.target.style.display='none'} />
-            </h1>
-            <p className="text-xs text-[var(--muted)] mt-1">React v1.0</p>
-          </div>
-          
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-bold mb-2 px-2 mt-4">
-            {d.roles[roleIndex]}
-          </div>
-          
-          {/* Menú del Vocero */}
-          {user.role === 'user' && (
-            <div className="flex flex-col gap-1">
-              <Link to="/vocero" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/vocero' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/vocero' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>1</span>
-                {d.nav[0]}
-              </Link>
-              <Link to="/vocero/escenarios" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/vocero/escenarios' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/vocero/escenarios' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>2</span>
-                {d.nav[1]}
-              </Link>
-              <Link to="/vocero/preparar" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/preparar') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/preparar') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>3</span>
-                {d.nav[2]}
-              </Link>
-              <Link to="/vocero/sesion" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/sesion') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/sesion') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>4</span>
-                {d.nav[3]}
-              </Link>
-              <Link to="/vocero/analizando" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/analizando') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/analizando') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>5</span>
-                {d.nav[4]}
-              </Link>
-              <Link to="/vocero/informe" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/informe') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/informe') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>6</span>
-                {d.nav[5]}
-              </Link>
-              <Link to="/vocero/progreso" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/vocero/progreso') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/vocero/progreso') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>7</span>
-                {d.nav[6]}
-              </Link>
-            </div>
-          )}
+      {/* Contenido */}
+      <main className="flex-1">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={location.pathname}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="max-w-6xl mx-auto px-4 md:px-6 py-10 md:py-14"
+          >
+            <Outlet />
+          </motion.div>
+        </AnimatePresence>
+      </main>
 
-          {/* Menú del Admin */}
-          {user.role === 'admin' && (
-            <div className="flex flex-col gap-1">
-              <Link to="/admin" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/admin' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/admin' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>1</span>
-                {d.nav[7]}
-              </Link>
-              <Link to="/admin/tema" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/admin/tema') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/admin/tema') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>2</span>
-                {d.nav[8]}
-              </Link>
-              <Link to="/admin/retencion" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/admin/retencion') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/admin/retencion') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>3</span>
-                {d.nav[9]}
-              </Link>
-            </div>
-          )}
-
-          {/* Menú del Maestro */}
-          {user.role === 'master' && (
-            <div className="flex flex-col gap-1">
-              <Link to="/maestro" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname === '/maestro' ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname === '/maestro' ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>1</span>
-                {d.nav[10]}
-              </Link>
-              <Link to="/maestro/rubrica" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/maestro/rubrica') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/maestro/rubrica') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>2</span>
-                {d.nav[11]}
-              </Link>
-              <Link to="/maestro/etiquetado" className={`flex items-center gap-2 px-3 py-2 text-sm rounded-md transition-colors ${location.pathname.includes('/maestro/etiquetado') ? 'text-[var(--accent)] bg-[var(--accentsoft)] font-semibold border-l-4 border-[var(--accent)]' : 'text-[var(--ink)] hover:bg-[var(--soft)] border-l-4 border-transparent'}`}>
-                <span className={`w-5 h-5 rounded-full text-[10px] flex items-center justify-center shrink-0 ${location.pathname.includes('/maestro/etiquetado') ? 'bg-[var(--accent)] text-white' : 'bg-[var(--barfill)] text-[var(--muted)]'}`}>3</span>
-                {d.nav[12]}
-              </Link>
-            </div>
-          )}
-        </nav>
-
-        {/* CONTENIDO PRINCIPAL ANIMADO CON FRAMER MOTION */}
-        <main className="flex-1 p-6 md:p-8 overflow-x-hidden relative h-[calc(100vh-56px)] overflow-y-auto">
-          {/* AnimatePresence permite animar componentes que se desmontan del DOM */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              initial={{ opacity: 0, y: 15 }}    // Estado inicial: invisible y ligeramente desplazado hacia abajo
-              animate={{ opacity: 1, y: 0 }}     // Estado final: visible y en su posición original
-              exit={{ opacity: 0, y: -15 }}      // Estado de salida: invisible y se desplaza hacia arriba
-              transition={{ duration: 0.25, ease: "easeOut" }} // Duración de la animación (0.25s)
-              className="h-full"
-            >
-              <Outlet />
-            </motion.div>
-          </AnimatePresence>
-        </main>
-        
-      </div>
+      <footer className="border-t border-line">
+        <div className="max-w-6xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between text-xs text-faint">
+          <span>© 2026 VoxReady</span>
+          <span className="hidden sm:inline">Entrenamiento de voceros con IA</span>
+        </div>
+      </footer>
     </div>
   );
 }

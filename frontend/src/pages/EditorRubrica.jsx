@@ -1,86 +1,83 @@
+import { useState } from 'react';
+import toast from 'react-hot-toast';
 import I from '../data/dictionary';
+import { Badge, Button, Card, CardHeader, PageHeader, Segmented, cx } from '../components/ui';
 
 export default function EditorRubrica() {
-  const d = I.es;
-  const t = d.L.m2;
+  const t = I.es.L.m2;
+  const [weights, setWeights] = useState(t.rows.map((r) => r[3]));
+  const [level, setLevel] = useState('Alto');
+  const total = weights.reduce((a, b) => a + b, 0);
+  const valid = total === 100;
+
+  const setWeight = (i, v) => setWeights(weights.map((w, j) => (j === i ? v : w)));
 
   return (
-    <div className="animate-fade-in pb-10">
-      <div className="text-xs text-[var(--muted)] mb-1">{t.crumbs}</div>
-      <h2 className="text-2xl font-bold mb-1 text-[var(--ink)]">{t.title}</h2>
-      <p className="text-sm text-[var(--muted)] mb-6">{t.sub}</p>
+    <>
+      <PageHeader
+        eyebrow={t.eyebrow}
+        title={t.title}
+        description={t.sub}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => toast.success('Borrador guardado')}>
+              {t.draft}
+            </Button>
+            <Button disabled={!valid} onClick={() => toast.success('Versión publicada')} icon="check">
+              {t.publish}
+            </Button>
+          </>
+        }
+      />
 
-      <div className="bg-[var(--panel)] border border-[var(--line2)] rounded-lg overflow-hidden shadow-sm">
-        <div className="flex items-center gap-2 px-3 py-2 bg-[var(--chrome2)] border-b border-[var(--line)]">
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <span className="w-2.5 h-2.5 rounded-full bg-[var(--line)]"></span>
-          <div className="flex-1 ml-2 bg-[var(--panel)] border border-[var(--line)] rounded-[5px] text-[11px] text-[var(--muted)] px-3 py-1">
-            master.voxready.io/rubrica
-          </div>
-        </div>
-
-        <div className="p-5 md:p-6">
-          
-          {/* Tabla de Áreas de Evaluación */}
-          <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.areasL}</div>
-          <div className="overflow-x-auto border border-[var(--line)] rounded-lg mb-6">
-            <table className="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr className="bg-[var(--soft)] text-[var(--muted)]">
-                  {t.th.map((h, i) => (
-                    <th key={i} className="p-3 font-semibold border-b border-[var(--line)]">{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {t.rows.map((row, i) => (
-                  <tr key={i} className="border-b border-[var(--line)] last:border-0 hover:bg-[var(--stat)] transition-colors">
-                    {row.map((cell, j) => (
-                      <td key={j} className="p-3 text-[var(--ink)]">{cell}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-col md:flex-row gap-6">
-            {/* Descriptores */}
-            <div className="flex-[2] border border-[var(--line)] rounded-lg p-5 bg-[var(--panel)]">
-              <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.descL}</div>
-              <div className="min-h-[90px] border border-[var(--line)] rounded-md bg-[var(--panel)] p-3 text-xs text-[var(--muted)]">
-                {t.descV}
+      <Card className="mb-6">
+        <CardHeader
+          title={t.areasL}
+          action={
+            <Badge tone={valid ? 'success' : 'danger'} icon={valid ? 'check' : 'alert'}>
+              Total {total}%
+            </Badge>
+          }
+        />
+        <div className="divide-y divide-line -mx-6 border-t border-line">
+          {t.rows.map((row, i) => (
+            <div key={row[0]} className="grid grid-cols-1 md:grid-cols-[1.2fr_1fr_1.6fr_220px] gap-3 md:gap-6 items-center px-6 py-5">
+              <div className="text-sm font-medium text-ink">{row[0]}</div>
+              <div><Badge tone="outline">{row[1]}</Badge></div>
+              <div className="text-[13px] text-muted">{row[2]}</div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min="0"
+                  max="60"
+                  step="5"
+                  value={weights[i]}
+                  onChange={(e) => setWeight(i, Number(e.target.value))}
+                  className="flex-1 accent-[rgb(var(--accent))]"
+                  aria-label={`Peso de ${row[0]}`}
+                />
+                <span className="w-12 text-right text-sm font-semibold tabular-nums text-ink">{weights[i]}%</span>
               </div>
             </div>
-
-            {/* Multiidioma
-            <div className="flex-1 border border-[var(--line)] rounded-lg p-5 bg-[var(--panel)]">
-              <div className="text-[11px] text-[var(--muted)] uppercase tracking-wider font-bold mb-3">{t.multiL}</div>
-              <div className="flex gap-2 flex-wrap mb-3">
-                <span className="border rounded-full px-3 py-1 text-[11px] font-semibold bg-[var(--accentsoft)] border-[var(--accent)] text-[var(--accent)]">ES</span>
-                <span className="border rounded-full px-3 py-1 text-[11px] font-semibold bg-[var(--accentsoft)] border-[var(--accent)] text-[var(--accent)]">EN</span>
-                <span className="border rounded-full px-3 py-1 text-[11px] bg-[var(--panel)] border-[var(--line2)] text-[var(--ink)]">PT</span>
-              </div>
-              <div className="text-xs text-[var(--muted)]">{t.multiLeg}</div>
-            </div> */}
-          </div>
-
-          {/* Botones */}
-          <div className="flex gap-3 mt-6">
-            <button className="border border-[var(--accent2)] bg-[var(--accent2)] rounded-md px-5 py-2 text-xs text-white font-semibold hover:brightness-105 transition-all">
-              {t.publish}
-            </button>
-            <button className="border border-[var(--line2)] bg-transparent px-5 py-2 rounded-md text-xs font-semibold text-[var(--ink)] hover:bg-[var(--soft)] transition-colors">
-              {t.draft}
-            </button>
-          </div>
-
-          <div className="mt-6 bg-[var(--note)] border border-[var(--noteline)] rounded-lg p-4 text-xs text-[var(--notetext)] leading-relaxed">
-            <b className="font-bold">{d.noteUX}</b> {t.note}
-          </div>
+          ))}
         </div>
-      </div>
-    </div>
+        {/* Barra apilada con la distribución de pesos */}
+        <div className="flex h-2 rounded-full overflow-hidden mt-2 gap-0.5">
+          {weights.map((w, i) => (
+            <div key={i} style={{ width: `${(w / Math.max(total, 1)) * 100}%`, background: `rgb(var(--c${i + 1}))` }} />
+          ))}
+        </div>
+        {!valid && <p className="text-xs text-danger mt-3">Los pesos deben sumar 100% para publicar.</p>}
+      </Card>
+
+      <Card>
+        <CardHeader title={t.descL} description="Área: empatía" action={<Segmented options={['Alto', 'Medio', 'Bajo']} value={level} onChange={setLevel} />} />
+        <textarea
+          key={level}
+          className={cx('textarea min-h-[140px]')}
+          placeholder={`Nivel ${level.toLowerCase()}: ${t.descV}`}
+        />
+      </Card>
+    </>
   );
 }

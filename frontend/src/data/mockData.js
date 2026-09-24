@@ -11,4 +11,9 @@ export const CHARTDATA = [
   [40, 46, 50, 54, 58]
 ];
 
-export const CHARTCOLORS = ['#17354F', '#DB6427', '#2f9c83', '#9aa0a6'];
+// Colores de series definidos como variables CSS (se adaptan al modo oscuro)
+export const CHARTCOLORS = ['rgb(var(--c1))', 'rgb(var(--c2))', 'rgb(var(--c3))', 'rgb(var(--c4))'];
+
+export const roleIndex = (role) => (role === 'user' ? 0 : role === 'admin' ? 1 : 2);
+
+export const homeFor = (role) => (role === 'user' ? '/vocero' : role === 'admin' ? '/admin' : '/maestro');
