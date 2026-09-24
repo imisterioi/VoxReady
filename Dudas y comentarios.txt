@@ -1,5 +1,7 @@
 Quien va a administrar a los clientes? (aun pendiente)
 
+Debe haber una IA visual que repita las preguntas al usuario? o debe ser solo voz? o no es una IA?
+
 Qué es linea roja? (algo que el vocero no debe decir)
 
 A qué se refiere que evita revisiones inservibles? que aunque el usuario pueda continuar con la sesion, no se va a guardar? (probablemente)

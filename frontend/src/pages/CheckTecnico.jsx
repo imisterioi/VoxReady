@@ -29,6 +29,7 @@ export default function CheckTecnico() {
   const [calibrating, setCalibrating] = useState(false);
   const [calibrationProgress, setCalibrationProgress] = useState(0);
   const [microphoneLevel, setMicrophoneLevel] = useState(0);
+  const [brightness, setBrightness] = useState(0);
 
   const [error, setError] = useState('');
 
@@ -52,6 +53,9 @@ export default function CheckTecnico() {
   const microphoneAnimationRef = useRef(null);
 
   const calibrationTimerRef = useRef(null);
+
+  const brightnessCanvasRef = useRef(null);
+  const brightnessAnimationRef = useRef(null);
 
   // -----------------------------------------
   // Activar cámara
@@ -80,10 +84,83 @@ export default function CheckTecnico() {
       }
 
       setCameraActive(true);
+
+      if (brightnessAnimationRef.current) {
+        cancelAnimationFrame(brightnessAnimationRef.current);
+      }
+
+      brightnessAnimationRef.current =
+        requestAnimationFrame(measureBrightness);
     } catch (err) {
       console.error('Error al activar cámara:', err);
       setError('No se pudo acceder a la cámara. Revisa los permisos del navegador.');
     }
+  };
+
+  // checkear iluminacion
+  const measureBrightness = () => {
+    const video = videoRef.current;
+
+    if (!video || video.readyState < 2) {
+      brightnessAnimationRef.current =
+        requestAnimationFrame(measureBrightness);
+      return;
+    }
+
+    if (!brightnessCanvasRef.current) {
+      brightnessCanvasRef.current = document.createElement('canvas');
+      brightnessCanvasRef.current.width = 64;
+      brightnessCanvasRef.current.height = 36;
+    }
+
+    const canvas = brightnessCanvasRef.current;
+    const context = canvas.getContext('2d', {
+      willReadFrequently: true,
+    });
+
+    if (!context) return;
+
+    context.drawImage(
+      video,
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const imageData = context.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+
+    const pixels = imageData.data;
+
+    let totalBrightness = 0;
+    const pixelCount = pixels.length / 4;
+
+    for (let i = 0; i < pixels.length; i += 4) {
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+
+      // Luminosidad percibida
+      const pixelBrightness =
+        0.299 * r +
+        0.587 * g +
+        0.114 * b;
+
+      totalBrightness += pixelBrightness;
+    }
+
+    const averageBrightness =
+      totalBrightness / pixelCount;
+
+    setBrightness(averageBrightness);
+
+    brightnessAnimationRef.current =
+      requestAnimationFrame(measureBrightness);
   };
 
   // -----------------------------------------
@@ -159,7 +236,7 @@ export default function CheckTecnico() {
     setCalibrationProgress(0);
 
     const startTime = performance.now();
-    const duration = 30000;
+    const duration = 1000;
 
     calibrationTimerRef.current = setInterval(() => {
       const elapsed = performance.now() - startTime;
@@ -225,6 +302,11 @@ export default function CheckTecnico() {
         cancelAnimationFrame(microphoneAnimationRef.current);
       }
 
+      if (brightnessAnimationRef.current) {
+        cancelAnimationFrame(brightnessAnimationRef.current);
+        brightnessAnimationRef.current = null;
+      }
+
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
@@ -235,12 +317,48 @@ export default function CheckTecnico() {
     loadDevices();
   }, []);
 
+  // iluminacion niveles
+  const getBrightnessStatus = () => {
+    if (brightness < 45) {
+      return {
+        label: 'Mala',
+        level: 1,
+      };
+    }
+
+    if (brightness < 100) {
+      return {
+        label: 'Buena',
+        level: 2,
+      };
+    }
+
+    return {
+      label: 'Excelente',
+      level: 3,
+    };
+  };
+
+  const brightnessStatus = getBrightnessStatus();
+
+  const lightingOk =
+    cameraActive && brightness >= 45;
   // -----------------------------------------
   // Consentimiento
   // -----------------------------------------
 
-  const canStart = check1 && check2;
+  
   const calibrationDone = calibrationProgress >= 1;
+  
+  const canStart =
+    check1 &&
+    check2 &&
+    cameraActive &&
+    microphoneActive &&
+    lightingOk &&
+    calibrationDone;
+
+ 
 
   const checks = [
     { label: 'Cámara', ok: cameraActive, icon: 'camera' },
@@ -399,6 +517,50 @@ export default function CheckTecnico() {
                 })}
               </div>
             </div>
+            {/* iluminacion */}
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">
+                  Iluminación
+                </span>
+
+                <span className="text-sm text-[var(--muted)]">
+                  {brightnessStatus.label}
+                </span>
+              </div>
+
+              <div className="flex gap-1 h-3">
+                <div
+                  className={`flex-1 rounded-l-full ${
+                    brightnessStatus.level >= 1
+                      ? 'bg-red-500'
+                      : 'bg-gray-200'
+                  }`}
+                />
+
+                <div
+                  className={`flex-1 ${
+                    brightnessStatus.level >= 2
+                      ? 'bg-yellow-400'
+                      : 'bg-gray-200'
+                  }`}
+                />
+
+                <div
+                  className={`flex-1 rounded-r-full ${
+                    brightnessStatus.level >= 3
+                      ? 'bg-green-500'
+                      : 'bg-gray-200'
+                  }`}
+                />
+              </div>
+
+              <div className="flex justify-between text-xs text-[var(--muted)] mt-1">
+                <span>Mala</span>
+                <span>Buena</span>
+                <span>Excelente</span>
+              </div>
+            </div>
 
             {/* Calibración */}
             <div className="mt-6 pt-6 border-t border-line flex flex-col sm:flex-row sm:items-center gap-4">
@@ -459,7 +621,17 @@ export default function CheckTecnico() {
                 size="lg"
                 className="w-full"
                 iconRight="arrowRight"
-                onClick={() => navigate('/vocero/sesion')}
+                onClick={() => {
+                  sessionStorage.setItem(
+                    'voxready_dispositivos',
+                    JSON.stringify({
+                      cameraId: selectedCamera,
+                      microphoneId: selectedMicrophone,
+                    })
+                  );
+
+                  navigate('/vocero/sesion');
+                }}
                 disabled={!canStart}
               >
                 {t.beginBtn}
