@@ -67,7 +67,7 @@ const I = {
         legal: 'Durante la sesión se grabará tu voz e imagen con el único fin de evaluar tu desempeño. Estos datos se consideran biométricos y se tratan según la política de retención de tu organización.',
         chk1: 'Acepto la grabación y el tratamiento de mis datos según la política de retención de mi organización.',
         chk2: 'Entiendo que puedo solicitar el borrado de mis grabaciones en cualquier momento.',
-        beginBtn: 'Comenzar sesión', cancel: 'Cancelar', sesLang: 'Acepta ambos puntos para continuar.',
+        beginBtn: 'Comenzar sesión', cancel: 'Cancelar', sesLang: 'Completa todos los pasos para continuar.',
       },
       u4: {
         eyebrow: 'Sesión en curso', interviewer: 'Entrevistador IA', selfV: 'Tu cámara',

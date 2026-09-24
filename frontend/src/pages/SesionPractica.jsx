@@ -5,8 +5,8 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button } from '../components/ui';
+import { API_URL } from '../lib/api';
 
-const API_URL = 'http://localhost:3000';
 const TEST_USER_EMAIL = 'vocero@demo.com';
 
 export default function SesionPractica() {
@@ -422,22 +422,20 @@ export default function SesionPractica() {
               autoPlay
               muted
               playsInline
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover -scale-x-100"
             />
 
             {!recording && !loading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <span className="text-white/70 text-sm">
-                  Cámara detenida
-                </span>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F] text-white/40">
+                <Icon name="video" size={32} strokeWidth={1.25} />
+                <span className="text-xs">Cámara detenida</span>
               </div>
             )}
 
             {loading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <span className="text-white/70 text-sm">
-                  Preparando sesión...
-                </span>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F]">
+                <span className="h-6 w-6 rounded-full border-2 border-white/10 border-t-white/60 animate-spin" />
+                <span className="text-xs text-white/50">Preparando sesión…</span>
               </div>
             )}
 
@@ -464,7 +462,8 @@ export default function SesionPractica() {
 
         {/* Error */}
         {error && (
-          <div className="mx-4 mb-4 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+          <div className="mx-1 mb-4 flex items-center gap-3 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+            <Icon name="alert" size={16} className="shrink-0" />
             {error}
           </div>
         )}
@@ -512,7 +511,7 @@ export default function SesionPractica() {
             }
             className="md:ml-auto"
           >
-            {finishing ? 'Guardando...' : t.finish}
+            {finishing ? 'Guardando…' : t.finish}
           </Button>
 
         </div>

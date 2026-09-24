@@ -317,55 +317,48 @@ export default function CheckTecnico() {
     loadDevices();
   }, []);
 
-  // iluminacion niveles
+  // -----------------------------------------
+  // Niveles de iluminación
+  // -----------------------------------------
+
   const getBrightnessStatus = () => {
     if (brightness < 45) {
-      return {
-        label: 'Mala',
-        level: 1,
-      };
+      return { label: 'Mala', level: 1, tone: 'danger', bar: 'bg-danger' };
     }
 
     if (brightness < 100) {
-      return {
-        label: 'Buena',
-        level: 2,
-      };
+      return { label: 'Buena', level: 2, tone: 'success', bar: 'bg-success' };
     }
 
-    return {
-      label: 'Excelente',
-      level: 3,
-    };
+    return { label: 'Excelente', level: 3, tone: 'success', bar: 'bg-success' };
   };
 
   const brightnessStatus = getBrightnessStatus();
 
-  const lightingOk =
-    cameraActive && brightness >= 45;
+  const lightingOk = cameraActive && brightness >= 45;
+
   // -----------------------------------------
-  // Consentimiento
+  // Requisitos para comenzar
   // -----------------------------------------
 
-  
+  const consentOk = check1 && check2;
   const calibrationDone = calibrationProgress >= 1;
-  
+
   const canStart =
-    check1 &&
-    check2 &&
+    consentOk &&
     cameraActive &&
     microphoneActive &&
     lightingOk &&
     calibrationDone;
 
- 
-
   const checks = [
     { label: 'Cámara', ok: cameraActive, icon: 'camera' },
     { label: 'Micrófono', ok: microphoneActive, icon: 'mic' },
+    { label: 'Iluminación', ok: lightingOk, icon: 'sun', warn: cameraActive && !lightingOk },
     { label: 'Calibración corporal', ok: calibrationDone, icon: 'person', progress: calibrating },
-    { label: 'Consentimiento', ok: canStart, icon: 'shield' },
+    { label: 'Consentimiento', ok: consentOk, icon: 'shield' },
   ];
+  const doneCount = checks.filter((c) => c.ok).length;
 
   // -----------------------------------------
   // Render
@@ -417,9 +410,15 @@ export default function CheckTecnico() {
 
             {cameraActive && (
               <>
-                <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur px-3 h-7 text-white text-xs">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                  Cámara activa
+                <div className="absolute top-3 left-3 flex items-center gap-2">
+                  <div className="flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur px-3 h-7 text-white text-xs">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                    Cámara activa
+                  </div>
+                  <div className="flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur px-3 h-7 text-white text-xs">
+                    <Icon name="sun" size={12} className={lightingOk ? 'text-emerald-400' : 'text-red-400'} />
+                    Luz {brightnessStatus.label.toLowerCase()}
+                  </div>
                 </div>
                 {/* Guía de encuadre */}
                 <div className="pointer-events-none absolute inset-8 rounded-2xl border border-dashed border-white/20" />
@@ -517,49 +516,38 @@ export default function CheckTecnico() {
                 })}
               </div>
             </div>
-            {/* iluminacion */}
-            <div className="mt-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium">
-                  Iluminación
-                </span>
-
-                <span className="text-sm text-[var(--muted)]">
-                  {brightnessStatus.label}
-                </span>
+            {/* Iluminación */}
+            <div className="mt-6">
+              <div className="flex items-center justify-between text-xs text-muted mb-2">
+                <span>Iluminación</span>
+                {cameraActive ? (
+                  <Badge tone={brightnessStatus.tone}>{brightnessStatus.label}</Badge>
+                ) : (
+                  <span>—</span>
+                )}
               </div>
-
-              <div className="flex gap-1 h-3">
-                <div
-                  className={`flex-1 rounded-l-full ${
-                    brightnessStatus.level >= 1
-                      ? 'bg-red-500'
-                      : 'bg-gray-200'
-                  }`}
-                />
-
-                <div
-                  className={`flex-1 ${
-                    brightnessStatus.level >= 2
-                      ? 'bg-yellow-400'
-                      : 'bg-gray-200'
-                  }`}
-                />
-
-                <div
-                  className={`flex-1 rounded-r-full ${
-                    brightnessStatus.level >= 3
-                      ? 'bg-green-500'
-                      : 'bg-gray-200'
-                  }`}
-                />
+              <div className="grid grid-cols-3 gap-1.5">
+                {[1, 2, 3].map((level) => (
+                  <span
+                    key={level}
+                    className={cx(
+                      'h-1.5 rounded-full transition-colors duration-300',
+                      cameraActive && brightnessStatus.level >= level ? brightnessStatus.bar : 'bg-subtle',
+                    )}
+                  />
+                ))}
               </div>
-
-              <div className="flex justify-between text-xs text-[var(--muted)] mt-1">
+              <div className="grid grid-cols-3 text-[11px] text-faint mt-1.5">
                 <span>Mala</span>
-                <span>Buena</span>
-                <span>Excelente</span>
+                <span className="text-center">Buena</span>
+                <span className="text-right">Excelente</span>
               </div>
+              {cameraActive && !lightingOk && (
+                <p className="flex items-start gap-1.5 text-xs text-danger mt-3 leading-relaxed">
+                  <Icon name="sun" size={13} className="mt-0.5" />
+                  Tu rostro se ve muy oscuro. Busca una fuente de luz frente a ti, no detrás.
+                </p>
+              )}
             </div>
 
             {/* Calibración */}
@@ -584,20 +572,27 @@ export default function CheckTecnico() {
         {/* ----------------------------- Consentimiento */}
         <div className="space-y-6">
           <Card>
-            <div className="eyebrow mb-4">Estado</div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="eyebrow">Estado</span>
+              <span className="text-xs text-muted tabular-nums">
+                {doneCount} de {checks.length}
+              </span>
+            </div>
             <ul className="space-y-3">
               {checks.map((c) => (
                 <li key={c.label} className="flex items-center gap-3">
                   <span
                     className={cx(
                       'h-8 w-8 rounded-lg flex items-center justify-center',
-                      c.ok ? 'bg-success/10 text-success' : 'bg-subtle text-faint',
+                      c.ok ? 'bg-success/10 text-success' : c.warn ? 'bg-danger/10 text-danger' : 'bg-subtle text-faint',
                     )}
                   >
                     <Icon name={c.ok ? 'check' : c.icon} size={15} strokeWidth={c.ok ? 2.5 : 1.75} />
                   </span>
                   <span className={cx('text-sm flex-1', c.ok ? 'text-ink' : 'text-muted')}>{c.label}</span>
-                  <span className="text-xs text-faint">{c.ok ? 'Listo' : c.progress ? 'En curso' : 'Pendiente'}</span>
+                  <span className={cx('text-xs', c.warn ? 'text-danger' : 'text-faint')}>
+                    {c.ok ? 'Listo' : c.warn ? 'Insuficiente' : c.progress ? 'En curso' : 'Pendiente'}
+                  </span>
                 </li>
               ))}
             </ul>
