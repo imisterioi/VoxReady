@@ -1,3 +1,5 @@
+El LLM para es demasiado para un mvp y crearlo desde 0 tendria un costo de tiempo demasiado alto. Usar un servicio externo para este caso es mas viable pero no hay recursos monetarios de momento para su realizacion, por lo que se optará una IA para cumplir con el minimo.
+
 Quien va a administrar a los clientes? (aun pendiente)
 
 Debe haber una IA visual que repita las preguntas al usuario? o debe ser solo voz? o no es una IA?
