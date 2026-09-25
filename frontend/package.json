@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
+    "@rive-app/react-canvas": "^4.35.0",
     "framer-motion": "^13.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

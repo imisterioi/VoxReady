@@ -13,53 +13,55 @@ model Tenant {
   name      String
   createdAt DateTime @default(now())
 
-  users     User[]
-  themes    Theme[]
-  sessions  Session[]
+  users    User[]
+  themes   Theme[]
+  sessions Session[]
 }
 
 // 2. Usuario (Vocero, Admin, Maestro)
 model User {
-  id        String   @id @default(uuid())
-  email     String   @unique
-  name      String
-  role      String   @default("VOCERO")
+  id    String @id @default(uuid())
+  email String @unique
+  name  String
+  role  String @default("VOCERO")
 
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  sessions      Session[]
-  assignments   ScenarioAssignment[]
+  sessions       Session[]
+  assignments    ScenarioAssignment[]
+  masterPatterns MasterPattern[]
 }
 
 // 3. Tema / Escenario
 model Theme {
-  id          String   @id @default(uuid())
+  id          String @id @default(uuid())
   title       String
-  context     String   @db.Text
-  keyMessages String   @db.Text
-  category    String   @default("GENERAL")
+  context     String @db.Text
+  keyMessages String @db.Text
+  category    String @default("GENERAL")
 
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
 
-  sessions     Session[]
-  assignments  ScenarioAssignment[]
+  sessions    Session[]
+  assignments ScenarioAssignment[]
 }
 
 // 4. Asignación de un escenario a un vocero
 model ScenarioAssignment {
-  id        String   @id @default(uuid())
+  id String @id @default(uuid())
 
-  status    String   @default("PENDING")
-  assignedAt DateTime @default(now())
+  status      String          @default("PENDING")
+  assignedAt  DateTime        @default(now())
   completedAt DateTime?
+  rubric      ScenarioRubric?
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  themeId   String
-  theme     Theme    @relation(fields: [themeId], references: [id])
+  themeId String
+  theme   Theme  @relation(fields: [themeId], references: [id])
 
   @@unique([userId, themeId])
 }
@@ -70,12 +72,62 @@ model Session {
   status    String   @default("CREATED")
   createdAt DateTime @default(now())
 
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
 
-  themeId   String
-  theme     Theme    @relation(fields: [themeId], references: [id])
+  themeId String
+  theme   Theme  @relation(fields: [themeId], references: [id])
 
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id])
+}
+
+// 6. Patrón maestro de evaluación
+model MasterPattern {
+  id      String @id @default(uuid())
+  version Int    @default(1)
+  status  String @default("ACTIVE")
+
+  expressionWeight Int
+  voiceToneWeight  Int
+  coherenceWeight  Int
+  empathyWeight    Int
+
+  empathyLevel       String
+  empathyDescription String @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String
+  createdBy   User   @relation(fields: [createdById], references: [id])
+
+  scenarioRubrics ScenarioRubric[]
+}
+
+// 7. Rubrica de escenario
+model ScenarioRubric {
+  id String @id @default(uuid())
+
+  expressionWeight Int
+  voiceToneWeight  Int
+  coherenceWeight  Int
+  empathyWeight    Int
+
+  empathyLevel       String
+  empathyDescription String @db.Text
+
+  manuallyModified Boolean @default(false)
+
+  masterPatternId      String?
+  masterPatternVersion Int?
+
+  version Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignmentId  String             @unique
+  assignment    ScenarioAssignment @relation(fields: [assignmentId], references: [id])
+  masterPattern MasterPattern?     @relation(fields: [masterPatternId], references: [id])
 }

@@ -326,6 +326,144 @@ app.post('/api/sessions/:id/video', async (req, res) => {
   }
 });
 
+// Crear y publicar un nuevo patrón maestro
+app.post('/api/master-pattern', async (req, res) => {
+  try {
+    const {
+      email,
+      expressionWeight,
+      voiceToneWeight,
+      coherenceWeight,
+      empathyWeight,
+      empathyLevel,
+      empathyDescription
+    } = req.body;
+
+    // 1. Validar campos obligatorios
+    if (
+      !email ||
+      expressionWeight === undefined ||
+      voiceToneWeight === undefined ||
+      coherenceWeight === undefined ||
+      empathyWeight === undefined ||
+      !empathyLevel ||
+      !empathyDescription?.trim()
+    ) {
+      return res.status(400).json({
+        status: 'error',
+        mensaje: 'Faltan datos obligatorios'
+      });
+    }
+
+    // 2. Convertir los pesos a números
+    const weights = {
+      expressionWeight: Number(expressionWeight),
+      voiceToneWeight: Number(voiceToneWeight),
+      coherenceWeight: Number(coherenceWeight),
+      empathyWeight: Number(empathyWeight)
+    };
+
+    // 3. Comprobar que sean números válidos
+    const invalidWeight = Object.values(weights).some(
+      (weight) => !Number.isInteger(weight) || weight < 0 || weight > 100
+    );
+
+    if (invalidWeight) {
+      return res.status(400).json({
+        status: 'error',
+        mensaje: 'Los pesos deben ser números enteros entre 0 y 100'
+      });
+    }
+
+    // 4. Comprobar que los pesos sumen exactamente 100
+    const total =
+      weights.expressionWeight +
+      weights.voiceToneWeight +
+      weights.coherenceWeight +
+      weights.empathyWeight;
+
+    if (total !== 100) {
+      return res.status(400).json({
+        status: 'error',
+        mensaje: 'Los pesos deben sumar 100%',
+        total
+      });
+    }
+
+    // 5. Buscar al configurador maestro
+    const user = await prisma.user.findUnique({
+      where: {
+        email
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        status: 'error',
+        mensaje: 'Usuario no encontrado'
+      });
+    }
+
+    // 6. Crear la nueva versión dentro de una transacción
+    const masterPattern = await prisma.$transaction(async (tx) => {
+
+      // Desactivar el patrón actualmente activo
+      await tx.masterPattern.updateMany({
+        where: {
+          status: 'ACTIVE'
+        },
+        data: {
+          status: 'INACTIVE'
+        }
+      });
+
+      // Buscar la última versión existente
+      const lastPattern = await tx.masterPattern.findFirst({
+        orderBy: {
+          version: 'desc'
+        }
+      });
+
+      const nextVersion = lastPattern
+        ? lastPattern.version + 1
+        : 1;
+
+      // Crear la nueva versión
+      return tx.masterPattern.create({
+        data: {
+          version: nextVersion,
+          status: 'ACTIVE',
+
+          expressionWeight: weights.expressionWeight,
+          voiceToneWeight: weights.voiceToneWeight,
+          coherenceWeight: weights.coherenceWeight,
+          empathyWeight: weights.empathyWeight,
+
+          empathyLevel,
+          empathyDescription: empathyDescription.trim(),
+
+          createdById: user.id
+        }
+      });
+    });
+
+    // 7. Respuesta
+    return res.status(201).json({
+      status: 'ok',
+      mensaje: 'Patrón maestro publicado correctamente',
+      masterPattern
+    });
+
+  } catch (error) {
+    console.error('Error creando patrón maestro:', error);
+
+    return res.status(500).json({
+      status: 'error',
+      mensaje: 'No se pudo crear el patrón maestro'
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor backend de VoxReady corriendo en http://localhost:${PORT}`);
 });

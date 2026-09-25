@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { API_URL } from '../lib/api';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, PageHeader, cx } from '../components/ui';
+import { useRive } from '@rive-app/react-canvas';
 
 // Endpoints de prueba disponibles en backend/index.js
 const ENDPOINTS = [
@@ -119,6 +120,48 @@ export default function Laboratorio() {
   const okCount = ENDPOINTS.filter((e) => results[e.id]?.state === 'ok').length;
   const anyOffline = ENDPOINTS.some((e) => results[e.id]?.state === 'offline');
 
+    // RIVE
+    const { RiveComponent } = useRive({
+      src: 'https://cdn.rive.app/animations/vehicles.riv',
+      autoplay: true,
+    });
+    const QUESTION =
+      '¿Cómo respondería ante una situación de crisis que afecte la reputación de su organización?';
+
+    const [isSpeaking, setIsSpeaking] = useState(false);
+    const speechRef = useRef(null);
+    const speakQuestion = () => {
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(QUESTION);
+
+      utterance.lang = 'es-CL';
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+      };
+
+      utterance.onend = () => {
+        setIsSpeaking(false);
+      };
+
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+      };
+
+      speechRef.current = utterance;
+
+      window.speechSynthesis.speak(utterance);
+    };
+    useEffect(() => {
+      return () => {
+        window.speechSynthesis.cancel();
+      };
+    }, []);
+    // RIVE
+
   return (
     <>
       <PageHeader
@@ -201,7 +244,76 @@ export default function Laboratorio() {
             </Card>
           </Link>
         </section>
+        
       </div>
+      {/* RIVE */}
+            <section className="mt-8">
+            <div className="mb-4">
+              <h2 className="text-[15px] font-semibold text-ink">
+                Entrevistador virtual
+              </h2>
+
+              <p className="text-[13px] text-muted mt-0.5">
+                Prueba de Rive junto con síntesis de voz.
+              </p>
+            </div>
+
+            <Card className="overflow-hidden">
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-6">
+
+                {/* Avatar */}
+                <div className="rounded-xl bg-subtle min-h-[400px] flex flex-col items-center justify-center">
+                  <div className="w-full h-[350px]">
+                    <RiveComponent />
+                  </div>
+
+                  <div className="pb-4">
+                    <Badge tone={isSpeaking ? 'success' : 'neutral'}>
+                      {isSpeaking ? 'Hablando...' : 'Esperando'}
+                    </Badge>
+                  </div>
+                </div>
+
+                {/* Pregunta */}
+                <div className="flex flex-col justify-center p-4 lg:p-8">
+
+                  <div className="text-xs text-muted mb-3">
+                    Pregunta del entrevistador
+                  </div>
+
+                  <div className="rounded-xl border border-line bg-subtle/50 p-5">
+                    <p className="text-[17px] leading-relaxed text-ink">
+                      {QUESTION}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 mt-5">
+                    <Button
+                      variant="primary"
+                      icon="play"
+                      onClick={speakQuestion}
+                    >
+                      Preguntar
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      icon="refresh"
+                      onClick={speakQuestion}
+                    >
+                      Repetir pregunta
+                    </Button>
+                  </div>
+
+                </div>
+
+              </div>
+            </Card>
+          </section>
+      {/* RIVE */}
     </>
   );
+  
+
+  
 }
