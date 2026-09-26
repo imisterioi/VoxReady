@@ -1,4 +1,7 @@
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import Icon from './Icon';
 
 const cx = (...c) => c.filter(Boolean).join(' ');
@@ -103,6 +106,7 @@ const BADGE_TONES = {
   warning: 'bg-warning/10 text-warning',
   danger: 'bg-danger/10 text-danger',
   outline: 'border border-line text-muted',
+  brand: 'bg-brand/10 text-brand',
 };
 
 export function Badge({ tone = 'neutral', icon, className, children }) {
@@ -322,6 +326,65 @@ export function Table({ columns, children }) {
         <tbody className="divide-y divide-line">{children}</tbody>
       </table>
     </div>
+  );
+}
+
+/* --------------------------------------------------------------- Modal */
+
+export function Modal({ open, onClose, title, description, children, footer, width = 'max-w-lg' }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    document.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [open, onClose]);
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+        >
+          <div className="absolute inset-0 bg-[#0B1118]/40 backdrop-blur-[2px]" onClick={onClose} />
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label={title}
+            className={cx('relative w-full bg-surface border border-line shadow-lift rounded-t-2xl sm:rounded-2xl max-h-[92vh] flex flex-col', width)}
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            <div className="flex items-start justify-between gap-4 px-6 pt-6 pb-4">
+              <div>
+                <h2 className="font-display text-lg font-semibold tracking-[-0.02em] text-ink">{title}</h2>
+                {description && <p className="text-[13px] text-muted mt-1 leading-relaxed">{description}</p>}
+              </div>
+              <button
+                onClick={onClose}
+                className="h-8 w-8 -mr-2 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-subtle transition-colors"
+                aria-label="Cerrar"
+              >
+                <Icon name="x" size={16} />
+              </button>
+            </div>
+            <div className="px-6 pb-6 overflow-y-auto">{children}</div>
+            {footer && <div className="flex justify-end gap-2 px-6 py-4 border-t border-line bg-subtle/40 rounded-b-2xl">{footer}</div>}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
+    document.body,
   );
 }
 

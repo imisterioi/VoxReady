@@ -12,3 +12,15 @@ export async function apiGet(path) {
   }
   return data;
 }
+
+// Consulta un endpoint y devuelve su estado (sin lanzar errores).
+export async function checkEndpoint(path) {
+  const start = performance.now();
+  try {
+    const res = await fetch(`${API_URL}${path}`);
+    const body = await res.json().catch(() => null);
+    return { state: res.ok ? 'ok' : 'error', status: res.status, ms: Math.round(performance.now() - start), body };
+  } catch (err) {
+    return { state: 'offline', status: null, ms: null, body: { error: err.message } };
+  }
+}

@@ -19,6 +19,10 @@ import ColaEtiquetado from './pages/ColaEtiquetado';
 import Microleccion from './pages/Microleccion';
 import NotFound from './pages/NotFound';
 import Laboratorio from './pages/Laboratorio';
+import Voceros from './pages/Voceros';
+import SistemaHome from './pages/sistema/SistemaHome';
+import Organizaciones from './pages/sistema/Organizaciones';
+import Usuarios from './pages/sistema/Usuarios';
 
 // MediaPipe es pesado: se carga solo al entrar a la prueba
 const MediaPipeTest = lazy(() => import('./pages/MediaPipeTest'));
@@ -71,6 +75,7 @@ function App() {
 
           {/* Admin del cliente */}
           <Route path="admin" element={<AdminHome />} />
+          <Route path="admin/voceros" element={<Voceros />} />
           <Route path="admin/tema" element={<EditorTema />} />
           <Route path="admin/retencion" element={<PoliticaRetencion />} />
 
@@ -78,6 +83,11 @@ function App() {
           <Route path="maestro" element={<MaestroHome />} />
           <Route path="maestro/rubrica" element={<EditorRubrica />} />
           <Route path="maestro/etiquetado" element={<ColaEtiquetado />} />
+
+          {/* Administrador del sistema */}
+          <Route path="sistema" element={<SistemaHome />} />
+          <Route path="sistema/organizaciones" element={<Organizaciones />} />
+          <Route path="sistema/usuarios" element={<Usuarios />} />
 
           <Route path="*" element={<NotFound />} />
         </Route>

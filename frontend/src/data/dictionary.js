@@ -10,7 +10,7 @@ const I = {
       heroTitle: 'Tu próxima vocería empieza con práctica.',
       heroSub: 'Entrevistas simuladas con IA y retroalimentación tipo coach sobre expresión, tono, coherencia y empatía.',
     },
-    roles: ['Vocero', 'Administrador', 'Configurador maestro'],
+    roles: ['Vocero', 'Administrador', 'Configurador maestro', 'Administrador del sistema'],
     nav: {
       user: [
         { to: '/vocero', label: 'Inicio', icon: 'home', end: true },
@@ -20,6 +20,7 @@ const I = {
       ],
       admin: [
         { to: '/admin', label: 'Panel', icon: 'home', end: true },
+        { to: '/admin/voceros', label: 'Voceros', icon: 'users' },
         { to: '/admin/tema', label: 'Temas', icon: 'file' },
         { to: '/admin/retencion', label: 'Retención', icon: 'lock' },
       ],
@@ -27,6 +28,11 @@ const I = {
         { to: '/maestro', label: 'Panel', icon: 'home', end: true },
         { to: '/maestro/rubrica', label: 'Rúbrica', icon: 'sliders' },
         { to: '/maestro/etiquetado', label: 'Etiquetado', icon: 'tag' },
+      ],
+      system: [
+        { to: '/sistema', label: 'Resumen', icon: 'activity', end: true },
+        { to: '/sistema/organizaciones', label: 'Organizaciones', icon: 'layers' },
+        { to: '/sistema/usuarios', label: 'Usuarios', icon: 'users' },
       ],
       lab: { to: '/laboratorio', label: 'Laboratorio', icon: 'flask' },
     },

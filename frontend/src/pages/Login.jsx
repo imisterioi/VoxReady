@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
 import { TEST_USERS, roleIndex, homeFor } from '../data/mockData';
+import { findUserByEmail, getDirectory, initialsOf, registerLogin } from '../data/directory';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
@@ -15,15 +16,28 @@ export default function Login() {
   const d = I.es;
 
   const handleLogin = (user) => {
+    // Respeta suspensiones hechas desde la administración del sistema
+    const account = findUserByEmail(user.email);
+    const tenant = getDirectory().tenants.find((t) => t.id === account?.tenantId);
+    if (account?.status === 'SUSPENDED') return setError('Esta cuenta está suspendida. Contacta a tu administrador.');
+    if (tenant?.status === 'SUSPENDED') return setError(`La organización ${tenant.name} está suspendida.`);
+
+    registerLogin(user.email);
     localStorage.setItem('voxready_user', JSON.stringify(user));
     navigate(homeFor(user.role));
   };
 
   const submitLogin = (e) => {
     e.preventDefault();
-    const user = TEST_USERS.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-    if (user) handleLogin(user);
-    else setError(d.login.err);
+    const test = TEST_USERS.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
+    if (test) return handleLogin(test);
+
+    // Usuarios creados desde la administración (demo sin contraseña)
+    const created = findUserByEmail(email);
+    if (created) {
+      return handleLogin({ role: created.role, initials: initialsOf(created.name), name: created.name, email: created.email });
+    }
+    setError(d.login.err);
   };
 
   return (
@@ -114,12 +128,12 @@ export default function Login() {
               <span className="flex-1 h-px bg-line" />
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {TEST_USERS.map((u) => (
                 <button
                   key={u.email}
                   onClick={() => handleLogin(u)}
-                  className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl border border-line bg-surface text-left hover:border-line-strong hover:shadow-soft transition-all"
+                  className="group w-full flex items-center gap-3 px-3 py-2 rounded-xl border border-line bg-surface text-left hover:border-line-strong hover:shadow-soft transition-all"
                 >
                   <Avatar initials={u.initials} />
                   <span className="flex-1 min-w-0">

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Outlet, useNavigate, useLocation, NavLink, Link } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, NavLink, Link, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import I from '../data/dictionary';
-import { roleIndex, homeFor } from '../data/mockData';
+import { roleIndex, homeFor, ROLE_HOME } from '../data/mockData';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
@@ -46,6 +46,12 @@ export default function MainLayout() {
   };
 
   if (!user) return null;
+
+  // Cada rol solo puede entrar a su propia sección (Laboratorio queda abierto a todos)
+  const area = Object.entries(ROLE_HOME).find(
+    ([, base]) => location.pathname === base || location.pathname.startsWith(`${base}/`),
+  );
+  if (area && area[0] !== user.role) return <Navigate to={homeFor(user.role)} replace />;
 
   const links = [...(d.nav[user.role] || []), d.nav.lab];
   const inPracticeFlow = ['/vocero/preparar', '/vocero/sesion', '/vocero/analizando', '/vocero/informe'].some((p) =>
