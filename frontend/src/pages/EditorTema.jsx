@@ -4,6 +4,7 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import { Button, Card, ChoiceChips, Field, PageHeader, cx } from '../components/ui';
 
+
 function EditableList({ items, setItems, placeholder, addLabel, danger }) {
   const [draft, setDraft] = useState('');
 
@@ -65,8 +66,62 @@ export default function EditorTema() {
   ]);
   const [redLines, setRedLines] = useState(['Culpar a proveedores o terceros.']);
 
-  const handleSave = () => {
-    toast.success('¡Tema guardado con éxito!');
+  const [availableToAllVoceros, setAvailableToAllVoceros] = useState(false);
+
+
+  const handleSave = async () => {
+    try {
+      if (!name.trim()) {
+        toast.error('Debes ingresar un nombre para el escenario.');
+        return;
+      }
+
+      if (!context.trim()) {
+        toast.error('Debes ingresar un contexto.');
+        return;
+      }
+
+      if (messages.length === 0) {
+        toast.error('Debes agregar al menos un mensaje clave.');
+        return;
+      }
+
+      const response = await fetch('http://localhost:3000/api/themes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: 'admin@demo.com',
+          title: name,
+          context,
+          keyMessages: messages,
+          category: 'GENERAL',
+          optic,
+          publics,
+          redLines,
+          availableToAllVoceros,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.error || 'No se pudo crear el escenario.'
+        );
+      }
+
+      toast.success('¡Escenario creado con éxito!');
+
+      console.log('Escenario creado:', data.theme);
+    } catch (error) {
+      console.error('Error creando escenario:', error);
+
+      toast.error(
+        error.message || 'No se pudo crear el escenario.'
+      );
+    }
   };
 
   return (
@@ -101,6 +156,29 @@ export default function EditorTema() {
           <Field label={t.pubL} hint="Puedes seleccionar más de uno.">
             <ChoiceChips options={t.pubs} value={publics} onChange={setPublics} multiple />
           </Field>
+          <div className="rounded-xl border border-line bg-surface p-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={availableToAllVoceros}
+                onChange={(e) =>
+                  setAvailableToAllVoceros(e.target.checked)
+                }
+                className="mt-1"
+              />
+
+              <div>
+                <p className="text-sm font-medium text-ink">
+                  Disponible para todos los voceros
+                </p>
+
+                <p className="text-xs text-muted mt-1">
+                  Todos los voceros de esta organización podrán ver y utilizar
+                  este escenario.
+                </p>
+              </div>
+            </label>
+          </div>
         </Card>
 
         <div className="space-y-6">
@@ -120,7 +198,7 @@ export default function EditorTema() {
               </h3>
               <p className="text-[13px] text-muted mt-1">{t.redHelp}</p>
             </div>
-            <EditableList items={redLines} setItems={setRedLines} placeholder="Escribe una línea roja…" addLabel="Añadir" danger />
+            <EditableList items={redLines} setItems={setRedLines} placeholder="Escribe auna línea roja…" addLabel="Añadir" danger />
           </Card>
         </div>
       </div>
