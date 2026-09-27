@@ -503,4 +503,79 @@ app.listen(PORT, () => {
   warmUp();
 });
 
+app.post('/api/themes', async (req, res) => {
+  try {
+    const {
+      email,
+      title,
+      context,
+      keyMessages,
+      category,
+      optic,
+      publics,
+      redLines,
+      availableToAllVoceros,
+    } = req.body;
+
+    if (!email || !title || !context || !keyMessages) {
+      return res.status(400).json({
+        error: 'Faltan datos obligatorios.',
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        error: 'Usuario no encontrado.',
+      });
+    }
+
+    if (user.role !== 'ADMIN') {
+      return res.status(403).json({
+        error: 'Solo un administrador puede crear escenarios.',
+      });
+    }
+
+    const theme = await prisma.theme.create({
+      data: {
+        title: title.trim(),
+        context: context.trim(),
+
+        keyMessages: JSON.stringify(keyMessages),
+
+        category: category || 'GENERAL',
+
+        optic: optic || null,
+
+        publics: publics
+          ? JSON.stringify(publics)
+          : null,
+
+        redLines: redLines
+          ? JSON.stringify(redLines)
+          : null,
+
+        availableToAllVoceros:
+          Boolean(availableToAllVoceros),
+
+        tenantId: user.tenantId,
+      },
+    });
+
+    res.status(201).json({
+      message: 'Escenario creado correctamente.',
+      theme,
+    });
+  } catch (error) {
+    console.error('Error creando escenario:', error);
+
+    res.status(500).json({
+      error: 'Error interno creando el escenario.',
+    });
+  }
+});
+
 

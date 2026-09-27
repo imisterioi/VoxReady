@@ -35,17 +35,25 @@ model User {
 
 // 3. Tema / Escenario
 model Theme {
-  id          String @id @default(uuid())
+  id          String   @id @default(uuid())
   title       String
-  context     String @db.Text
-  keyMessages String @db.Text
-  category    String @default("GENERAL")
+  context     String   @db.Text
+  keyMessages String   @db.Text
+  category    String   @default("GENERAL")
 
-  tenantId String
-  tenant   Tenant @relation(fields: [tenantId], references: [id])
+  optic       String?
+  publics     String?
+  redLines    String?
 
-  sessions    Session[]
-  assignments ScenarioAssignment[]
+  availableToAllVoceros Boolean @default(false)
+
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  sessions     Session[]
+  assignments  ScenarioAssignment[]
+
+  @@unique([tenantId, title])
 }
 
 // 4. Asignación de un escenario a un vocero
