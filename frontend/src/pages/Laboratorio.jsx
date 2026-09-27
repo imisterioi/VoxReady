@@ -4,6 +4,7 @@ import { API_URL } from '../lib/api';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, PageHeader, cx } from '../components/ui';
 import { useRive } from '@rive-app/react-canvas';
+import { isNaturalVoice, speak, useInterviewerVoice, voiceLabel } from '../lib/voice';
 
 // Endpoints de prueba disponibles en backend/index.js
 const ENDPOINTS = [
@@ -125,35 +126,60 @@ export default function Laboratorio() {
       src: 'https://cdn.rive.app/animations/vehicles.riv',
       autoplay: true,
     });
-    const QUESTION =
-      '¿Cómo respondería ante una situación de crisis que afecte la reputación de su organización?';
+    const [question, setQuestion] = useState(
+      '¿Cómo respondería ante una situación de crisis que afecte la reputación de su organización?'
+    );
+    const [answer, setAnswer] = useState('');
+    const [history, setHistory] = useState([]);
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiInfo, setAiInfo] = useState(null);
 
     const [isSpeaking, setIsSpeaking] = useState(false);
     const speechRef = useRef(null);
-    const speakQuestion = () => {
+    // Usa la voz más natural disponible (o la que el usuario elija)
+    const { voices, voice, setVoiceURI } = useInterviewerVoice();
+    const speakQuestion = (text = question) => {
+      speechRef.current = speak(text, voice, {
+        onStart: () => setIsSpeaking(true),
+        onEnd: () => setIsSpeaking(false),
+      });
+    };
+
+    // Pide al entrevistador IA (backend → API de NVIDIA) la siguiente pregunta.
+    // Si escribiste una respuesta, la IA genera una repregunta sobre ella.
+    const askAI = async () => {
+      const nextHistory = history.length
+        ? [...history, { role: 'vocero', text: answer }]
+        : [];
+
+      try {
+        setAiLoading(true);
+        setAiInfo(null);
+        const res = await fetch(`${API_URL}/api/interviewer/next-question`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ history: nextHistory }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.mensaje || 'La IA no respondió');
+
+        setQuestion(data.question);
+        setHistory([...nextHistory, { role: 'interviewer', text: data.question }]);
+        setAnswer('');
+        setAiInfo({ ok: true, text: `${data.model} · ${data.ms} ms` });
+        speakQuestion(data.question);
+      } catch (error) {
+        setAiInfo({ ok: false, text: error.message === 'Failed to fetch' ? 'No se pudo contactar al backend' : error.message });
+      } finally {
+        setAiLoading(false);
+      }
+    };
+
+    const resetInterview = () => {
       window.speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(QUESTION);
-
-      utterance.lang = 'es-CL';
-      utterance.rate = 0.95;
-      utterance.pitch = 1;
-
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-      };
-
-      utterance.onend = () => {
-        setIsSpeaking(false);
-      };
-
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-      };
-
-      speechRef.current = utterance;
-
-      window.speechSynthesis.speak(utterance);
+      setHistory([]);
+      setAnswer('');
+      setAiInfo(null);
     };
     useEffect(() => {
       return () => {
@@ -254,7 +280,7 @@ export default function Laboratorio() {
               </h2>
 
               <p className="text-[13px] text-muted mt-0.5">
-                Prueba de Rive junto con síntesis de voz.
+                Pregunta generada por IA (API de NVIDIA) y leída por la voz del navegador.
               </p>
             </div>
 
@@ -283,27 +309,81 @@ export default function Laboratorio() {
 
                   <div className="rounded-xl border border-line bg-subtle/50 p-5">
                     <p className="text-[17px] leading-relaxed text-ink">
-                      {QUESTION}
+                      {question}
                     </p>
                   </div>
 
+                  {history.length > 0 && (
+                    <div className="mt-4">
+                      <label className="label">Tu respuesta</label>
+                      <textarea
+                        className="textarea min-h-[80px]"
+                        value={answer}
+                        onChange={(e) => setAnswer(e.target.value)}
+                        placeholder="Escribe lo que respondería el vocero (vacío = silencio) y pide la siguiente pregunta."
+                      />
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2 mt-5">
                     <Button
-                      variant="primary"
-                      icon="play"
-                      onClick={speakQuestion}
+                      variant="accent"
+                      icon="sparkles"
+                      onClick={askAI}
+                      disabled={aiLoading}
                     >
-                      Preguntar
+                      {aiLoading ? 'Pensando…' : history.length ? 'Siguiente pregunta IA' : 'Preguntar con IA'}
                     </Button>
 
                     <Button
                       variant="secondary"
                       icon="refresh"
-                      onClick={speakQuestion}
+                      onClick={() => speakQuestion()}
                     >
                       Repetir pregunta
                     </Button>
+
+                    {history.length > 0 && (
+                      <Button variant="ghost" onClick={resetInterview}>
+                        Reiniciar
+                      </Button>
+                    )}
                   </div>
+
+                  {voices.length > 0 && (
+                    <div className="mt-5 pt-5 border-t border-line">
+                      <label className="label">Voz del entrevistador</label>
+                      <div className="flex gap-2">
+                        <select
+                          className="input flex-1 min-w-0"
+                          value={voice?.voiceURI || ''}
+                          onChange={(e) => setVoiceURI(e.target.value)}
+                        >
+                          {voices.map((v) => (
+                            <option key={v.voiceURI} value={v.voiceURI}>
+                              {voiceLabel(v)}
+                            </option>
+                          ))}
+                        </select>
+                        <Button variant="secondary" icon="play" onClick={() => speakQuestion()} className="shrink-0">
+                          Probar
+                        </Button>
+                      </div>
+                      {voice && !isNaturalVoice(voice) && (
+                        <p className="text-xs text-muted mt-2 leading-relaxed">
+                          Tu navegador no tiene voces naturales en español. En Microsoft Edge aparecen voces
+                          muy humanas (por ejemplo, Catalina o Lorenzo de Chile).
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {aiInfo && (
+                    <p className={cx('text-xs mt-3 flex items-center gap-1.5', aiInfo.ok ? 'text-faint' : 'text-danger')}>
+                      <Icon name={aiInfo.ok ? 'sparkles' : 'alert'} size={13} />
+                      {aiInfo.text}
+                    </p>
+                  )}
 
                 </div>
 

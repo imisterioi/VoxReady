@@ -8,6 +8,9 @@ const { pipeline } = require('stream/promises');
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 require('dotenv').config();
+// Claves privadas (API de IA) en un archivo que git ignora
+require('dotenv').config({ path: path.join(__dirname, '.env.local') });
+const { generateQuestion, warmUp } = require('./ai/interviewer');
 console.log('DATABASE_URL:', process.env.DATABASE_URL);
 
 // Inicializar Express y Prisma
@@ -464,8 +467,40 @@ app.post('/api/master-pattern', async (req, res) => {
   }
 });
 
+// Entrevistador IA: devuelve la siguiente pregunta según el escenario y la conversación
+// Body: { themeId?: string, history?: [{ role: 'interviewer' | 'vocero', text: string }] }
+app.post('/api/interviewer/next-question', async (req, res) => {
+  try {
+    const { themeId, history = [] } = req.body || {};
+
+    let theme = null;
+    if (themeId) {
+      theme = await prisma.theme.findUnique({ where: { id: themeId } });
+    }
+
+    const result = await generateQuestion({ theme, history });
+
+    res.json({
+      status: 'ok',
+      question: result.question,
+      model: result.model,
+      ms: result.ms
+    });
+  } catch (error) {
+    console.error('Error generando pregunta:', error.message);
+
+    res.status(error.code === 'NO_API_KEY' ? 503 : 502).json({
+      status: 'error',
+      mensaje: error.code === 'NO_API_KEY'
+        ? 'La IA no está configurada: falta NVIDIA_API_KEY en backend/.env.local'
+        : 'El entrevistador IA no respondió. Intenta de nuevo.'
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`Servidor backend de VoxReady corriendo en http://localhost:${PORT}`);
+  warmUp();
 });
 
 
