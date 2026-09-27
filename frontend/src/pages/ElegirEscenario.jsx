@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
-import { apiGet } from '../lib/api';
+import { apiGet, getCurrentUser } from '../lib/api';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Badge, Button, Card, EmptyState, PageHeader, Segmented } from '../components/ui';
@@ -28,7 +28,7 @@ export default function ElegirEscenario() {
       try {
         setCargando(true);
         setError('');
-        const data = await apiGet('/api/scenarios/my?email=vocero@demo.com');
+        const data = await apiGet(`/api/scenarios/my?email=${encodeURIComponent(getCurrentUser()?.email || '')}`);
         setEscenarios(data.scenarios || []);
       } catch (error) {
         console.error('Error cargando escenarios:', error);

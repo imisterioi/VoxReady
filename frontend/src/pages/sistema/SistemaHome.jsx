@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { checkEndpoint } from '../../lib/api';
-import { ROLE_META, timeAgo, useDirectory } from '../../data/directory';
+import { ROLE_META, timeAgo } from '../../data/directory';
+import useApiData from '../../hooks/useApiData';
 import Icon from '../../components/Icon';
 import { Badge, Button, Card, CardHeader, PageHeader, Stat, cx } from '../../components/ui';
-
-// Sesiones diarias de las últimas dos semanas (ilustrativo hasta tener el endpoint)
-const DAILY_SESSIONS = [14, 18, 11, 22, 25, 9, 6, 19, 24, 21, 28, 30, 12, 8];
 
 const ROLE_COLORS = { user: 'bg-[rgb(var(--c4))]', admin: 'bg-accent', master: 'bg-success', system: 'bg-brand' };
 
@@ -20,7 +18,13 @@ const SERVICE_STATE = {
 };
 
 export default function SistemaHome() {
-  const { tenants, users, activity } = useDirectory();
+  // Datos reales: GET /api/system/overview y GET /api/tenants
+  const overview = useApiData('/api/system/overview');
+  const tenantsData = useApiData('/api/tenants');
+  const tenants = tenantsData.data?.tenants || [];
+  const ov = overview.data;
+  const activity = ov?.activity || [];
+  const DAILY_SESSIONS = ov?.sessions.daily.map((d) => d.count) || Array(14).fill(0);
   const [api, setApi] = useState({ state: 'loading' });
   const [db, setDb] = useState({ state: 'loading' });
 
@@ -42,25 +46,25 @@ export default function SistemaHome() {
     { name: 'Base de datos', detail: 'PostgreSQL · Prisma', icon: 'database', ...db },
     { name: 'Almacenamiento de grabaciones', detail: 'backend/uploads', icon: 'video', state: api.state === 'ok' ? 'ok' : api.state },
     { name: 'Análisis de pose', detail: 'MediaPipe · se ejecuta en el navegador', icon: 'person', state: 'client' },
-    { name: 'Transcripción de voz', detail: 'Whisper · pendiente de integrar', icon: 'mic', state: 'pending' },
+    { name: 'Transcripción de voz', detail: 'Reconocimiento de voz del navegador (Chrome/Edge)', icon: 'mic', state: 'client' },
+    { name: 'IA entrevistadora y evaluadora', detail: 'API de NVIDIA · DeepSeek/Gemma y Kimi K3', icon: 'sparkles', state: api.state === 'ok' ? 'ok' : api.state },
   ];
   const operational = services.filter((s) => s.state === 'ok' || s.state === 'client').length;
   const checking = api.state === 'loading';
 
-  const activeTenants = tenants.filter((t) => t.status === 'ACTIVE');
-  const activeUsers = users.filter((u) => u.status === 'ACTIVE');
-  const invited = users.filter((u) => u.status === 'INVITED').length;
-  const sessionsMonth = tenants.reduce((sum, t) => sum + (t.sessionsMonth || 0), 0);
+  const usersTotal = ov?.users.total || 0;
+  const suspended = usersTotal - (ov?.users.active || 0);
+  const sessionsMonth = ov?.sessions.month || 0;
 
   const byRole = ['user', 'admin', 'master', 'system'].map((role) => ({
     role,
-    count: users.filter((u) => u.role === role).length,
+    count: ov?.users.byRole[role] || 0,
   }));
 
-  const maxDaily = Math.max(...DAILY_SESSIONS);
+  const maxDaily = Math.max(1, ...DAILY_SESSIONS);
   const weekTotal = DAILY_SESSIONS.slice(-7).reduce((a, b) => a + b, 0);
   const prevWeek = DAILY_SESSIONS.slice(0, 7).reduce((a, b) => a + b, 0);
-  const weekDelta = Math.round(((weekTotal - prevWeek) / prevWeek) * 100);
+  const weekDelta = prevWeek ? Math.round(((weekTotal - prevWeek) / prevWeek) * 100) : null;
 
   return (
     <>
@@ -84,27 +88,27 @@ export default function SistemaHome() {
       <div
         className={cx(
           'flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border px-5 py-4 mb-6',
-          checking ? 'border-line bg-surface' : operational === services.length - 1 ? 'border-success/25 bg-success/[0.06]' : 'border-danger/25 bg-danger/[0.05]',
+          checking ? 'border-line bg-surface' : operational === services.length ? 'border-success/25 bg-success/[0.06]' : 'border-danger/25 bg-danger/[0.05]',
         )}
       >
         <span
           className={cx(
             'h-9 w-9 rounded-xl flex items-center justify-center',
-            checking ? 'bg-subtle text-muted' : operational === services.length - 1 ? 'bg-success/15 text-success' : 'bg-danger/10 text-danger',
+            checking ? 'bg-subtle text-muted' : operational === services.length ? 'bg-success/15 text-success' : 'bg-danger/10 text-danger',
           )}
         >
-          <Icon name={checking ? 'refresh' : operational === services.length - 1 ? 'check' : 'alert'} size={17} strokeWidth={2} />
+          <Icon name={checking ? 'refresh' : operational === services.length ? 'check' : 'alert'} size={17} strokeWidth={2} />
         </span>
         <div className="flex-1">
           <div className="text-sm font-medium text-ink">
             {checking
               ? 'Comprobando servicios…'
-              : operational === services.length - 1
+              : operational === services.length
                 ? 'Todos los servicios conectados funcionan con normalidad'
                 : 'Hay servicios que requieren atención'}
           </div>
           <div className="text-xs text-muted mt-0.5">
-            {operational} de {services.length} servicios operativos · la transcripción aún no está integrada
+            {operational} de {services.length} servicios operativos
           </div>
         </div>
         <Button variant="ghost" size="sm" icon="refresh" onClick={runChecks} disabled={checking}>
@@ -113,10 +117,16 @@ export default function SistemaHome() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Stat label="Organizaciones activas" value={activeTenants.length} icon="layers" hint={`${tenants.length} en total`} />
-        <Stat label="Usuarios activos" value={activeUsers.length} icon="users" hint={`${invited} invitaciones pendientes`} />
-        <Stat label="Sesiones del mes" value={sessionsMonth} icon="activity" hint="Todas las organizaciones" />
-        <Stat label="Sesiones esta semana" value={weekTotal} icon="chart" trend={`${weekDelta >= 0 ? '+' : ''}${weekDelta}%`} hint="vs. semana anterior" />
+        <Stat label="Organizaciones activas" value={ov ? ov.tenants.active : '—'} icon="layers" hint={ov ? `${ov.tenants.total} en total` : 'Cargando…'} />
+        <Stat label="Usuarios activos" value={ov ? ov.users.active : '—'} icon="users" hint={ov ? `${suspended} suspendidos` : 'Cargando…'} />
+        <Stat label="Sesiones del mes" value={ov ? sessionsMonth : '—'} icon="activity" hint="Todas las organizaciones" />
+        <Stat
+          label="Sesiones esta semana"
+          value={ov ? weekTotal : '—'}
+          icon="chart"
+          trend={weekDelta != null ? `${weekDelta >= 0 ? '+' : ''}${weekDelta}%` : undefined}
+          hint="vs. semana anterior"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr] gap-6 mb-6">
@@ -160,7 +170,7 @@ export default function SistemaHome() {
         <Card className="flex flex-col">
           <CardHeader
             title="Usuarios por rol"
-            description={`${users.length} cuentas registradas`}
+            description={`${usersTotal} cuentas registradas`}
             action={
               <Link to="/sistema/usuarios" className="text-[13px] font-medium text-muted hover:text-ink inline-flex items-center gap-1">
                 Ver todos <Icon name="arrowRight" size={14} />
@@ -169,7 +179,7 @@ export default function SistemaHome() {
           />
           <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5 mb-6">
             {byRole.map((r) => (
-              <div key={r.role} className={ROLE_COLORS[r.role]} style={{ width: `${(r.count / users.length) * 100}%` }} />
+              <div key={r.role} className={ROLE_COLORS[r.role]} style={{ width: `${(r.count / Math.max(usersTotal, 1)) * 100}%` }} />
             ))}
           </div>
           <ul className="space-y-3">
@@ -183,8 +193,8 @@ export default function SistemaHome() {
           </ul>
           <div className="mt-auto pt-6">
             <div className="flex items-center justify-between rounded-xl bg-subtle/60 px-4 py-3 text-[13px]">
-              <span className="text-muted">Invitaciones pendientes</span>
-              <Badge tone={invited ? 'warning' : 'neutral'}>{invited}</Badge>
+              <span className="text-muted">Cuentas suspendidas</span>
+              <Badge tone={suspended ? 'danger' : 'neutral'}>{suspended}</Badge>
             </div>
           </div>
         </Card>
@@ -220,6 +230,7 @@ export default function SistemaHome() {
         {/* Actividad */}
         <Card>
           <CardHeader title="Actividad reciente" />
+          {activity.length === 0 && <p className="text-[13px] text-muted">{overview.loading ? 'Cargando…' : 'Aún no hay actividad.'}</p>}
           <ul className="space-y-4">
             {activity.slice(0, 6).map((a) => (
               <li key={a.id} className="flex gap-3">
@@ -251,7 +262,7 @@ export default function SistemaHome() {
         </div>
         <ul className="divide-y divide-line border-t border-line">
           {tenants.map((t) => {
-            const voceros = users.filter((u) => u.tenantId === t.id && u.role === 'user').length;
+            const voceros = t.voceros;
             const max = Math.max(...tenants.map((x) => x.sessionsMonth || 0), 1);
             return (
               <li key={t.id} className="grid grid-cols-[1fr_auto] sm:grid-cols-[1.2fr_80px_1fr_auto] items-center gap-4 px-6 py-3.5">

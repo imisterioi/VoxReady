@@ -4,27 +4,55 @@
 //   AI_MODEL=deepseek-ai/deepseek-v4.1-flash          (modelo principal)
 //   AI_FALLBACK_MODEL=google/gemma-4-31b-it           (respaldo si el principal no responde)
 //   AI_TIMEOUT_MS=20000                               (espera máxima por modelo)
+//   AI_EXTRA_MODELS=moonshotai/kimi-k3,nvidia/nemotron-3-super-120b-a12b  (más respaldos)
+//
+// En el plan gratuito la disponibilidad de cada modelo cambia minuto a minuto,
+// por eso se consultan varios a la vez y se usa el primero que responda.
 
 const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
 const DEFAULT_MODEL = 'deepseek-ai/deepseek-v4.1-flash';
 const DEFAULT_FALLBACK = 'google/gemma-4-31b-it';
+const DEFAULT_EXTRA = 'moonshotai/kimi-k3,nvidia/nemotron-3-super-120b-a12b';
+
+// Los temas guardan listas como texto JSON (editor de temas) o como texto plano (seed antiguo)
+function parseList(value) {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch {
+    /* texto plano */
+  }
+  return [String(value)];
+}
 
 // Instrucciones del periodista. El escenario se completa con datos de la tabla Theme.
 function buildSystemPrompt(theme) {
-  const scenario = theme
-    ? `Escenario: ${theme.title}.\nContexto: ${theme.context}\nMensajes que el vocero intentará sostener: ${theme.keyMessages}`
-    : 'Escenario: una empresa enfrenta una crisis que afecta a sus clientes.';
+  const lines = ['Eres un periodista chileno, incisivo pero respetuoso, entrevistando en vivo al vocero de una organización.'];
 
-  return [
-    'Eres un periodista chileno, incisivo pero respetuoso, entrevistando en vivo al vocero de una organización.',
-    scenario,
+  if (theme) {
+    lines.push(`Escenario: ${theme.title}.`, `Contexto: ${theme.context}`);
+    const keyMessages = parseList(theme.keyMessages);
+    const redLines = parseList(theme.redLines);
+    if (keyMessages.length) lines.push(`Mensajes que el vocero intentará sostener: ${keyMessages.join(' | ')}`);
+    if (redLines.length) {
+      lines.push(`Cosas que el vocero NO debe decir (líneas rojas): ${redLines.join(' | ')}`);
+      lines.push('De vez en cuando formula preguntas que tienten al vocero a cruzar esas líneas rojas.');
+    }
+  } else {
+    lines.push('Escenario: una empresa enfrenta una crisis que afecta a sus clientes.');
+  }
+
+  lines.push(
     'Reglas:',
     '- Haz UNA sola pregunta, en español, de máximo 35 palabras.',
     '- Si el vocero evade o responde de forma genérica, repregunta sobre lo que no contestó.',
     '- Si el vocero no dijo nada, reformula la pregunta anterior de forma más directa.',
+    '- No repitas preguntas que ya hiciste; avanza hacia otros aspectos de la crisis.',
     '- Responde solo con la pregunta: sin saludos, comillas, explicaciones ni etiquetas.',
-  ].join('\n');
+  );
+  return lines.join('\n');
 }
 
 // history: [{ role: 'interviewer' | 'vocero', text: string }]
@@ -46,25 +74,42 @@ function buildMessages(theme, history = []) {
 }
 
 // Limpia la respuesta: una sola línea, sin comillas ni prefijos.
+// Algunos modelos a veces devuelven su "razonamiento" (en inglés) en vez de la
+// pregunta: en ese caso se descarta y se usa la respuesta de otro modelo.
+const ENGLISH_HINTS = /\b(the|they|which|journalist|should|question|user|needs?|answer)\b/i;
+
 function cleanQuestion(text) {
-  return text
+  const lines = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean)
-    .pop()
-    ?.replace(/^(pregunta|periodista)\s*:\s*/i, '')
-    .replace(/^["“«]+|["”»]+$/g, '')
-    .trim();
+    .map((l) =>
+      l
+        .replace(/\*/g, '') // negritas de markdown
+        .trim()
+        .replace(/^(pregunta|periodista)\s*[:.-]\s*/i, '')
+        .replace(/^["“«]+|["”»]+$/g, '')
+        .trim(),
+    )
+    .filter(Boolean);
+
+  // La última línea que parezca una pregunta en español
+  const candidate = [...lines].reverse().find((l) => l.includes('?') || l.includes('¿'));
+  if (!candidate) return null;
+  if (ENGLISH_HINTS.test(candidate) && !candidate.includes('¿')) return null;
+  if (candidate.split(/\s+/).length > 70) return null;
+  return candidate;
 }
 
-async function callModel(model, messages, timeoutMs) {
+async function callModel(model, messages, timeoutMs, raceSignal) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  // Se cancela por tiempo o cuando otro modelo ya respondió
+  const signal = raceSignal ? AbortSignal.any([controller.signal, raceSignal]) : controller.signal;
 
   try {
     const response = await fetch(`${BASE_URL}/chat/completions`, {
       method: 'POST',
-      signal: controller.signal,
+      signal,
       headers: {
         Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
         'Content-Type': 'application/json',
@@ -85,7 +130,7 @@ async function callModel(model, messages, timeoutMs) {
 
     const data = await response.json();
     const question = cleanQuestion(data.choices?.[0]?.message?.content || '');
-    if (!question) throw new Error('El modelo no devolvió texto');
+    if (!question) throw new Error('respuesta descartada: no era una pregunta en español');
     return question;
   } finally {
     clearTimeout(timer);
@@ -104,13 +149,16 @@ async function generateQuestion({ theme, history }) {
 
   const messages = buildMessages(theme, history);
   const timeoutMs = Number(process.env.AI_TIMEOUT_MS) || 20000;
-  const models = [...new Set([process.env.AI_MODEL || DEFAULT_MODEL, process.env.AI_FALLBACK_MODEL || DEFAULT_FALLBACK])];
+  const extra = (process.env.AI_EXTRA_MODELS ?? DEFAULT_EXTRA).split(',').map((m) => m.trim()).filter(Boolean);
+  const models = [...new Set([process.env.AI_MODEL || DEFAULT_MODEL, process.env.AI_FALLBACK_MODEL || DEFAULT_FALLBACK, ...extra])];
   const start = Date.now();
+  const race = new AbortController();
 
   const attempts = models.map((model) =>
-    callModel(model, messages, timeoutMs)
+    callModel(model, messages, timeoutMs, race.signal)
       .then((question) => ({ question, model, ms: Date.now() - start }))
       .catch((error) => {
+        if (race.signal.aborted) throw new Error(`${model}: cancelado`); // otro modelo ganó
         const reason = error.name === 'AbortError' ? `sin respuesta en ${timeoutMs} ms` : error.message;
         console.warn(`[IA] ${model} falló: ${reason}`);
         throw new Error(`${model}: ${reason}`);
@@ -118,7 +166,9 @@ async function generateQuestion({ theme, history }) {
   );
 
   try {
-    return await Promise.any(attempts);
+    const winner = await Promise.any(attempts);
+    race.abort(); // cancela las consultas que siguen pendientes
+    return winner;
   } catch (aggregate) {
     throw new Error(`Ningún modelo respondió (${aggregate.errors.map((e) => e.message).join(' | ')})`);
   }
@@ -133,4 +183,4 @@ function warmUp() {
     .catch(() => console.warn('[IA] No se pudo precalentar el modelo; se reintentará en la primera pregunta'));
 }
 
-module.exports = { generateQuestion, warmUp };
+module.exports = { generateQuestion, warmUp, parseList };

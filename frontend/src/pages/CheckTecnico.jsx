@@ -4,10 +4,14 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Badge, Button, Card, Checkbox, Field, PageHeader, Progress, cx } from '../components/ui';
+import { ScenarioBriefModal } from '../components/ScenarioBrief';
 
+// El escenario (contexto, mensajes clave y líneas rojas) se muestra en una
+// ventana emergente al entrar; se puede volver a abrir con "Ver escenario".
 export default function CheckTecnico() {
   const t = I.es.L.u3;
   const navigate = useNavigate();
+  const [briefOpen, setBriefOpen] = useState(true);
 
   const escenario = (() => {
     try {
@@ -371,8 +375,27 @@ export default function CheckTecnico() {
         eyebrow={t.eyebrow}
         title={t.title}
         description={t.sub}
-        actions={escenario && <Badge tone="outline" icon="layers">{escenario.title}</Badge>}
+        actions={
+          <>
+            {escenario && (
+              <Button variant="secondary" size="sm" icon="file" onClick={() => setBriefOpen(true)}>
+                Ver escenario
+              </Button>
+            )}
+            {escenario && <Badge tone="outline" icon="layers">{escenario.title}</Badge>}
+          </>
+        }
       />
+
+      <ScenarioBriefModal scenario={escenario} open={briefOpen} onClose={() => setBriefOpen(false)} />
+
+      {!escenario && (
+        <div className="mb-6 flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-ink">
+          <Icon name="info" size={16} className="text-warning" />
+          <span className="flex-1">Aún no elegiste un escenario.</span>
+          <Button size="sm" variant="secondary" to="/vocero/escenarios">Elegir escenario</Button>
+        </div>
+      )}
 
       {error && (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">

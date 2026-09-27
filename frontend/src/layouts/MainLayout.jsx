@@ -7,6 +7,7 @@ import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
 import { Avatar, Button, cx } from '../components/ui';
+import { apiFetch, clearSession, getCurrentUser, getToken, saveSession } from '../lib/api';
 
 export default function MainLayout() {
   const [user, setUser] = useState(null);
@@ -19,10 +20,24 @@ export default function MainLayout() {
   const location = useLocation();
   const d = I.es;
 
+  // Requiere sesión iniciada; se valida el token con el backend (GET /api/auth/me)
   useEffect(() => {
-    const storedUser = localStorage.getItem('voxready_user');
-    if (!storedUser) navigate('/login');
-    else setUser(JSON.parse(storedUser));
+    const token = getToken();
+    const storedUser = getCurrentUser();
+    if (!token || !storedUser) {
+      clearSession();
+      navigate('/login');
+      return;
+    }
+    setUser(storedUser);
+    apiFetch('/api/auth/me')
+      .then(({ user: fresh }) => {
+        saveSession(token, fresh);
+        setUser(fresh);
+      })
+      .catch(() => {
+        /* 401 → apiFetch ya redirige al login; sin conexión se mantiene la sesión local */
+      });
   }, [navigate]);
 
   // Cierra menús al cambiar de ruta
@@ -41,7 +56,7 @@ export default function MainLayout() {
   }, []);
 
   const handleLogout = () => {
-    localStorage.removeItem('voxready_user');
+    clearSession();
     navigate('/login');
   };
 

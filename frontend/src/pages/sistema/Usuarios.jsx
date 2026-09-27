@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ROLE_META, STATUS_META, initialsOf, setUserStatus, timeAgo, useDirectory } from '../../data/directory';
+import { ROLE_META, STATUS_META, initialsOf, timeAgo } from '../../data/directory';
+import { apiFetch, getCurrentUser } from '../../lib/api';
+import useApiData from '../../hooks/useApiData';
 import Icon from '../../components/Icon';
 import UserFormModal from '../../components/UserFormModal';
 import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Segmented, Table } from '../../components/ui';
@@ -14,17 +16,19 @@ const ROLE_FILTERS = [
 ];
 
 export default function Usuarios() {
-  const { users, tenants } = useDirectory();
+  const usersData = useApiData('/api/users');
+  const tenantsData = useApiData('/api/tenants');
+  const users = useMemo(() => usersData.data?.users || [], [usersData.data]);
+  const tenants = tenantsData.data?.tenants || [];
   const [params, setParams] = useSearchParams();
   const [roleFilter, setRoleFilter] = useState('all');
   const [tenantFilter, setTenantFilter] = useState('all');
   const [query, setQuery] = useState('');
 
-  const me = JSON.parse(localStorage.getItem('voxready_user') || '{}');
+  const me = getCurrentUser() || {};
   const creating = params.get('nuevo') === '1';
   const setCreating = (v) => setParams(v ? { nuevo: '1' } : {}, { replace: true });
 
-  const tenantName = (id) => tenants.find((t) => t.id === id)?.name;
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -37,10 +41,15 @@ export default function Usuarios() {
     });
   }, [users, roleFilter, tenantFilter, query]);
 
-  const toggle = (u) => {
+  const toggle = async (u) => {
     const next = u.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
-    setUserStatus(u.id, next);
-    toast.success(`${u.name} ${next === 'ACTIVE' ? 'reactivado' : 'suspendido'}`);
+    try {
+      await apiFetch(`/api/users/${u.id}`, { method: 'PATCH', body: { status: next } });
+      toast.success(`${u.name} ${next === 'ACTIVE' ? 'reactivado' : 'suspendido'}`);
+      usersData.reload();
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   return (
@@ -82,7 +91,11 @@ export default function Usuarios() {
           </span>
         </div>
 
-        {filtered.length === 0 ? (
+        {usersData.error ? (
+          <EmptyState tone="danger" icon="server" title="No se pudieron cargar los usuarios" description={usersData.error} />
+        ) : usersData.loading && !usersData.data ? (
+          <EmptyState icon="refresh" title="Cargando usuarios…" />
+        ) : filtered.length === 0 ? (
           <EmptyState icon="users" title="Sin resultados" description="Ajusta los filtros o la búsqueda." />
         ) : (
           <Table
@@ -91,7 +104,7 @@ export default function Usuarios() {
               { label: 'Rol' },
               { label: 'Organización' },
               { label: 'Estado' },
-              { label: 'Última actividad' },
+              { label: 'Último ingreso' },
               { label: '', align: 'right' },
             ]}
           >
@@ -114,17 +127,17 @@ export default function Usuarios() {
                     <Badge tone={ROLE_META[u.role].tone}>{ROLE_META[u.role].short}</Badge>
                   </td>
                   <td className="py-3.5 px-6 text-muted whitespace-nowrap">
-                    {u.tenantId ? tenantName(u.tenantId) : <span className="text-faint">VoxReady</span>}
+                    {u.tenantName || <span className="text-faint">VoxReady</span>}
                   </td>
                   <td className="py-3.5 px-6 whitespace-nowrap">
                     <span className="inline-flex items-center gap-1.5 text-xs text-muted">
                       <span
-                        className={`h-2 w-2 rounded-full ${u.status === 'ACTIVE' ? 'bg-success' : u.status === 'INVITED' ? 'bg-warning' : 'bg-danger'}`}
+                        className={`h-2 w-2 rounded-full ${u.status === 'ACTIVE' ? 'bg-success' : 'bg-danger'}`}
                       />
-                      {STATUS_META[u.status].label}
+                      {STATUS_META[u.status]?.label || u.status}
                     </span>
                   </td>
-                  <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastActive)}</td>
+                  <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastLoginAt)}</td>
                   <td className="py-3.5 px-6 text-right">
                     {!isMe && (
                       <Button variant="ghost" size="sm" onClick={() => toggle(u)}>
@@ -142,6 +155,7 @@ export default function Usuarios() {
       <UserFormModal
         open={creating}
         onClose={() => setCreating(false)}
+        onCreated={usersData.reload}
         allowedRoles={['admin', 'master', 'system']}
         tenants={tenants}
       />

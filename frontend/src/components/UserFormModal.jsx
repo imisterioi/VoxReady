@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { AREAS, ROLE_META, createUser } from '../data/directory';
+import { apiFetch } from '../lib/api';
+import { AREAS, ROLE_META } from '../data/directory';
 import Icon from './Icon';
 import { Button, ChoiceChips, Field, Modal, Radio } from './ui';
 
@@ -11,43 +12,56 @@ const ROLE_HELP = {
   user: 'Practica entrevistas en los escenarios asignados por su organización.',
 };
 
-const EMPTY = { name: '', email: '', tenantId: '', area: AREAS[0] };
+const EMPTY = { name: '', email: '', password: '', tenantId: '', area: AREAS[0] };
 
-// Formulario para crear usuarios.
+// Formulario para crear usuarios (POST /api/users).
 // - allowedRoles: roles que quien crea puede asignar.
-// - fixedTenantId: si se indica, el usuario queda en esa organización (admin del cliente).
-export default function UserFormModal({ open, onClose, allowedRoles, defaultRole, tenants = [], fixedTenantId, title, description }) {
-  const [form, setForm] = useState({ ...EMPTY, role: defaultRole || allowedRoles[0], tenantId: fixedTenantId || '' });
+// - fixedTenantId: si se indica, el usuario queda en esa organización.
+// - onCreated: se llama tras crear el usuario (para recargar la lista).
+export default function UserFormModal({ open, onClose, onCreated, allowedRoles, defaultRole, tenants = [], fixedTenantId, title, description }) {
+  const initial = () => ({ ...EMPTY, role: defaultRole || allowedRoles[0], tenantId: fixedTenantId || '' });
+  const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const set = (field) => (value) => {
     setForm((f) => ({ ...f, [field]: value }));
     setError('');
   };
 
-  const needsTenant = form.role === 'admin' || form.role === 'user';
+  const needsTenant = form.role === 'admin' && !fixedTenantId;
   const activeTenants = tenants.filter((t) => t.status === 'ACTIVE');
 
   const close = () => {
-    setForm({ ...EMPTY, role: defaultRole || allowedRoles[0], tenantId: fixedTenantId || '' });
+    setForm(initial());
     setError('');
     onClose();
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e?.preventDefault();
+    if (saving) return;
     try {
-      const user = createUser({
-        name: form.name,
-        email: form.email,
-        role: form.role,
-        tenantId: fixedTenantId || form.tenantId,
-        area: form.area,
+      setSaving(true);
+      const { user } = await apiFetch('/api/users', {
+        method: 'POST',
+        body: {
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          role: form.role,
+          tenantId: fixedTenantId || form.tenantId || undefined,
+          area: form.role === 'user' ? form.area : undefined,
+        },
       });
-      toast.success(`Invitación enviada a ${user.email}`);
+      toast.success(`Cuenta creada: ${user.email}`);
+      onCreated?.(user);
       close();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -56,14 +70,14 @@ export default function UserFormModal({ open, onClose, allowedRoles, defaultRole
       open={open}
       onClose={close}
       title={title || 'Nuevo usuario'}
-      description={description || 'La persona recibirá una invitación por correo para activar su cuenta.'}
+      description={description || 'Comparte el correo y la contraseña inicial con la persona para que pueda ingresar.'}
       footer={
         <>
           <Button variant="ghost" onClick={close}>
             Cancelar
           </Button>
-          <Button onClick={submit} icon="check">
-            Crear e invitar
+          <Button onClick={submit} icon="check" disabled={saving}>
+            {saving ? 'Creando…' : 'Crear usuario'}
           </Button>
         </>
       }
@@ -85,7 +99,7 @@ export default function UserFormModal({ open, onClose, allowedRoles, defaultRole
           </Field>
         )}
 
-        {needsTenant && !fixedTenantId && (
+        {needsTenant && (
           <Field label="Organización">
             <select className="input" value={form.tenantId} onChange={(e) => set('tenantId')(e.target.value)}>
               <option value="">Selecciona una organización…</option>
@@ -107,6 +121,27 @@ export default function UserFormModal({ open, onClose, allowedRoles, defaultRole
           </Field>
         </div>
 
+        <Field label="Contraseña inicial" hint="Mínimo 6 caracteres.">
+          <div className="relative">
+            <input
+              className="input pr-10"
+              type={showPassword ? 'text' : 'password'}
+              value={form.password}
+              onChange={(e) => set('password')(e.target.value)}
+              placeholder="••••••••"
+              autoComplete="new-password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-faint hover:text-ink"
+              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            >
+              <Icon name="eye" size={15} />
+            </button>
+          </div>
+        </Field>
+
         {form.role === 'user' && (
           <Field label="Público interno" hint="Define qué escenarios verá el vocero.">
             <ChoiceChips options={AREAS} value={form.area} onChange={set('area')} />
@@ -127,7 +162,6 @@ export default function UserFormModal({ open, onClose, allowedRoles, defaultRole
           </p>
         )}
 
-        {/* Permite enviar con Enter */}
         <button type="submit" className="hidden" />
       </form>
     </Modal>

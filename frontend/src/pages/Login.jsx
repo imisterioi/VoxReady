@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
-import { TEST_USERS, roleIndex, homeFor } from '../data/mockData';
-import { findUserByEmail, getDirectory, initialsOf, registerLogin } from '../data/directory';
+import { TEST_USERS, DEMO_PASSWORD, roleIndex, homeFor } from '../data/mockData';
+import { apiFetch, saveSession } from '../lib/api';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
@@ -10,34 +10,36 @@ import { Avatar, Button, Field } from '../components/ui';
 
 export default function Login() {
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState('');
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
   const d = I.es;
 
-  const handleLogin = (user) => {
-    // Respeta suspensiones hechas desde la administración del sistema
-    const account = findUserByEmail(user.email);
-    const tenant = getDirectory().tenants.find((t) => t.id === account?.tenantId);
-    if (account?.status === 'SUSPENDED') return setError('Esta cuenta está suspendida. Contacta a tu administrador.');
-    if (tenant?.status === 'SUSPENDED') return setError(`La organización ${tenant.name} está suspendida.`);
-
-    registerLogin(user.email);
-    localStorage.setItem('voxready_user', JSON.stringify(user));
-    navigate(homeFor(user.role));
+  // Inicia sesión contra el backend (POST /api/auth/login)
+  const login = async (loginEmail, loginPassword) => {
+    setError('');
+    setLoading(loginEmail);
+    try {
+      const { token, user } = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        auth: false,
+        body: { email: loginEmail, password: loginPassword },
+      });
+      saveSession(token, user);
+      navigate(homeFor(user.role));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading('');
+    }
   };
 
   const submitLogin = (e) => {
     e.preventDefault();
-    const test = TEST_USERS.find((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-    if (test) return handleLogin(test);
-
-    // Usuarios creados desde la administración (demo sin contraseña)
-    const created = findUserByEmail(email);
-    if (created) {
-      return handleLogin({ role: created.role, initials: initialsOf(created.name), name: created.name, email: created.email });
-    }
-    setError(d.login.err);
+    if (!email.trim() || !password) return setError('Ingresa tu correo y contraseña.');
+    login(email.trim(), password);
   };
 
   return (
@@ -103,11 +105,23 @@ export default function Login() {
                     setEmail(e.target.value);
                     setError('');
                   }}
+                  disabled={Boolean(loading)}
                   autoComplete="email"
                 />
               </Field>
               <Field label={d.login.passL}>
-                <input className="input" type="password" placeholder={d.login.passPh} autoComplete="current-password" />
+                <input
+                  className="input"
+                  type="password"
+                  placeholder={d.login.passPh}
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setError('');
+                  }}
+                  disabled={Boolean(loading)}
+                />
               </Field>
 
               {error && (
@@ -117,8 +131,8 @@ export default function Login() {
                 </p>
               )}
 
-              <Button type="submit" className="w-full" size="lg">
-                {d.login.signIn}
+              <Button type="submit" className="w-full" size="lg" disabled={Boolean(loading)}>
+                {loading === email.trim() && loading ? 'Ingresando…' : d.login.signIn}
               </Button>
             </form>
 
@@ -132,7 +146,8 @@ export default function Login() {
               {TEST_USERS.map((u) => (
                 <button
                   key={u.email}
-                  onClick={() => handleLogin(u)}
+                  onClick={() => login(u.email, DEMO_PASSWORD)}
+                  disabled={Boolean(loading)}
                   className="group w-full flex items-center gap-3 px-3 py-2 rounded-xl border border-line bg-surface text-left hover:border-line-strong hover:shadow-soft transition-all"
                 >
                   <Avatar initials={u.initials} />
@@ -142,7 +157,11 @@ export default function Login() {
                       {d.roles[roleIndex(u.role)]} · {u.email}
                     </span>
                   </span>
-                  <Icon name="arrowRight" size={16} className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
+                  {loading === u.email ? (
+                    <span className="h-4 w-4 rounded-full border-2 border-line border-t-ink animate-spin" />
+                  ) : (
+                    <Icon name="arrowRight" size={16} className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all" />
+                  )}
                 </button>
               ))}
             </div>

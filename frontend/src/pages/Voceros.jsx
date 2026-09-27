@@ -1,27 +1,33 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
-import { STATUS_META, findUserByEmail, initialsOf, setUserStatus, timeAgo, useDirectory } from '../data/directory';
+import { STATUS_META, initialsOf, timeAgo } from '../data/directory';
+import { apiFetch, getCurrentUser } from '../lib/api';
+import useApiData from '../hooks/useApiData';
 import UserFormModal from '../components/UserFormModal';
 import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Stat, Table } from '../components/ui';
 
 export default function Voceros() {
-  const { users, tenants } = useDirectory();
   const [creating, setCreating] = useState(false);
 
-  // Organización del administrador conectado
-  const me = JSON.parse(localStorage.getItem('voxready_user') || '{}');
-  const tenantId = findUserByEmail(me.email || '')?.tenantId;
-  const tenant = tenants.find((t) => t.id === tenantId);
-  const voceros = users.filter((u) => u.tenantId === tenantId && u.role === 'user');
+  // El backend devuelve solo los voceros de la organización del admin conectado
+  const { data, loading, error, reload } = useApiData('/api/users');
+  const voceros = data?.users || [];
+  const me = getCurrentUser() || {};
+  const tenant = me.tenantId ? { id: me.tenantId, name: me.tenantName } : null;
 
   const active = voceros.filter((u) => u.status === 'ACTIVE').length;
-  const invited = voceros.filter((u) => u.status === 'INVITED').length;
+  const suspended = voceros.filter((u) => u.status === 'SUSPENDED').length;
   const sessions = voceros.reduce((sum, u) => sum + (u.sessions || 0), 0);
 
-  const toggle = (u) => {
+  const toggle = async (u) => {
     const next = u.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
-    setUserStatus(u.id, next);
-    toast.success(`${u.name} ${next === 'ACTIVE' ? 'reactivado' : 'suspendido'}`);
+    try {
+      await apiFetch(`/api/users/${u.id}`, { method: 'PATCH', body: { status: next } });
+      toast.success(`${u.name} ${next === 'ACTIVE' ? 'reactivado' : 'suspendido'}`);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   return (
@@ -29,7 +35,7 @@ export default function Voceros() {
       <PageHeader
         eyebrow={tenant ? `Administración · ${tenant.name}` : 'Administración'}
         title="Voceros"
-        description="Personas de tu organización que practican en VoxReady. Al crearlas reciben una invitación por correo."
+        description="Personas de tu organización que practican en VoxReady. Al crearlas les asignas una contraseña inicial."
         actions={
           <Button icon="plus" onClick={() => setCreating(true)} disabled={!tenant}>
             Nuevo vocero
@@ -39,12 +45,16 @@ export default function Voceros() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         <Stat label="Voceros activos" value={active} icon="users" />
-        <Stat label="Invitaciones pendientes" value={invited} icon="clock" />
+        <Stat label="Suspendidos" value={suspended} icon="lock" />
         <Stat label="Sesiones realizadas" value={sessions} icon="activity" />
       </div>
 
       <Card>
-        {voceros.length === 0 ? (
+        {error ? (
+          <EmptyState tone="danger" icon="server" title="No se pudieron cargar los voceros" description={error} />
+        ) : loading && !data ? (
+          <EmptyState icon="refresh" title="Cargando voceros…" />
+        ) : voceros.length === 0 ? (
           <EmptyState
             icon="users"
             title="Aún no hay voceros"
@@ -62,7 +72,7 @@ export default function Voceros() {
               { label: 'Público interno' },
               { label: 'Sesiones' },
               { label: 'Estado' },
-              { label: 'Última actividad' },
+              { label: 'Último ingreso' },
               { label: '', align: 'right' },
             ]}
           >
@@ -82,9 +92,9 @@ export default function Voceros() {
                 </td>
                 <td className="py-3.5 px-6 text-ink tabular-nums">{u.sessions || 0}</td>
                 <td className="py-3.5 px-6 whitespace-nowrap">
-                  <Badge tone={STATUS_META[u.status].tone}>{STATUS_META[u.status].label}</Badge>
+                  <Badge tone={STATUS_META[u.status]?.tone || 'neutral'}>{STATUS_META[u.status]?.label || u.status}</Badge>
                 </td>
-                <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastActive)}</td>
+                <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastLoginAt)}</td>
                 <td className="py-3.5 px-6 text-right">
                   <Button variant="ghost" size="sm" onClick={() => toggle(u)}>
                     {u.status === 'SUSPENDED' ? 'Reactivar' : 'Suspender'}
@@ -100,11 +110,11 @@ export default function Voceros() {
         <UserFormModal
           open={creating}
           onClose={() => setCreating(false)}
+          onCreated={reload}
           allowedRoles={['user']}
           fixedTenantId={tenant.id}
-          tenants={tenants}
           title="Nuevo vocero"
-          description={`Se agregará a ${tenant.name} y recibirá una invitación por correo.`}
+          description={`Se agregará a ${tenant.name}. Comparte su correo y contraseña inicial para que pueda ingresar.`}
         />
       )}
     </>

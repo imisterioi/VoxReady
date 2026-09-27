@@ -1,8 +1,10 @@
+// Perfiles de demostración: cuentas reales creadas por el seed (backend/prisma/seed-demo.js)
+export const DEMO_PASSWORD = 'demo1234';
 export const TEST_USERS = [
-  { role: 'user', initials: 'AT', name: 'Ana Torres', email: 'ana@visum.com', pass: 'demo1234' },
-  { role: 'admin', initials: 'CR', name: 'Carlos Ruiz', email: 'carlos@visum.com', pass: 'demo1234' },
-  { role: 'master', initials: 'MV', name: 'Marta Vidal', email: 'marta@voxready.io', pass: 'demo1234' },
-  { role: 'system', initials: 'SR', name: 'Sofía Reyes', email: 'sofia@voxready.io', pass: 'demo1234' }
+  { role: 'user', initials: 'AT', name: 'Ana Torres', email: 'vocero@demo.com' },
+  { role: 'admin', initials: 'CR', name: 'Carlos Ruiz', email: 'admin@demo.com' },
+  { role: 'master', initials: 'MV', name: 'Marta Vidal', email: 'marta@voxready.io' },
+  { role: 'system', initials: 'SR', name: 'Sofía Reyes', email: 'sofia@voxready.io' }
 ];
 
 export const CHARTDATA = [

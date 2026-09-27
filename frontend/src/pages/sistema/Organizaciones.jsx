@@ -1,16 +1,19 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { SECTORS, createTenant, formatDate, initialsOf, setTenantStatus, useDirectory } from '../../data/directory';
+import { SECTORS, formatDate, initialsOf } from '../../data/directory';
+import { apiFetch } from '../../lib/api';
+import useApiData from '../../hooks/useApiData';
 import Icon from '../../components/Icon';
 import UserFormModal from '../../components/UserFormModal';
 import { Avatar, Badge, Button, Card, EmptyState, Field, Modal, PageHeader } from '../../components/ui';
 
-const EMPTY = { name: '', sector: SECTORS[0], adminName: '', adminEmail: '' };
+const EMPTY = { name: '', sector: SECTORS[0], adminName: '', adminEmail: '', adminPassword: '' };
 
-function NewTenantModal({ open, onClose }) {
+function NewTenantModal({ open, onClose, onCreated }) {
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
   const set = (k) => (e) => {
     setForm((f) => ({ ...f, [k]: e.target.value }));
     setError('');
@@ -22,14 +25,19 @@ function NewTenantModal({ open, onClose }) {
     onClose();
   };
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e?.preventDefault();
+    if (saving) return;
     try {
-      const { tenant, admin } = createTenant(form);
-      toast.success(`${tenant.name} creada · invitación enviada a ${admin.email}`);
+      setSaving(true);
+      const { tenant, admin } = await apiFetch('/api/tenants', { method: 'POST', body: form });
+      toast.success(`${tenant.name} creada · administrador: ${admin.email}`);
+      onCreated?.();
       close();
     } catch (err) {
       setError(err.message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -44,8 +52,8 @@ function NewTenantModal({ open, onClose }) {
           <Button variant="ghost" onClick={close}>
             Cancelar
           </Button>
-          <Button onClick={submit} icon="check">
-            Crear organización
+          <Button onClick={submit} icon="check" disabled={saving}>
+            {saving ? 'Creando…' : 'Crear organización'}
           </Button>
         </>
       }
@@ -77,6 +85,9 @@ function NewTenantModal({ open, onClose }) {
               <input className="input" type="email" value={form.adminEmail} onChange={set('adminEmail')} placeholder="nombre@empresa.com" />
             </Field>
           </div>
+          <Field label="Contraseña inicial" hint="Mínimo 6 caracteres. Compártela con el administrador para que ingrese.">
+            <input className="input" type="password" value={form.adminPassword} onChange={set('adminPassword')} placeholder="••••••••" autoComplete="new-password" />
+          </Field>
         </div>
 
         {error && (
@@ -92,7 +103,8 @@ function NewTenantModal({ open, onClose }) {
 }
 
 export default function Organizaciones() {
-  const { tenants, users } = useDirectory();
+  const { data, loading, error, reload } = useApiData('/api/tenants');
+  const tenants = useMemo(() => data?.tenants || [], [data]);
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [adminFor, setAdminFor] = useState(null);
@@ -102,23 +114,21 @@ export default function Organizaciones() {
 
   const rows = useMemo(
     () =>
-      tenants
-        .filter((t) => t.name.toLowerCase().includes(query.toLowerCase()) || t.sector.toLowerCase().includes(query.toLowerCase()))
-        .map((t) => {
-          const members = users.filter((u) => u.tenantId === t.id);
-          return {
-            ...t,
-            admins: members.filter((u) => u.role === 'admin'),
-            voceros: members.filter((u) => u.role === 'user').length,
-          };
-        }),
-    [tenants, users, query],
+      tenants.filter(
+        (t) => t.name.toLowerCase().includes(query.toLowerCase()) || (t.sector || '').toLowerCase().includes(query.toLowerCase()),
+      ),
+    [tenants, query],
   );
 
-  const toggle = (t) => {
+  const toggle = async (t) => {
     const next = t.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-    setTenantStatus(t.id, next);
-    toast.success(`${t.name} ${next === 'ACTIVE' ? 'reactivada' : 'suspendida'}`);
+    try {
+      await apiFetch(`/api/tenants/${t.id}`, { method: 'PATCH', body: { status: next } });
+      toast.success(`${t.name} ${next === 'ACTIVE' ? 'reactivada' : 'suspendida'}`);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    }
   };
 
   return (
@@ -139,7 +149,15 @@ export default function Organizaciones() {
         <input className="input pl-9" placeholder="Buscar organización…" value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
 
-      {rows.length === 0 ? (
+      {loading && !data ? (
+        <Card>
+          <EmptyState icon="refresh" title="Cargando organizaciones…" />
+        </Card>
+      ) : error ? (
+        <Card>
+          <EmptyState tone="danger" icon="server" title="No se pudieron cargar" description={error} action={<Button variant="secondary" icon="refresh" onClick={reload}>Reintentar</Button>} />
+        </Card>
+      ) : rows.length === 0 ? (
         <Card>
           <EmptyState icon="search" title="Sin resultados" description="No hay organizaciones que coincidan con la búsqueda." />
         </Card>
@@ -155,7 +173,7 @@ export default function Organizaciones() {
                   <div className="min-w-0">
                     <h3 className="text-[15px] font-semibold text-ink truncate">{t.name}</h3>
                     <p className="text-xs text-muted">
-                      {t.sector} · desde {formatDate(t.createdAt)}
+                      {t.sector || 'Sin sector'} · desde {formatDate(t.createdAt)}
                     </p>
                   </div>
                 </div>
@@ -198,12 +216,13 @@ export default function Organizaciones() {
         </div>
       )}
 
-      <NewTenantModal open={creating} onClose={() => setCreating(false)} />
+      <NewTenantModal open={creating} onClose={() => setCreating(false)} onCreated={reload} />
 
       {adminFor && (
         <UserFormModal
           open
           onClose={() => setAdminFor(null)}
+          onCreated={reload}
           allowedRoles={['admin']}
           fixedTenantId={adminFor}
           tenants={tenants}

@@ -2,6 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 
 require('dotenv').config();
+const { seedDemo } = require('./seed-demo');
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -158,6 +159,9 @@ async function main() {
       },
     });
   }
+
+  // Cuentas con contraseña, segunda organización y escenario de prueba integral
+  await seedDemo(prisma, { tenant, scenarios });
 
   console.log('Datos creados/verificados correctamente.');
   console.log(`Administrador: ${admin.email}`);

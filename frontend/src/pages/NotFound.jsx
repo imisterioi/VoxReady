@@ -1,10 +1,11 @@
 import { useNavigate } from 'react-router-dom';
 import { homeFor } from '../data/mockData';
 import { Button } from '../components/ui';
+import { getCurrentUser } from '../lib/api';
 
 export default function NotFound() {
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem('voxready_user') || 'null');
+  const user = getCurrentUser();
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center">

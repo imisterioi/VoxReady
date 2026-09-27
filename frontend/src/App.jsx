@@ -20,6 +20,7 @@ import Microleccion from './pages/Microleccion';
 import NotFound from './pages/NotFound';
 import Laboratorio from './pages/Laboratorio';
 import Voceros from './pages/Voceros';
+import Practicas from './pages/Practicas';
 import SistemaHome from './pages/sistema/SistemaHome';
 import Organizaciones from './pages/sistema/Organizaciones';
 import Usuarios from './pages/sistema/Usuarios';
@@ -67,15 +68,19 @@ function App() {
           <Route path="vocero" element={<VoceroHome />} />
           <Route path="vocero/escenarios" element={<ElegirEscenario />} />
           <Route path="vocero/preparar" element={<CheckTecnico />} />
+          <Route path="vocero/preparar-popup" element={<Navigate to="/vocero/preparar" replace />} />
           <Route path="vocero/sesion" element={<SesionPractica />} />
           <Route path="vocero/analizando" element={<Analizando />} />
           <Route path="vocero/informe" element={<InformeCoach />} />
           <Route path="vocero/progreso" element={<MiProgreso />} />
           <Route path="vocero/leccion" element={<Microleccion />} />
+          <Route path="vocero/leccion/:id" element={<Microleccion />} />
 
           {/* Admin del cliente */}
           <Route path="admin" element={<AdminHome />} />
           <Route path="admin/voceros" element={<Voceros />} />
+          <Route path="admin/practicas" element={<Practicas />} />
+          <Route path="admin/informe" element={<InformeCoach audience="admin" />} />
           <Route path="admin/tema" element={<EditorTema />} />
           <Route path="admin/retencion" element={<PoliticaRetencion />} />
 
@@ -83,6 +88,7 @@ function App() {
           <Route path="maestro" element={<MaestroHome />} />
           <Route path="maestro/rubrica" element={<EditorRubrica />} />
           <Route path="maestro/etiquetado" element={<ColaEtiquetado />} />
+          <Route path="maestro/informe" element={<InformeCoach audience="master" />} />
 
           {/* Administrador del sistema */}
           <Route path="sistema" element={<SistemaHome />} />
