@@ -1,0 +1,3 @@
+# Claves privadas y archivos locales (no subir a GitHub)
+.env.local
+uploads/
