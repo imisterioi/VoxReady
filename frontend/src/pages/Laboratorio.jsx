@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { API_URL } from '../lib/api';
+import { API_URL, DEMO_MODE } from '../lib/api';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, PageHeader, cx } from '../components/ui';
 import { useRive } from '@rive-app/react-canvas';
@@ -207,7 +207,7 @@ export default function Laboratorio() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="text-[15px] font-semibold text-ink">Backend</h2>
-              <p className="text-[13px] text-muted mt-0.5 font-mono">{API_URL}</p>
+              <p className="text-[13px] text-muted mt-0.5 font-mono">{DEMO_MODE ? 'Servidor de demostración (en el navegador)' : API_URL}</p>
             </div>
             <Badge tone={okCount === ENDPOINTS.length ? 'success' : okCount > 0 ? 'warning' : 'neutral'}>
               {okCount}/{ENDPOINTS.length} operativos

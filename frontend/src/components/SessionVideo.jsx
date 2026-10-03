@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Icon from './Icon';
-import { API_URL, getToken } from '../lib/api';
+import { API_URL, DEMO_MODE, getToken } from '../lib/api';
+import { demoVideoUrl } from '../demo/server';
 import { cx } from './ui';
 
 // Reproductor de la grabación de una sesión (GET /api/sessions/:id/video).
@@ -8,8 +9,11 @@ import { cx } from './ui';
 // se fuerza el cálculo saltando al final y volviendo al inicio, así la barra
 // de avance funciona.
 export default function SessionVideo({ sessionId, className }) {
-  const [failed, setFailed] = useState(false);
-  const src = `${API_URL}/api/sessions/${sessionId}/video?token=${encodeURIComponent(getToken() || '')}`;
+  // En la demo la grabación solo existe en la pestaña donde se hizo la práctica
+  const src = DEMO_MODE
+    ? demoVideoUrl(sessionId)
+    : `${API_URL}/api/sessions/${sessionId}/video?token=${encodeURIComponent(getToken() || '')}`;
+  const [failed, setFailed] = useState(!src);
 
   const fixDuration = (e) => {
     const video = e.currentTarget;
@@ -27,7 +31,11 @@ export default function SessionVideo({ sessionId, className }) {
       <div className={cx('aspect-video bg-subtle/60 flex flex-col items-center justify-center gap-2 text-center px-6', className)}>
         <Icon name="video" size={24} className="text-faint" />
         <p className="text-sm text-muted">No hay grabación disponible.</p>
-        <p className="text-xs text-faint">Pudo no haberse subido, o se eliminó según la política de retención de la organización.</p>
+        <p className="text-xs text-faint">
+          {DEMO_MODE
+            ? 'En la versión de demostración, la grabación solo se puede ver en la misma pestaña donde se realizó la práctica.'
+            : 'Pudo no haberse subido, o se eliminó según la política de retención de la organización.'}
+        </p>
       </div>
     );
   }

@@ -24,6 +24,9 @@ import Practicas from './pages/Practicas';
 import SistemaHome from './pages/sistema/SistemaHome';
 import Organizaciones from './pages/sistema/Organizaciones';
 import Usuarios from './pages/sistema/Usuarios';
+import DemoEntry from './pages/DemoEntry';
+import VersionSwitch from './components/VersionSwitch';
+import { DEMO_MODE } from './lib/api';
 
 // MediaPipe es pesado: se carga solo al entrar a la prueba
 const MediaPipeTest = lazy(() => import('./pages/MediaPipeTest'));
@@ -45,9 +48,14 @@ function App() {
           success: { iconTheme: { primary: 'rgb(var(--success))', secondary: 'rgb(var(--surface))' } },
         }}
       />
+      {/* Demo: switch flotante entre la versión antigua (wireframe) y la nueva */}
+      {DEMO_MODE && <VersionSwitch />}
       <Routes>
         {/* Login: pantalla completa, sin navegación */}
         <Route path="/login" element={<Login />} />
+
+        {/* Demo: entrada desde la versión antigua con el rol equivalente */}
+        <Route path="/demo/entrar" element={<DemoEntry />} />
 
         {/* Rutas con la navegación principal */}
         <Route path="/" element={<MainLayout />}>

@@ -1,5 +1,9 @@
+// Modo demostración (versión para Vercel): la API la simula el propio navegador
+// (src/demo). Para usar el backend real, define VITE_DEMO_MODE=false en frontend/.env
+export const DEMO_MODE = import.meta.env.VITE_DEMO_MODE !== 'false';
+
 // URL base del backend. Se puede sobreescribir con VITE_API_URL en frontend/.env
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+export const API_URL = DEMO_MODE ? '' : import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const TOKEN_KEY = 'voxready_token';
 const USER_KEY = 'voxready_user';

@@ -94,7 +94,7 @@ export default function ElegirEscenario() {
             tone="danger"
             icon="server"
             title={error}
-            description="Verifica que el backend esté corriendo en el puerto 3000 y que la base de datos tenga datos de prueba."
+            description="Intenta nuevamente en unos segundos."
             action={
               <div className="flex gap-2 justify-center">
                 <Button variant="secondary" icon="refresh" onClick={() => setIntento((n) => n + 1)}>

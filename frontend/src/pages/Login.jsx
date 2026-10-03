@@ -2,7 +2,9 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
 import { TEST_USERS, DEMO_PASSWORD, roleIndex, homeFor } from '../data/mockData';
-import { apiFetch, saveSession } from '../lib/api';
+import toast from 'react-hot-toast';
+import { DEMO_MODE, apiFetch, clearSession, saveSession } from '../lib/api';
+import { resetDb } from '../demo/db';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
@@ -34,6 +36,14 @@ export default function Login() {
     } finally {
       setLoading('');
     }
+  };
+
+  // Demo: vuelve a los datos de ejemplo originales (borra lo creado en este navegador)
+  const resetDemo = () => {
+    resetDb();
+    clearSession();
+    sessionStorage.clear();
+    toast.success('Datos de demostración restablecidos');
   };
 
   const submitLogin = (e) => {
@@ -165,6 +175,15 @@ export default function Login() {
                 </button>
               ))}
             </div>
+
+            {DEMO_MODE && (
+              <p className="mt-5 text-center text-xs text-faint">
+                Versión de demostración: los datos se guardan solo en este navegador.{' '}
+                <button type="button" onClick={resetDemo} className="font-medium text-muted underline underline-offset-2 hover:text-ink">
+                  Restablecer datos
+                </button>
+              </p>
+            )}
           </div>
         </div>
       </section>

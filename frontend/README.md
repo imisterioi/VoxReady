@@ -1,16 +1,48 @@
-# React + Vite
+# VoxReady — versión de demostración (solo frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Esta copia del frontend está preparada para publicarse en Vercel y mostrarse a clientes:
+se recorre completa **sin backend ni base de datos**. El proyecto real, con backend,
+está en `Fase 2/Evidencias Proyecto/Evidencias de sistema/`.
 
-Currently, two official plugins are available:
+## Cómo funciona el modo demostración
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `src/demo/server.js` intercepta las llamadas a `/api/*` y responde igual que el backend
+  real (mismas rutas, permisos y formato).
+- `src/demo/db.js` guarda los datos en el `localStorage` del navegador. La primera visita
+  siembra organizaciones, usuarios, escenarios, patrones y prácticas con informes.
+  Lo que se crea en la demo (temas, usuarios, prácticas) queda solo en ese navegador.
+  El enlace **Restablecer datos** del login vuelve a los datos de ejemplo.
+- `src/demo/interviewer.js` y `src/demo/evaluator.js` reemplazan a la IA: el entrevistador
+  usa plantillas según el escenario y el evaluador aplica las mismas reglas de voz y
+  expresión del backend, más reglas simples para coherencia y empatía.
+- Las grabaciones de video solo se pueden ver en la misma pestaña donde se hizo la práctica.
 
-## React Compiler
+Perfiles de demostración (contraseña `demo1234`): `vocero@demo.com`, `admin@demo.com`,
+`marta@voxready.io` y `sofia@voxready.io`.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Para volver a usar el backend real, crea `frontend/.env` con:
 
-## Expanding the Oxlint configuration
+```
+VITE_DEMO_MODE=false
+VITE_API_URL=http://localhost:3000
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Versión antigua / versión nueva
+
+`public/version-antigua.html` es el wireframe original del proyecto. El switch flotante
+(abajo a la izquierda) cambia entre ambas versiones y abre la pantalla equivalente con el
+mismo rol (`src/demo/versions.js` tiene la tabla de equivalencias).
+
+## Desarrollo
+
+```
+npm install
+npm run dev
+```
+
+## Publicar en Vercel
+
+1. Importa el repositorio en Vercel.
+2. En **Root Directory** elige `frontend`.
+3. Vercel detecta Vite: comando `npm run build` (o pnpm) y carpeta de salida `dist`.
+   `vercel.json` redirige las rutas de la aplicación a `index.html`.
