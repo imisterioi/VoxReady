@@ -48,6 +48,7 @@ const PATHS = {
   globe: <><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" /></>,
   message: <path d="M4 5h16v11H9l-5 4V5Z" />,
   flag: <><path d="M5 21V4" /><path d="M5 4h12l-2 4 2 4H5" /></>,
+  palette: <><path d="M12 21a9 9 0 1 1 9-9c0 2.5-2 3.6-3.6 3.6h-1.6a1.6 1.6 0 0 0-1.1 2.7 1.6 1.6 0 0 1-1.1 2.7H12Z" /><circle cx="7.5" cy="11" r="1" /><circle cx="10.5" cy="7" r="1" /><circle cx="15" cy="7" r="1" /><circle cx="17" cy="11" r="1" /></>,
 };
 
 export default function Icon({ name, size = 18, className = '', strokeWidth = 1.75, ...rest }) {

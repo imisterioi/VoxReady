@@ -10,7 +10,7 @@ const cx = (...c) => c.filter(Boolean).join(' ');
 
 const BTN_VARIANTS = {
   primary: 'bg-primary text-primary-ink hover:bg-primary/90 shadow-sm',
-  accent: 'bg-accent text-white hover:bg-accent/90 shadow-sm shadow-accent/20',
+  accent: 'bg-accent text-accent-ink hover:bg-accent/90 shadow-sm shadow-accent/20',
   secondary: 'bg-surface text-ink border border-line hover:border-line-strong hover:bg-subtle',
   ghost: 'text-muted hover:text-ink hover:bg-subtle',
   danger: 'bg-danger/10 text-danger hover:bg-danger/15',
@@ -101,7 +101,7 @@ export function Stat({ label, value, hint, trend, icon }) {
 
 const BADGE_TONES = {
   neutral: 'bg-subtle text-muted',
-  accent: 'bg-accent-soft text-accent',
+  accent: 'bg-accent-soft text-accent-fg',
   success: 'bg-success/10 text-success',
   warning: 'bg-warning/10 text-warning',
   danger: 'bg-danger/10 text-danger',
@@ -296,7 +296,7 @@ export function EmptyState({ icon = 'info', title, description, action, tone = '
 export function Avatar({ initials, size = 'md' }) {
   const s = size === 'sm' ? 'h-7 w-7 text-[11px]' : size === 'lg' ? 'h-11 w-11 text-sm' : 'h-9 w-9 text-xs';
   return (
-    <span className={cx('rounded-full bg-brand text-white dark:text-canvas font-semibold flex items-center justify-center shrink-0', s)}>
+    <span className={cx('rounded-full bg-brand text-brand-ink font-semibold flex items-center justify-center shrink-0', s)}>
       {initials}
     </span>
   );

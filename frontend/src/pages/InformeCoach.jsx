@@ -160,7 +160,7 @@ export default function InformeCoach({ audience = 'user' }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
               {[
                 { title: t.good, items: report.fortalezas, icon: 'check', tone: 'bg-success/10 text-success' },
-                { title: t.improve, items: report.mejoras, icon: 'target', tone: 'bg-accent-soft text-accent' },
+                { title: t.improve, items: report.mejoras, icon: 'target', tone: 'bg-accent-soft text-accent-fg' },
               ].map((col) => (
                 <div key={col.title}>
                   <div className="flex items-center gap-2 mb-3">
@@ -328,7 +328,7 @@ export default function InformeCoach({ audience = 'user' }) {
                     </div>
                     {feedback?.comentario && (
                       <p className="text-[13px] text-ink rounded-xl bg-subtle/60 p-3 flex gap-2">
-                        <Icon name="sparkles" size={14} className="text-accent mt-0.5 shrink-0" />
+                        <Icon name="sparkles" size={14} className="text-accent-fg mt-0.5 shrink-0" />
                         {feedback.comentario}
                       </p>
                     )}

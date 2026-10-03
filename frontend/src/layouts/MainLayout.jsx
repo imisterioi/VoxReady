@@ -7,7 +7,9 @@ import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
 import { Avatar, Button, cx } from '../components/ui';
-import { apiFetch, clearSession, getCurrentUser, getToken, saveSession } from '../lib/api';
+import { DEMO_MODE, apiFetch, clearSession, getCurrentUser, getToken, saveSession } from '../lib/api';
+import PaletteSwatches from '../components/PaletteSwatches';
+import { setOrgPalette, setPaletteLocked } from '../lib/palette';
 
 export default function MainLayout() {
   const [user, setUser] = useState(null);
@@ -39,6 +41,13 @@ export default function MainLayout() {
         /* 401 → apiFetch ya redirige al login; sin conexión se mantiene la sesión local */
       });
   }, [navigate]);
+
+  // Colores de la organización (configuración "Estilo" del administrador del cliente).
+  // Los voceros y su administrador ven siempre la paleta de la organización.
+  useEffect(() => {
+    setOrgPalette(user?.palette);
+    setPaletteLocked(['user', 'admin'].includes(user?.role));
+  }, [user]);
 
   // Cierra menús al cambiar de ruta
   useEffect(() => {
@@ -101,6 +110,12 @@ export default function MainLayout() {
               <Button to="/vocero/escenarios" variant="accent" size="sm" icon="mic" className="hidden sm:inline-flex">
                 {d.practice}
               </Button>
+            )}
+
+            {/* Colores de muestra: el admin del cliente guarda la paleta de su organización;
+                el personal de VoxReady solo la previsualiza. Los voceros no la eligen. */}
+            {DEMO_MODE && user.role !== 'user' && (
+              <PaletteSwatches mode={user.role === 'admin' ? 'org' : 'local'} className="hidden lg:flex mr-1" />
             )}
 
             <button

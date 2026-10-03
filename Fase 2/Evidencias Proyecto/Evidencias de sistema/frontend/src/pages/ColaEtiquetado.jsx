@@ -175,7 +175,7 @@ export default function ColaEtiquetado() {
                             onChange={(e) => setScores((s) => ({ ...s, [a.key]: e.target.value }))}
                             className={cx(
                               'input h-9 w-20 text-right tabular-nums',
-                              scores[a.key] !== '' && Number(scores[a.key]) !== aiScore(a.key) && 'border-accent text-accent',
+                              scores[a.key] !== '' && Number(scores[a.key]) !== aiScore(a.key) && 'border-accent text-accent-fg',
                             )}
                           />
                         </div>

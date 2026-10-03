@@ -136,7 +136,7 @@ export default function VoceroHome() {
           <Card padded={false} className="divide-y divide-line overflow-hidden">
             {lessons.map((m) => (
               <Link key={m.id} to={`/vocero/leccion/${m.id}`} className="group flex items-center gap-4 p-4 hover:bg-subtle/60 transition-colors">
-                <span className="h-10 w-10 rounded-xl bg-accent-soft text-accent flex items-center justify-center">
+                <span className="h-10 w-10 rounded-xl bg-accent-soft text-accent-fg flex items-center justify-center">
                   <Icon name={m.icon} size={18} />
                 </span>
                 <span className="flex-1 min-w-0">

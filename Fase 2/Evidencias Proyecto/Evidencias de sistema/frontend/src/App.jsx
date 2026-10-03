@@ -13,6 +13,7 @@ import Analizando from './pages/Analizando';
 import InformeCoach from './pages/InformeCoach';
 import MiProgreso from './pages/MiProgreso';
 import PoliticaRetencion from './pages/PoliticaRetencion';
+import Estilo from './pages/Estilo';
 import EditorTema from './pages/EditorTema';
 import EditorRubrica from './pages/EditorRubrica';
 import ColaEtiquetado from './pages/ColaEtiquetado';
@@ -85,6 +86,7 @@ function App() {
           <Route path="admin/informe" element={<InformeCoach audience="admin" />} />
           <Route path="admin/tema" element={<EditorTema />} />
           <Route path="admin/retencion" element={<PoliticaRetencion />} />
+          <Route path="admin/estilo" element={<Estilo />} />
 
           {/* Configurador maestro */}
           <Route path="maestro" element={<MaestroHome />} />

@@ -19,6 +19,10 @@ model Tenant {
   retentionMode String @default("FULL") // FULL = video + métricas | METRICS = solo métricas
   retentionDays Int    @default(90)
 
+  // Estilo de la plataforma (lo define el admin del cliente). null = colores de VoxReady
+  brandColor  String? // Color principal, formato #RRGGBB
+  accentColor String? // Color de acento, formato #RRGGBB
+
   users    User[]
   themes   Theme[]
   sessions Session[]

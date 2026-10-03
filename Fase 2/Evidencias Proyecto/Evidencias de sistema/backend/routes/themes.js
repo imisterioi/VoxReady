@@ -154,6 +154,41 @@ module.exports = function registerThemeRoutes(app, prisma) {
     }
   });
 
+  // ------------------------------------------------ Estilo de la organización
+
+  // Colores con los que los voceros de la organización ven la plataforma
+  const HEX = /^#[0-9a-f]{6}$/i;
+  const toBranding = (t) => ({ brandColor: t.brandColor, accentColor: t.accentColor, name: t.name });
+
+  app.get('/api/tenant/branding', auth('admin'), async (req, res) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.user.tenantId } });
+      res.json({ status: 'ok', branding: toBranding(tenant) });
+    } catch (error) {
+      console.error('Error obteniendo estilo:', error);
+      fail(res, 500, 'No se pudo obtener el estilo.');
+    }
+  });
+
+  // Enviar ambos colores en null vuelve a los colores de VoxReady
+  app.put('/api/tenant/branding', auth('admin'), async (req, res) => {
+    try {
+      const { brandColor = null, accentColor = null } = req.body || {};
+      const reset = brandColor == null && accentColor == null;
+      if (!reset && (!HEX.test(brandColor || '') || !HEX.test(accentColor || ''))) {
+        return fail(res, 400, 'Los colores deben tener el formato #RRGGBB.');
+      }
+      const tenant = await prisma.tenant.update({
+        where: { id: req.user.tenantId },
+        data: reset ? { brandColor: null, accentColor: null } : { brandColor: brandColor.toUpperCase(), accentColor: accentColor.toUpperCase() },
+      });
+      res.json({ status: 'ok', branding: toBranding(tenant) });
+    } catch (error) {
+      console.error('Error guardando estilo:', error);
+      fail(res, 500, 'No se pudo guardar el estilo.');
+    }
+  });
+
   // ------------------------------------------------ Política de retención
 
   app.get('/api/tenant/settings', auth('admin'), async (req, res) => {

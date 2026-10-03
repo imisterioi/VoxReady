@@ -442,11 +442,11 @@ export default function SesionPractica() {
           {/* Entrevistador IA */}
           <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-br from-[#16263A] to-[#0E1824] flex items-center justify-center">
             <div className="relative">
-              {phase === 'speaking' && <span className="absolute inset-0 rounded-full bg-[#E0662A]/30 animate-pulse-ring" />}
+              {phase === 'speaking' && <span className="absolute inset-0 rounded-full bg-accent/30 animate-pulse-ring" />}
               <span
                 className={cx(
                   'relative h-24 w-24 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-300',
-                  phase === 'speaking' ? 'bg-gradient-to-br from-[#F08046] to-[#B84A18] scale-105' : 'bg-gradient-to-br from-[#3A4A5E] to-[#1E2A38]',
+                  phase === 'speaking' ? 'bg-gradient-to-br from-accent to-brand-deep scale-105' : 'bg-gradient-to-br from-[#3A4A5E] to-[#1E2A38]',
                 )}
               >
                 {phase === 'thinking' || phase === 'loading' ? (
@@ -458,7 +458,7 @@ export default function SesionPractica() {
             </div>
 
             <div className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 h-7 text-white/90 text-xs">
-              <span className={cx('h-1.5 w-1.5 rounded-full', phase === 'speaking' ? 'bg-[#F08046] animate-pulse' : 'bg-white/40')} />
+              <span className={cx('h-1.5 w-1.5 rounded-full', phase === 'speaking' ? 'bg-accent-bright animate-pulse' : 'bg-white/40')} />
               {t.interviewer}
             </div>
             {scenario && <div className="absolute bottom-4 inset-x-4 text-center text-[11px] text-white/40 truncate">{scenario.title}</div>}
@@ -597,7 +597,7 @@ export default function SesionPractica() {
 
           <div className="flex items-center gap-3 md:flex-1 md:max-w-xs md:mx-auto">
             <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-              <div className="h-full rounded-full bg-[#F08046] transition-all duration-500" style={{ width: `${(turnCount / TOTAL_QUESTIONS) * 100}%` }} />
+              <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${(turnCount / TOTAL_QUESTIONS) * 100}%` }} />
             </div>
             <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
               {turnCount} de {TOTAL_QUESTIONS} respondidas

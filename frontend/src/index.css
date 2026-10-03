@@ -21,6 +21,11 @@
   --brand: 23 53 79;
   --accent: 224 102 42;
   --accent-soft: 252 238 229;
+  --accent-ink: 255 255 255;
+  --accent-fg: 175 80 33; /* acento para textos: contraste 4,5:1 */
+  --accent-bright: 240 128 70; /* acento sobre fondos oscuros fijos */
+  --brand-ink: 255 255 255;
+  --brand-deep: 14 32 47;
 
   --success: 38 140 104;
   --warning: 196 136 24;
@@ -50,6 +55,10 @@
   --brand: 143 179 217;
   --accent: 240 128 70;
   --accent-soft: 52 30 20;
+  --accent-ink: 255 255 255;
+  --accent-fg: 240 128 70;
+  --accent-bright: 240 128 70;
+  --brand-ink: 9 13 19;
 
   --success: 76 196 150;
   --warning: 230 176 70;

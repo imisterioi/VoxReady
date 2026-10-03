@@ -25,7 +25,7 @@ export default function VersionSwitch() {
       <button type="button" onClick={goLegacy} className={cx(option, 'text-muted hover:text-ink hover:bg-subtle')}>
         Versión antigua
       </button>
-      <button type="button" aria-pressed="true" className={cx(option, 'bg-[#E0662A] text-white cursor-default')}>
+      <button type="button" aria-pressed="true" className={cx(option, 'bg-accent text-accent-ink cursor-default')}>
         Versión nueva
       </button>
     </div>

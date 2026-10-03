@@ -66,7 +66,7 @@ function LessonDetail({ lesson }) {
       <h1 className="font-display font-semibold text-[36px] md:text-[48px] leading-[1.1] tracking-[-0.03em] text-ink">{lesson.title}</h1>
 
       <div className="mt-8 rounded-2xl border border-line bg-subtle/40 p-5 flex gap-4">
-        <Icon name="target" size={20} className="text-accent mt-0.5" />
+        <Icon name="target" size={20} className="text-accent-fg mt-0.5" />
         <div>
           <div className="text-sm font-medium text-ink">Qué aprenderás</div>
           <p className="text-[15px] text-muted mt-1 leading-relaxed">{lesson.objective}</p>
@@ -91,7 +91,7 @@ function LessonDetail({ lesson }) {
       <ol className="space-y-3">
         {lesson.points.map((p, i) => (
           <li key={p} className="flex gap-3 text-[15px] text-ink leading-relaxed">
-            <span className="h-6 w-6 rounded-full bg-accent-soft text-accent text-xs font-semibold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+            <span className="h-6 w-6 rounded-full bg-accent-soft text-accent-fg text-xs font-semibold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
             {p}
           </li>
         ))}

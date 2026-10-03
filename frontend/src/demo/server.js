@@ -54,6 +54,8 @@ function toApiUser(db, u) {
     area: u.area,
     tenantId: u.tenantId,
     tenantName: tenant?.name || null,
+    // Colores de la organización (configuración "Estilo"); null = colores de VoxReady
+    palette: tenant?.brandColor && tenant?.accentColor ? { brand: tenant.brandColor, accent: tenant.accentColor } : null,
     createdAt: u.createdAt,
     lastLoginAt: u.lastLoginAt,
   };
@@ -453,6 +455,24 @@ route('PUT', '/api/tenant/settings', ['admin'], ({ db, user, body }) => {
   tenant.retentionDays = days;
   saveDb();
   return { status: 'ok', settings: { retentionMode, retentionDays: days } };
+});
+
+// Estilo de la organización: colores con los que sus voceros ven la plataforma
+const HEX = /^#[0-9a-f]{6}$/i;
+route('GET', '/api/tenant/branding', ['admin'], ({ db, user }) => {
+  const tenant = db.tenants.find((t) => t.id === user.tenantId);
+  return { status: 'ok', branding: { brandColor: tenant.brandColor || null, accentColor: tenant.accentColor || null, name: tenant.name } };
+});
+
+route('PUT', '/api/tenant/branding', ['admin'], ({ db, user, body }) => {
+  const { brandColor = null, accentColor = null } = body || {};
+  const reset = brandColor == null && accentColor == null;
+  if (!reset && (!HEX.test(brandColor || '') || !HEX.test(accentColor || ''))) fail(400, 'Los colores deben tener el formato #RRGGBB.');
+  const tenant = db.tenants.find((t) => t.id === user.tenantId);
+  tenant.brandColor = reset ? null : brandColor.toUpperCase();
+  tenant.accentColor = reset ? null : accentColor.toUpperCase();
+  saveDb();
+  return { status: 'ok', branding: { brandColor: tenant.brandColor, accentColor: tenant.accentColor, name: tenant.name } };
 });
 
 route('GET', '/api/admin/overview', ['admin'], ({ db, user }) => {

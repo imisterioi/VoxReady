@@ -24,6 +24,7 @@ const I = {
         { to: '/admin/practicas', label: 'Prácticas', icon: 'activity' },
         { to: '/admin/tema', label: 'Temas', icon: 'file' },
         { to: '/admin/retencion', label: 'Retención', icon: 'lock' },
+        { to: '/admin/estilo', label: 'Estilo', icon: 'palette' },
       ],
       master: [
         { to: '/maestro', label: 'Panel', icon: 'home', end: true },

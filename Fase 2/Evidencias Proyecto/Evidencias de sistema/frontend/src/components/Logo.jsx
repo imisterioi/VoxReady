@@ -11,7 +11,7 @@ export default function Logo({ className = '', showText = true, tone = 'auto' })
         <path
           d="M9 9l7 14 7-14"
           fill="none"
-          className={inverse ? 'stroke-[#17354F]' : 'stroke-white dark:stroke-canvas'}
+          className={inverse ? 'stroke-brand-deep' : 'stroke-white dark:stroke-canvas'}
           strokeWidth="2.6"
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -20,7 +20,7 @@ export default function Logo({ className = '', showText = true, tone = 'auto' })
       </svg>
       {showText && (
         <span className={`font-display text-[17px] font-bold tracking-[-0.02em] ${inverse ? 'text-white' : 'text-ink'}`}>
-          Vox<span className={inverse ? 'text-[#F08046]' : 'text-accent'}>Ready</span>
+          Vox<span className={inverse ? 'text-accent-bright' : 'text-accent'}>Ready</span>
         </span>
       )}
     </span>

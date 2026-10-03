@@ -5,7 +5,7 @@ import { DEFAULT_CONFIG, deepMerge } from './patternConfig';
 import { evaluateSession } from './evaluator';
 import { nextQuestion } from './interviewer';
 
-const STORAGE_KEY = 'voxready_demo_db_v1';
+const STORAGE_KEY = 'voxready_demo_db_v2';
 export const DEMO_PASSWORD = 'demo1234';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -221,7 +221,7 @@ function composeTranscript(theme, level, questions = 5) {
 
 function buildSeed() {
   const t1 = { id: '00000000-0000-0000-0000-000000000001', name: 'Empresa Demo', sector: 'Retail', status: 'ACTIVE', createdAt: daysAgo(120), retentionMode: 'FULL', retentionDays: 90 };
-  const t2 = { id: '00000000-0000-0000-0000-000000000002', name: 'Energía Andes', sector: 'Energía', status: 'ACTIVE', createdAt: daysAgo(75), retentionMode: 'METRICS', retentionDays: 30 };
+  const t2 = { id: '00000000-0000-0000-0000-000000000002', name: 'Energía Andes', sector: 'Energía', status: 'ACTIVE', createdAt: daysAgo(75), retentionMode: 'METRICS', retentionDays: 30, brandColor: '#0F3D35', accentColor: '#0F8A6A' };
   const t3 = { id: '00000000-0000-0000-0000-000000000003', name: 'Clínica Austral', sector: 'Salud', status: 'ACTIVE', createdAt: daysAgo(9), retentionMode: 'FULL', retentionDays: 180 };
 
   const user = (id, email, name, role, tenantId = null, extra = {}) => ({

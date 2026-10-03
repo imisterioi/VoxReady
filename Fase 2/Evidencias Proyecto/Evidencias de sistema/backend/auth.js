@@ -70,6 +70,11 @@ function toApiUser(user) {
     area: user.area,
     tenantId: user.tenantId,
     tenantName: user.tenant?.name || null,
+    // Colores de la organización (configuración "Estilo"); null = colores de VoxReady
+    palette:
+      user.tenant?.brandColor && user.tenant?.accentColor
+        ? { brand: user.tenant.brandColor, accent: user.tenant.accentColor }
+        : null,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };

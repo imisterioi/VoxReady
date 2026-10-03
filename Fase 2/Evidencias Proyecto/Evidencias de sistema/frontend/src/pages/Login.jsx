@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import I from '../data/dictionary';
 import { TEST_USERS, DEMO_PASSWORD, roleIndex, homeFor } from '../data/mockData';
 import { apiFetch, saveSession } from '../lib/api';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
+import { setOrgPalette, setPaletteLocked } from '../lib/palette';
 import Icon from '../components/Icon';
 import { Avatar, Button, Field } from '../components/ui';
 
@@ -16,6 +17,12 @@ export default function Login() {
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
   const d = I.es;
+
+  // Sin sesión se usan los colores de VoxReady (no los de una organización)
+  useEffect(() => {
+    setOrgPalette(null);
+    setPaletteLocked(false);
+  }, []);
 
   // Inicia sesión contra el backend (POST /api/auth/login)
   const login = async (loginEmail, loginPassword) => {
@@ -45,7 +52,7 @@ export default function Login() {
   return (
     <div className="h-dvh overflow-hidden grid lg:grid-cols-[1.05fr_1fr] bg-canvas">
       {/* Panel de marca */}
-      <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-[#0E1F2F] text-white p-10">
+      <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-brand-deep text-white p-10">
         <div
           className="absolute inset-0 opacity-[0.07]"
           style={{
@@ -54,7 +61,7 @@ export default function Login() {
             backgroundSize: '48px 48px',
           }}
         />
-        <div className="absolute -bottom-40 -right-40 h-[520px] w-[520px] rounded-full bg-[#E0662A] opacity-20 blur-[120px]" />
+        <div className="absolute -bottom-40 -right-40 h-[520px] w-[520px] rounded-full bg-accent opacity-20 blur-[120px]" />
 
         <Logo tone="inverse" className="relative" />
 
@@ -65,7 +72,7 @@ export default function Login() {
           <div className="mt-8 grid grid-cols-2 gap-3 max-w-sm">
             {['Expresión', 'Tono de voz', 'Coherencia', 'Empatía'].map((a) => (
               <div key={a} className="flex items-center gap-2 text-[13px] text-white/70">
-                <span className="h-1.5 w-1.5 rounded-full bg-[#F08046]" />
+                <span className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
                 {a}
               </div>
             ))}

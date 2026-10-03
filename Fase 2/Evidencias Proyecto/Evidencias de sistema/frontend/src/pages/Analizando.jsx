@@ -91,7 +91,7 @@ export default function Analizando() {
             <span
               className={cx(
                 'absolute rounded-full flex items-center justify-center transition-colors',
-                error ? 'inset-0 bg-danger/10 text-danger' : done ? 'inset-0 bg-success/10 text-success' : 'inset-2 bg-accent-soft text-accent',
+                error ? 'inset-0 bg-danger/10 text-danger' : done ? 'inset-0 bg-success/10 text-success' : 'inset-2 bg-accent-soft text-accent-fg',
               )}
             >
               <Icon name={error ? 'alert' : done ? 'check' : 'sparkles'} size={done || error ? 30 : 24} strokeWidth={done ? 2.5 : 1.75} />
@@ -120,7 +120,7 @@ export default function Analizando() {
                   <span
                     className={cx(
                       'h-8 w-8 rounded-lg flex items-center justify-center',
-                      state === 'done' ? 'bg-success/10 text-success' : state === 'active' ? 'bg-accent-soft text-accent' : 'bg-subtle text-faint',
+                      state === 'done' ? 'bg-success/10 text-success' : state === 'active' ? 'bg-accent-soft text-accent-fg' : 'bg-subtle text-faint',
                     )}
                   >
                     <Icon name={state === 'done' ? 'check' : s.icon} size={15} strokeWidth={state === 'done' ? 2.5 : 1.75} />
