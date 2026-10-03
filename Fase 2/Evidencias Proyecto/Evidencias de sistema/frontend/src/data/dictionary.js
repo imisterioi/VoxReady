@@ -22,7 +22,7 @@ const I = {
         { to: '/admin', label: 'Panel', icon: 'home', end: true },
         { to: '/admin/voceros', label: 'Voceros', icon: 'users' },
         { to: '/admin/practicas', label: 'Prácticas', icon: 'activity' },
-        { to: '/admin/tema', label: 'Temas', icon: 'file' },
+        { to: '/admin/temas', label: 'Temas', icon: 'file' },
         { to: '/admin/retencion', label: 'Retención', icon: 'lock' },
       ],
       master: [

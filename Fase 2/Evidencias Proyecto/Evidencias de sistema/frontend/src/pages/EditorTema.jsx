@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { API_URL, apiFetch, getCurrentUser } from '../lib/api';
+import { apiFetch } from '../lib/api';
 import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import { Avatar, Badge, Button, Card, ChoiceChips, EmptyState, Field, PageHeader, Segmented, cx } from '../components/ui';
@@ -151,17 +151,11 @@ export default function EditorTema() {
         await apiFetch(`/api/themes/${editingId}`, { method: 'PUT', body: payload });
         toast.success('Escenario actualizado');
       } else {
-        // Endpoint de creación de tu compañero (POST /api/themes)
-        const response = await fetch(`${API_URL}/api/themes`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: getCurrentUser()?.email, ...payload }),
-        });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error || data.mensaje || 'No se pudo crear el escenario.');
+        // POST /api/themes: el backend usa el tenant del administrador autenticado
+        await apiFetch('/api/themes', { method: 'POST', body: payload });
         toast.success('¡Escenario creado con éxito!');
       }
-      navigate('/admin');
+      navigate('/admin/temas');
     } catch (error) {
       console.error('Error guardando escenario:', error);
       toast.error(error.message || 'No se pudo guardar el escenario.');

@@ -21,6 +21,7 @@ import NotFound from './pages/NotFound';
 import Laboratorio from './pages/Laboratorio';
 import Voceros from './pages/Voceros';
 import Practicas from './pages/Practicas';
+import Temas from './pages/Temas';
 import SistemaHome from './pages/sistema/SistemaHome';
 import Organizaciones from './pages/sistema/Organizaciones';
 import Usuarios from './pages/sistema/Usuarios';
@@ -80,6 +81,7 @@ function App() {
           <Route path="admin" element={<AdminHome />} />
           <Route path="admin/voceros" element={<Voceros />} />
           <Route path="admin/practicas" element={<Practicas />} />
+          <Route path="admin/temas" element={<Temas />} />
           <Route path="admin/informe" element={<InformeCoach audience="admin" />} />
           <Route path="admin/tema" element={<EditorTema />} />
           <Route path="admin/retencion" element={<PoliticaRetencion />} />

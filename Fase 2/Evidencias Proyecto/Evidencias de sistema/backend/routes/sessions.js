@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { requireAuth } = require('../auth');
 const { evaluateSession } = require('../ai/evaluator');
+const { removeVideoFiles } = require('../lib/anonymize');
 
 // Mismo directorio donde el endpoint de tu compañero guarda las grabaciones
 const SESSIONS_DIR = path.join(__dirname, '..', 'uploads', 'sessions');
@@ -256,6 +257,8 @@ module.exports = function registerSessionRoutes(app, prisma) {
       if (!session) return fail(res, 404, 'Sesión no encontrada.');
       if (session.userId !== req.user.id) return fail(res, 403, 'Esta sesión no te pertenece.');
       if (session.score != null) return fail(res, 400, 'No se puede descartar una sesión ya evaluada.');
+      // Elimina primero la grabación para no dejar archivos huérfanos
+      removeVideoFiles([session.id]);
       await prisma.session.delete({ where: { id: session.id } });
       res.json({ status: 'ok' });
     } catch (error) {

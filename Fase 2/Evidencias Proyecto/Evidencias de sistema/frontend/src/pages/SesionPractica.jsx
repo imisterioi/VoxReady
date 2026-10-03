@@ -5,7 +5,7 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button, cx } from '../components/ui';
-import { API_URL, apiFetch, getCurrentUser } from '../lib/api';
+import { API_URL, apiFetch, getCurrentUser, getToken } from '../lib/api';
 import { speak, useInterviewerVoice } from '../lib/voice';
 import AudioMeter from '../lib/practice/audioMeter';
 import PoseTracker from '../lib/practice/poseTracker';
@@ -331,7 +331,8 @@ export default function SesionPractica() {
   async function uploadRecording() {
     const blob = new Blob(chunksRef.current, { type: 'video/webm' });
     if (!blob.size || !sessionIdRef.current) return;
-    await fetch(`${API_URL}/api/sessions/${sessionIdRef.current}/video`, {
+    // El endpoint exige autenticación; el <video> no permite encabezados, así que el token va en la URL
+    await fetch(`${API_URL}/api/sessions/${sessionIdRef.current}/video?token=${encodeURIComponent(getToken() || '')}`, {
       method: 'POST',
       headers: { 'Content-Type': 'video/webm' },
       body: blob,

@@ -117,6 +117,7 @@ module.exports = function registerPatternRoutes(app, prisma) {
   app.get('/api/patterns/themes', auth('master', 'system'), async (req, res) => {
     try {
       const themes = await prisma.theme.findMany({
+        where: { deletedAt: null },
         orderBy: [{ tenant: { name: 'asc' } }, { title: 'asc' }],
         include: { tenant: true, patternOverride: { include: { pattern: true } } },
       });

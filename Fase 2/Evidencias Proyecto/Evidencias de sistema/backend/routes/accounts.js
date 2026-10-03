@@ -13,6 +13,7 @@ const {
   toApiUser,
   requireAuth,
 } = require('../auth');
+const { anonymizeUser } = require('../lib/anonymize');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 6;
@@ -225,6 +226,29 @@ module.exports = function registerAccountRoutes(app, prisma) {
     } catch (error) {
       console.error('Error actualizando usuario:', error);
       fail(res, 500, 'No se pudo actualizar el usuario.');
+    }
+  });
+
+  // ------------------------------------------------ Anonimización (Bloque A)
+
+  // Anonimiza un vocero (usuario + sesiones + videos). Solo voceros.
+  // ADMIN: únicamente voceros de su organización. SYSTEM: cualquier vocero.
+  app.post('/api/users/:id/anonymize', auth('system', 'admin'), async (req, res) => {
+    try {
+      const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+      if (!target) return fail(res, 404, 'Usuario no encontrado.');
+      if (target.role !== 'VOCERO') return fail(res, 403, 'Solo se pueden anonimizar voceros.');
+      if (req.apiRole === 'admin' && target.tenantId !== req.user.tenantId) {
+        return fail(res, 403, 'Solo puedes anonimizar voceros de tu organización.');
+      }
+      if (target.anonymizedAt) return fail(res, 409, 'Este vocero ya fue anonimizado.');
+
+      const result = await anonymizeUser(prisma, target.id);
+      const fresh = await prisma.user.findUnique({ where: { id: target.id }, include: { tenant: true } });
+      res.json({ status: 'ok', user: toApiUser(fresh), result });
+    } catch (error) {
+      console.error('Error anonimizando usuario:', error);
+      fail(res, 500, 'No se pudo anonimizar el vocero.');
     }
   });
 

@@ -22,6 +22,8 @@ model Tenant {
   users    User[]
   themes   Theme[]
   sessions Session[]
+
+  deletionRequests DeletionRequest[]
 }
 
 // 2. Usuario (Vocero, Admin, Maestro)
@@ -38,6 +40,10 @@ model User {
   createdAt    DateTime  @default(now())
   lastLoginAt  DateTime?
 
+  // Anonimización (Bloque A): si tiene fecha, el vocero fue anonimizado
+  // (name/email/area sin PII, sin password) pero el registro y su histórico se conservan
+  anonymizedAt DateTime?
+
   // El staff de VoxReady (MASTER y SYSTEM) no pertenece a una organización
   tenantId String?
   tenant   Tenant? @relation(fields: [tenantId], references: [id])
@@ -48,6 +54,11 @@ model User {
 
   // Patrón de evaluación excepcional para este vocero (lo asigna el configurador maestro)
   patternOverride VoceroPatternOverride?
+
+  // Solicitudes de borrado (creadas / dirigidas a / resueltas por)
+  deletionRequestsMade     DeletionRequest[] @relation("DeletionRequestedBy")
+  deletionRequestsTargeted DeletionRequest[] @relation("DeletionRequestTarget")
+  deletionRequestsResolved DeletionRequest[] @relation("DeletionRequestResolvedBy")
 }
 
 // 3. Tema / Escenario
@@ -63,6 +74,10 @@ model Theme {
   redLines    String?
 
   availableToAllVoceros Boolean @default(false)
+
+  // Borrado lógico: un tema "eliminado" deja de estar disponible pero conserva
+  // su histórico (asignaciones, sesiones, informes y videos)
+  deletedAt DateTime?
 
   tenantId    String
   tenant      Tenant   @relation(fields: [tenantId], references: [id])
@@ -198,3 +213,35 @@ model VoceroPatternOverride {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// 10. Solicitud de borrado de datos de una organización (retención / derecho al olvido).
+// Flujo de estados: PENDING → APPROVED | REJECTED → COMPLETED (al completar se ejecuta el borrado).
+model DeletionRequest {
+  id String @id @default(uuid())
+
+  // Qué se solicita borrar: RECORDINGS = grabaciones (videos) de un vocero
+  scope  String  @default("RECORDINGS")
+  reason String?
+
+  // PENDING | APPROVED | REJECTED | COMPLETED
+  status String @default("PENDING")
+
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
+
+  resolutionNote String?
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  requestedById String
+  requestedBy   User   @relation("DeletionRequestedBy", fields: [requestedById], references: [id])
+
+  // Vocero cuyos datos se solicitan borrar (opcional)
+  targetUserId String?
+  targetUser   User?   @relation("DeletionRequestTarget", fields: [targetUserId], references: [id])
+
+  resolvedById String?
+  resolvedBy   User?   @relation("DeletionRequestResolvedBy", fields: [resolvedById], references: [id])
+}
+

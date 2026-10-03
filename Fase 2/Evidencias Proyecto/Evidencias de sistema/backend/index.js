@@ -11,10 +11,12 @@ require('dotenv').config();
 // Claves privadas (API de IA) en un archivo que git ignora
 require('dotenv').config({ path: path.join(__dirname, '.env.local') });
 const { generateQuestion, warmUp } = require('./ai/interviewer');
+const { requireAuth } = require('./auth');
 const registerAccountRoutes = require('./routes/accounts');
 const registerSessionRoutes = require('./routes/sessions');
 const registerPatternRoutes = require('./routes/patterns');
 const registerThemeRoutes = require('./routes/themes');
+const registerDeletionRoutes = require('./routes/deletionRequests');
 
 // Inicializar Express y Prisma
 const app = express();
@@ -35,6 +37,7 @@ registerAccountRoutes(app, prisma);
 registerSessionRoutes(app, prisma);
 registerPatternRoutes(app, prisma);
 registerThemeRoutes(app, prisma);
+registerDeletionRoutes(app, prisma);
 
 // Endpoint de prueba
 app.get('/api/health', (req, res) => {
@@ -96,7 +99,7 @@ app.get('/api/scenarios/my', async (req, res) => {
     // Los temas marcados como "disponible para todos los voceros" se asignan automáticamente
     if (user.tenantId) {
       const openThemes = await prisma.theme.findMany({
-        where: { tenantId: user.tenantId, availableToAllVoceros: true },
+        where: { tenantId: user.tenantId, availableToAllVoceros: true, deletedAt: null },
         select: { id: true }
       });
       for (const theme of openThemes) {
@@ -111,7 +114,8 @@ app.get('/api/scenarios/my', async (req, res) => {
     const assignments = await prisma.scenarioAssignment.findMany({
       where: {
         userId: user.id,
-        status: 'PENDING'
+        status: 'PENDING',
+        theme: { deletedAt: null }
       },
       include: {
         theme: true
@@ -238,7 +242,9 @@ app.post('/api/sessions', async (req, res) => {
   }
 });
 
-app.post('/api/sessions/:id/video', async (req, res) => {
+// Subida de la grabación de una sesión (un único endpoint, autenticado).
+// Solo el vocero dueño de la sesión puede subir su propio .webm.
+app.post('/api/sessions/:id/video', requireAuth(prisma), async (req, res) => {
   const sessionId = req.params.id;
 
   const filePath = path.join(
@@ -260,62 +266,10 @@ app.post('/api/sessions/:id/video', async (req, res) => {
       });
     }
 
-    const writeStream = fs.createWriteStream(filePath);
-
-    await pipeline(req, writeStream);
-
-    await prisma.session.update({
-      where: {
-        id: sessionId
-      },
-      data: {
-        status: 'COMPLETED'
-      }
-    });
-
-    res.json({
-      status: 'ok',
-      mensaje: 'Video guardado correctamente',
-      file: `${sessionId}.webm`
-    });
-
-  } catch (error) {
-    console.error('Error guardando video:', error);
-
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (deleteError) {
-      console.error('Error eliminando archivo incompleto:', deleteError);
-    }
-
-    res.status(500).json({
-      status: 'error',
-      mensaje: 'No se pudo guardar el video'
-    });
-  }
-});
-
-app.post('/api/sessions/:id/video', async (req, res) => {
-  const sessionId = req.params.id;
-
-  const filePath = path.join(
-    sessionsDir,
-    `${sessionId}.webm`
-  );
-
-  try {
-    const session = await prisma.session.findUnique({
-      where: {
-        id: sessionId
-      }
-    });
-
-    if (!session) {
-      return res.status(404).json({
+    if (session.userId !== req.user.id) {
+      return res.status(403).json({
         status: 'error',
-        mensaje: 'Sesión no encontrada'
+        mensaje: 'No puedes subir la grabación de otra sesión'
       });
     }
 
@@ -530,10 +484,11 @@ app.listen(PORT, () => {
   warmUp();
 });
 
-app.post('/api/themes', async (req, res) => {
+app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {
   try {
+    // El administrador autenticado solo puede crear temas en su propia organización
+    const user = req.user;
     const {
-      email,
       title,
       context,
       keyMessages,
@@ -544,25 +499,15 @@ app.post('/api/themes', async (req, res) => {
       availableToAllVoceros,
     } = req.body;
 
-    if (!email || !title || !context || !keyMessages) {
+    if (!user.tenantId) {
+      return res.status(400).json({
+        error: 'El administrador no tiene una organización asociada.',
+      });
+    }
+
+    if (!title || !context || !keyMessages) {
       return res.status(400).json({
         error: 'Faltan datos obligatorios.',
-      });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        error: 'Usuario no encontrado.',
-      });
-    }
-
-    if (user.role !== 'ADMIN') {
-      return res.status(403).json({
-        error: 'Solo un administrador puede crear escenarios.',
       });
     }
 

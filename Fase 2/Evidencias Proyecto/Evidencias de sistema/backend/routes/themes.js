@@ -51,7 +51,7 @@ module.exports = function registerThemeRoutes(app, prisma) {
   app.get('/api/themes', auth('admin'), async (req, res) => {
     try {
       const themes = await prisma.theme.findMany({
-        where: { tenantId: req.user.tenantId },
+        where: { tenantId: req.user.tenantId, deletedAt: null },
         orderBy: { title: 'asc' },
         include,
       });
@@ -65,7 +65,7 @@ module.exports = function registerThemeRoutes(app, prisma) {
   app.get('/api/themes/:id', auth('admin'), async (req, res) => {
     try {
       const theme = await prisma.theme.findUnique({ where: { id: req.params.id }, include });
-      if (!theme || theme.tenantId !== req.user.tenantId) return fail(res, 404, 'Tema no encontrado.');
+      if (!theme || theme.tenantId !== req.user.tenantId || theme.deletedAt) return fail(res, 404, 'Tema no encontrado.');
       res.json({ status: 'ok', theme: toApiTheme(theme) });
     } catch (error) {
       console.error('Error obteniendo tema:', error);
@@ -76,7 +76,7 @@ module.exports = function registerThemeRoutes(app, prisma) {
   app.put('/api/themes/:id', auth('admin'), async (req, res) => {
     try {
       const theme = await prisma.theme.findUnique({ where: { id: req.params.id } });
-      if (!theme || theme.tenantId !== req.user.tenantId) return fail(res, 404, 'Tema no encontrado.');
+      if (!theme || theme.tenantId !== req.user.tenantId || theme.deletedAt) return fail(res, 404, 'Tema no encontrado.');
 
       const { title, context, keyMessages = [], redLines = [], publics = [], optic, category, availableToAllVoceros, voceroIds = [] } = req.body || {};
       if (!title?.trim() || !context?.trim()) return fail(res, 400, 'El nombre y el contexto son obligatorios.');
@@ -107,6 +107,50 @@ module.exports = function registerThemeRoutes(app, prisma) {
     } catch (error) {
       console.error('Error actualizando tema:', error);
       fail(res, 500, 'No se pudo actualizar el tema.');
+    }
+  });
+
+  // ------------------------------------------------ Asignación de voceros
+
+  // Reemplaza los voceros con acceso a un tema (reutiliza ScenarioAssignment)
+  app.put('/api/themes/:id/assignments', auth('admin'), async (req, res) => {
+    try {
+      const theme = await prisma.theme.findUnique({ where: { id: req.params.id } });
+      if (!theme || theme.tenantId !== req.user.tenantId || theme.deletedAt) return fail(res, 404, 'Tema no encontrado.');
+
+      const { voceroIds = [], availableToAllVoceros } = req.body || {};
+      if (!Array.isArray(voceroIds)) return fail(res, 400, 'Lista de voceros no válida.');
+      const all = typeof availableToAllVoceros === 'boolean' ? availableToAllVoceros : theme.availableToAllVoceros;
+
+      const updated = await prisma.theme.update({
+        where: { id: theme.id },
+        data: { availableToAllVoceros: all },
+      });
+      // syncAssignments valida que cada vocero pertenezca al tenant del tema
+      await syncAssignments(prisma, updated, all ? [] : voceroIds);
+
+      const fresh = await prisma.theme.findUnique({ where: { id: theme.id }, include });
+      res.json({ status: 'ok', theme: toApiTheme(fresh) });
+    } catch (error) {
+      console.error('Error guardando asignaciones:', error);
+      fail(res, 500, 'No se pudieron guardar las asignaciones.');
+    }
+  });
+
+  // ------------------------------------------------ Eliminar tema
+
+  // Borrado lógico: el tema deja de estar disponible pero conserva el histórico
+  // (asignaciones, sesiones, informes y videos) según la política de retención.
+  app.delete('/api/themes/:id', auth('admin'), async (req, res) => {
+    try {
+      const theme = await prisma.theme.findUnique({ where: { id: req.params.id } });
+      if (!theme || theme.tenantId !== req.user.tenantId || theme.deletedAt) return fail(res, 404, 'Tema no encontrado.');
+
+      await prisma.theme.update({ where: { id: theme.id }, data: { deletedAt: new Date() } });
+      res.json({ status: 'ok' });
+    } catch (error) {
+      console.error('Error eliminando tema:', error);
+      fail(res, 500, 'No se pudo eliminar el tema.');
     }
   });
 
