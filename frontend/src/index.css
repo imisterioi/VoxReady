@@ -7,14 +7,15 @@
    Paleta basada en el logo: azul marino #17354F + naranjo #DB6427
 ------------------------------------------------------------------- */
 :root {
-  --canvas: 248 248 246;
+  /* Fondos teñidos con el acento en tono pastel (las tarjetas, --surface, son blancas) */
+  --canvas: 252 241 236;
   --surface: 255 255 255;
-  --subtle: 242 242 239;
+  --subtle: 250 232 223;
   --ink: 15 27 42;
-  --muted: 100 110 126;
+  --muted: 97 107 123;
   --faint: 150 158 170;
-  --line: 231 230 225;
-  --line-strong: 212 210 203;
+  --line: 230 215 203;
+  --line-strong: 213 197 184;
 
   --primary: 15 27 42;
   --primary-ink: 255 255 255;
@@ -41,14 +42,14 @@
 }
 
 .dark {
-  --canvas: 9 13 19;
-  --surface: 15 21 30;
-  --subtle: 22 30 41;
+  --canvas: 22 18 20;
+  --surface: 23 24 30;
+  --subtle: 38 36 41;
   --ink: 236 240 245;
   --muted: 142 153 170;
   --faint: 98 110 128;
-  --line: 32 42 56;
-  --line-strong: 46 58 74;
+  --line: 51 48 55;
+  --line-strong: 67 63 70;
 
   --primary: 236 240 245;
   --primary-ink: 9 13 19;

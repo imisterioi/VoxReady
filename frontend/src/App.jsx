@@ -27,6 +27,7 @@ import Organizaciones from './pages/sistema/Organizaciones';
 import Usuarios from './pages/sistema/Usuarios';
 import DemoEntry from './pages/DemoEntry';
 import VersionSwitch from './components/VersionSwitch';
+import DemoNotice from './components/DemoNotice';
 import { DEMO_MODE } from './lib/api';
 
 // MediaPipe es pesado: se carga solo al entrar a la prueba
@@ -51,6 +52,7 @@ function App() {
       />
       {/* Demo: switch flotante entre la versión antigua (wireframe) y la nueva */}
       {DEMO_MODE && <VersionSwitch />}
+      {DEMO_MODE && <DemoNotice />}
       <Routes>
         {/* Login: pantalla completa, sin navegación */}
         <Route path="/login" element={<Login />} />

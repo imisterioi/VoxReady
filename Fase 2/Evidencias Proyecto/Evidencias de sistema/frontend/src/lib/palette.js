@@ -36,6 +36,28 @@ const WHITE = [255, 255, 255];
 const BLACK = [0, 0, 0];
 const INK = [15, 27, 42];
 const DARK_SURFACE = [15, 21, 30];
+// Neutros base de src/index.css (se tiñen con el color de acento)
+const LIGHT_LINE = [231, 230, 225];
+const LIGHT_LINE_STRONG = [212, 210, 203];
+const LIGHT_MUTED = [100, 110, 126];
+const DARK_CANVAS = [9, 13, 19];
+const DARK_SUBTLE = [22, 30, 41];
+const DARK_LINE = [32, 42, 56];
+const DARK_LINE_STRONG = [46, 58, 74];
+
+// Tercera serie de los gráficos: el primer candidato que se distinga bien del color
+// principal y del acento (si no, el más distinto de todos)
+const SERIES_3 = [
+  [44, 143, 122], // verde azulado (el de VoxReady)
+  [106, 90, 205], // violeta
+  [196, 136, 24], // ámbar
+  [31, 122, 224], // azul
+];
+const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+function thirdSeries(brand, accent) {
+  const score = (c) => Math.min(distance(c, brand), distance(c, accent));
+  return SERIES_3.find((c) => score(c) >= 100) || [...SERIES_3].sort((a, b) => score(b) - score(a))[0];
+}
 
 function luminance(rgb) {
   const [r, g, b] = rgb.map((v) => {
@@ -79,6 +101,8 @@ export function paletteWarnings(p) {
 //  --accent-bright acento sobre fondos oscuros fijos (panel del login, sesión de práctica)
 //  --brand         logo, avatares y elementos de marca (se oscurece si es muy claro)
 //  --brand-deep    fondo oscuro del panel del login
+//  --canvas/--subtle/--line  fondos y bordes teñidos con el acento en tono pastel
+//                  (las tarjetas, --surface, quedan blancas para que el contenido destaque)
 export function paletteTokens(p) {
   const brand = ensureContrast(toRgb(p.brand), WHITE, 4.5, BLACK);
   const accent = toRgb(p.accent);
@@ -90,8 +114,18 @@ export function paletteTokens(p) {
   const darkSoft = mix(accent, DARK_SURFACE, 0.8);
 
   const bright = ensureContrast(accent, deep, 4.5, WHITE);
+
+  // Fondos pastel: el texto secundario se oscurece si hace falta para mantener 4,5:1
+  const c3 = thirdSeries(brand, accent);
+  const canvas = mix(accent, WHITE, 0.91);
+  const subtle = mix(accent, WHITE, 0.85);
   return {
     light: {
+      canvas,
+      subtle,
+      line: mix(LIGHT_LINE, accent, 0.12),
+      'line-strong': mix(LIGHT_LINE_STRONG, accent, 0.12),
+      muted: ensureContrast(LIGHT_MUTED, subtle, 4.5, INK),
       brand,
       'brand-ink': inkOn(brand),
       'brand-deep': deep,
@@ -102,8 +136,14 @@ export function paletteTokens(p) {
       'accent-bright': bright,
       c1: brand,
       c2: accent,
+      c3,
     },
     dark: {
+      canvas: mix(DARK_CANVAS, accent, 0.06),
+      surface: mix(DARK_SURFACE, accent, 0.04),
+      subtle: mix(DARK_SUBTLE, accent, 0.08),
+      line: mix(DARK_LINE, accent, 0.1),
+      'line-strong': mix(DARK_LINE_STRONG, accent, 0.12),
       brand: darkBrand,
       'brand-ink': inkOn(darkBrand),
       accent: darkAccent,
@@ -113,6 +153,7 @@ export function paletteTokens(p) {
       'accent-bright': bright,
       c1: darkBrand,
       c2: darkAccent,
+      c3: mix(c3, WHITE, 0.25),
     },
   };
 }
