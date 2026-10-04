@@ -171,10 +171,43 @@ async function anonymizeUser(prisma, userId) {
   return { found: true, already: false, userId: user.id, sessions: sessions.length, videosRemoved };
 }
 
+// Elimina de forma inmediata TODOS los datos de un TENANT (eliminación manual, no espera retención).
+// No toca los escenarios globales (Theme.tenantId = null). Orden seguro de FKs (Restrict).
+// Archivos físicos primero (fuera de la transacción, best-effort); BD después en una transacción.
+async function deleteTenantData(prisma, tenantId) {
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true } });
+  if (!tenant) return { found: false };
+
+  // 1) Archivos físicos: borra los .webm de las sesiones del tenant
+  const sessions = await prisma.session.findMany({ where: { tenantId }, select: { id: true } });
+  const sessionIds = sessions.map((s) => s.id);
+  const videosRemoved = removeVideoFiles(sessionIds);
+
+  // 2) Ids relacionados para el borrado en orden seguro
+  const themeIds = (await prisma.theme.findMany({ where: { tenantId }, select: { id: true } })).map((t) => t.id);
+  const assignmentIds = themeIds.length
+    ? (await prisma.scenarioAssignment.findMany({ where: { themeId: { in: themeIds } }, select: { id: true } })).map((a) => a.id)
+    : [];
+
+  // 3) BD: borrado transaccional respetando FKs Restrict
+  await prisma.$transaction(async (tx) => {
+    if (assignmentIds.length) await tx.scenarioRubric.deleteMany({ where: { assignmentId: { in: assignmentIds } } });
+    if (themeIds.length) await tx.scenarioAssignment.deleteMany({ where: { themeId: { in: themeIds } } });
+    await tx.deletionRequest.deleteMany({ where: { tenantId } });            // requestedBy es Restrict
+    await tx.session.deleteMany({ where: { tenantId } });                    // userId/themeId son Restrict
+    if (themeIds.length) await tx.theme.deleteMany({ where: { tenantId } }); // solo temas del tenant (los globales tienen tenantId=null)
+    await tx.user.deleteMany({ where: { tenantId } });                       // VOCERO/ADMIN del tenant (VoceroPatternOverride cae por Cascade)
+    await tx.tenant.delete({ where: { id: tenantId } });
+  });
+
+  return { found: true, tenantId, name: tenant.name, sessions: sessionIds.length, videosRemoved, themes: themeIds.length };
+}
+
 module.exports = {
   anonymizeUser,
   anonymizeSession,
   deleteUserVideos,
+  deleteTenantData,
   removeVideoFiles,
   videoPathForSession,
   anonEmailFor,

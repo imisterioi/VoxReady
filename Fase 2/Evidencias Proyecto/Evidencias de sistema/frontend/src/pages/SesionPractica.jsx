@@ -5,7 +5,7 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button, cx } from '../components/ui';
-import { API_URL, apiFetch, getCurrentUser, getToken } from '../lib/api';
+import { API_URL, apiFetch, getToken } from '../lib/api';
 import { speak, useInterviewerVoice } from '../lib/voice';
 import AudioMeter from '../lib/practice/audioMeter';
 import PoseTracker from '../lib/practice/poseTracker';
@@ -120,8 +120,8 @@ export default function SesionPractica() {
     if (!scenario?.id) throw new Error('Primero elige un escenario.');
     const response = await fetch(`${API_URL}/api/sessions`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: getCurrentUser()?.email, themeId: scenario.id }),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() || ''}` },
+      body: JSON.stringify({ themeId: scenario.id }),
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.mensaje || 'No se pudo crear la sesión.');

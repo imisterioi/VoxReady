@@ -4,10 +4,13 @@ import { STATUS_META, initialsOf, timeAgo } from '../data/directory';
 import { apiFetch, getCurrentUser } from '../lib/api';
 import useApiData from '../hooks/useApiData';
 import UserFormModal from '../components/UserFormModal';
-import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Stat, Table } from '../components/ui';
+import { Avatar, Badge, Button, Card, EmptyState, Modal, PageHeader, Stat, Table } from '../components/ui';
 
 export default function Voceros() {
   const [creating, setCreating] = useState(false);
+  const [deletingUser, setDeletingUser] = useState(null);
+  const [suspendingUser, setSuspendingUser] = useState(null);
+  const [suspending, setSuspending] = useState(false);
 
   // El backend devuelve solo los voceros de la organización del admin conectado
   const { data, loading, error, reload } = useApiData('/api/users');
@@ -19,11 +22,40 @@ export default function Voceros() {
   const suspended = voceros.filter((u) => u.status === 'SUSPENDED').length;
   const sessions = voceros.reduce((sum, u) => sum + (u.sessions || 0), 0);
 
-  const toggle = async (u) => {
-    const next = u.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+  // Reactivar (acción directa, sin modal): reanuda la retención si el tenant también está activo.
+  const reactivate = async (u) => {
     try {
-      await apiFetch(`/api/users/${u.id}`, { method: 'PATCH', body: { status: next } });
-      toast.success(`${u.name} ${next === 'ACTIVE' ? 'reactivado' : 'suspendido'}`);
+      await apiFetch(`/api/users/${u.id}`, { method: 'PATCH', body: { status: 'ACTIVE' } });
+      toast.success(`${u.name} reactivado`);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  // Suspender requiere confirmación: solo aquí se envía la solicitud.
+  const confirmSuspend = async () => {
+    const u = suspendingUser;
+    try {
+      setSuspending(true);
+      await apiFetch(`/api/users/${u.id}`, { method: 'PATCH', body: { status: 'SUSPENDED' } });
+      toast.success(`${u.name} suspendido`);
+      setSuspendingUser(null);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSuspending(false);
+    }
+  };
+
+  // Eliminación manual (irreversible): procesa los datos del vocero de inmediato.
+  const remove = async () => {
+    const u = deletingUser;
+    try {
+      await apiFetch(`/api/users/${u.id}`, { method: 'DELETE' });
+      toast.success(`${u.name} eliminado`);
+      setDeletingUser(null);
       reload();
     } catch (err) {
       toast.error(err.message);
@@ -96,9 +128,14 @@ export default function Voceros() {
                 </td>
                 <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastLoginAt)}</td>
                 <td className="py-3.5 px-6 text-right">
-                  <Button variant="ghost" size="sm" onClick={() => toggle(u)}>
-                    {u.status === 'SUSPENDED' ? 'Reactivar' : 'Suspender'}
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => (u.status === 'SUSPENDED' ? reactivate(u) : setSuspendingUser(u))}>
+                      {u.status === 'SUSPENDED' ? 'Reactivar' : 'Suspender'}
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setDeletingUser(u)}>
+                      Eliminar
+                    </Button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -116,6 +153,58 @@ export default function Voceros() {
           title="Nuevo vocero"
           description={`Se agregará a ${tenant.name}. Comparte su correo y contraseña inicial para que pueda ingresar.`}
         />
+      )}
+
+      {deletingUser && (
+        <Modal
+          open
+          onClose={() => setDeletingUser(null)}
+          title="¿Eliminar este vocero?"
+          description={deletingUser.name}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setDeletingUser(null)}>
+                Cancelar
+              </Button>
+              <Button variant="danger" icon="trash" onClick={remove}>
+                Eliminar
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-muted leading-relaxed">
+            Esta acción eliminará o anonimizará sus datos inmediatamente (datos personales, grabaciones, transcripciones y
+            contenido sensible del report) y <b className="text-ink">no esperará al período de retención</b>. Es irreversible.
+          </p>
+        </Modal>
+      )}
+
+      {suspendingUser && (
+        <Modal
+          open
+          onClose={() => (suspending ? null : setSuspendingUser(null))}
+          title="¿Suspender a este vocero?"
+          description={suspendingUser.name}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setSuspendingUser(null)} disabled={suspending}>
+                Cancelar
+              </Button>
+              <Button onClick={confirmSuspend} disabled={suspending}>
+                {suspending ? 'Suspendiendo…' : 'Confirmar suspensión'}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-muted">Al suspender esta cuenta:</p>
+          <ul className="mt-3 space-y-2 text-sm text-muted list-disc pl-5 leading-relaxed">
+            <li>El vocero perderá el acceso a VoxReady mientras permanezca suspendido.</li>
+            <li>Sus datos, sesiones, videos, transcripciones e informes se conservarán.</li>
+            <li>El plazo de retención de sus datos quedará pausado durante la suspensión.</li>
+            <li>Cuando se reactive la cuenta, el plazo de retención continuará desde el tiempo restante, siempre que su tenant también esté activo.</li>
+            <li>Esta acción no elimina la cuenta ni sus datos.</li>
+          </ul>
+        </Modal>
       )}
     </>
   );

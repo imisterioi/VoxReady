@@ -1,3 +1,5 @@
+La eliminación física de los usuarios y las sesiones dentro de una transacción es una decisión razonable, pero el borrado de los archivos se hace antes de la transacción. Si falla la operación de base de datos después de borrar los videos, podría quedar el tenant registrado sin sus grabaciones. (abordar con un mecanismo de reintentos o una cola de eliminación)
+
 Anonimizacion:
 03-10-2026
 Se realizó este apartado a los datos de los usuarios y tenants. Cuando se anonimiza un usuario, se borran o modifican todos los datos que puedan identificarlo por un nombre o texto generico, como: email: anonimizado@none.com, sin embargo, se conservarón todos los datos que puedan ser útiles para el analisis, como las metricas. Surge la duda de si deberíamos cambiar también el id, ya que si alguien adquiere adquiere los datos de un cliente como nombre, id y tenant, aunque luego nosotros anonimicemos estos datos, con solo tener el id de esa persona, el hacker podrá saber a que persona o entidad pertenecen esos datos anonimizados.

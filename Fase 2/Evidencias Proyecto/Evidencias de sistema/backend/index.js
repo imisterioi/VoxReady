@@ -74,29 +74,11 @@ app.get('/api/db-test', async (req, res) => {
 // Definir el puerto y encender el servidor
 const PORT = process.env.PORT || 3000;
 
-app.get('/api/scenarios/my', async (req, res) => {
+app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
   try {
-    const email = req.query.email;
-
-    if (!email) {
-      return res.status(400).json({
-        status: 'error',
-        mensaje: 'Debes indicar el correo del usuario'
-      });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: {
-        email
-      }
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        mensaje: 'Usuario no encontrado'
-      });
-    }
+    // El usuario se determina EXCLUSIVAMENTE desde el token (req.user).
+    // Cualquier ?email= enviado por el cliente se ignora (no selecciona identidad).
+    const user = req.user;
 
     // Los temas marcados como "disponible para todos los voceros" se asignan automáticamente
     if (user.tenantId) {
@@ -183,29 +165,20 @@ const sessionsDir = path.join(__dirname, 'uploads', 'sessions');
 
 fs.mkdirSync(sessionsDir, { recursive: true });
 
-app.post('/api/sessions', async (req, res) => {
+app.post('/api/sessions', requireAuth(prisma), async (req, res) => {
   try {
-    const { email, themeId } = req.body;
+    const { themeId } = req.body || {};
 
-    if (!email || !themeId) {
+    if (!themeId) {
       return res.status(400).json({
         status: 'error',
-        mensaje: 'Faltan email o themeId'
+        mensaje: 'Falta themeId'
       });
     }
 
-    const user = await prisma.user.findUnique({
-      where: {
-        email
-      }
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        mensaje: 'Usuario no encontrado'
-      });
-    }
+    // El propietario de la sesión es SIEMPRE el usuario autenticado.
+    // Un email/userId enviado por el cliente se ignora.
+    const user = req.user;
 
     const theme = await prisma.theme.findUnique({
       where: {
@@ -338,11 +311,10 @@ app.post('/api/sessions/:id/video', requireAuth(prisma), async (req, res) => {
   }
 });
 
-// Crear y publicar un nuevo patrón maestro
-app.post('/api/master-pattern', async (req, res) => {
+// Crear y publicar un nuevo patrón maestro (solo MASTER y SYSTEM)
+app.post('/api/master-pattern', requireAuth(prisma, ['master', 'system']), async (req, res) => {
   try {
     const {
-      email,
       expressionWeight,
       voiceToneWeight,
       coherenceWeight,
@@ -353,7 +325,6 @@ app.post('/api/master-pattern', async (req, res) => {
 
     // 1. Validar campos obligatorios
     if (
-      !email ||
       expressionWeight === undefined ||
       voiceToneWeight === undefined ||
       coherenceWeight === undefined ||
@@ -402,19 +373,8 @@ app.post('/api/master-pattern', async (req, res) => {
       });
     }
 
-    // 5. Buscar al configurador maestro
-    const user = await prisma.user.findUnique({
-      where: {
-        email
-      }
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        status: 'error',
-        mensaje: 'Usuario no encontrado'
-      });
-    }
+    // 5. El autor del patrón es el usuario autenticado (MASTER/SYSTEM)
+    const user = req.user;
 
     // 6. Crear la nueva versión dentro de una transacción
     const masterPattern = await prisma.$transaction(async (tx) => {

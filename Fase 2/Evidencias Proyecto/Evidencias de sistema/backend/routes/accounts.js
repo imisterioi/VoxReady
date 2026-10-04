@@ -13,7 +13,8 @@ const {
   toApiUser,
   requireAuth,
 } = require('../auth');
-const { anonymizeUser } = require('../lib/anonymize');
+const { anonymizeUser, deleteTenantData } = require('../lib/anonymize');
+const { syncUserPause } = require('../lib/retentionPause');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 6;
@@ -140,11 +141,31 @@ module.exports = function registerAccountRoutes(app, prisma) {
     try {
       const { status } = req.body || {};
       if (!['ACTIVE', 'SUSPENDED'].includes(status)) return fail(res, 400, 'Estado no válido.');
-      const tenant = await prisma.tenant.update({ where: { id: req.params.id }, data: { status } });
+      // Cambia el estado y ajusta las pausas de retención de TODOS los voceros del tenant (atómico).
+      const tenant = await prisma.$transaction(async (tx) => {
+        const updated = await tx.tenant.update({ where: { id: req.params.id }, data: { status } });
+        const users = await tx.user.findMany({ where: { tenantId: updated.id }, select: { id: true } });
+        for (const u of users) await syncUserPause(tx, u.id);
+        return updated;
+      });
       res.json({ status: 'ok', tenant });
     } catch (error) {
       console.error('Error actualizando organización:', error);
       fail(res, 500, 'No se pudo actualizar la organización.');
+    }
+  });
+
+  // Elimina manualmente un tenant y procesa TODOS sus datos de inmediato (no espera la retención).
+  // No toca los escenarios globales. Acceso: SYSTEM / MASTER. Operación irreversible.
+  app.delete('/api/tenants/:id', auth('system', 'master'), async (req, res) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id } });
+      if (!tenant) return fail(res, 404, 'Organización no encontrada.');
+      const result = await deleteTenantData(prisma, tenant.id);
+      res.json({ status: 'ok', result });
+    } catch (error) {
+      console.error('Error eliminando organización:', error);
+      fail(res, 500, 'No se pudo eliminar la organización.');
     }
   });
 
@@ -221,7 +242,11 @@ module.exports = function registerAccountRoutes(app, prisma) {
         return fail(res, 403, 'Solo puedes gestionar voceros de tu organización.');
       }
 
-      const user = await prisma.user.update({ where: { id: target.id }, data: { status }, include: { tenant: true } });
+      const user = await prisma.$transaction(async (tx) => {
+        const updated = await tx.user.update({ where: { id: target.id }, data: { status }, include: { tenant: true } });
+        await syncUserPause(tx, target.id); // abre/cierra el intervalo de pausa de retención del vocero
+        return updated;
+      });
       res.json({ status: 'ok', user: toApiUser(user) });
     } catch (error) {
       console.error('Error actualizando usuario:', error);
@@ -249,6 +274,24 @@ module.exports = function registerAccountRoutes(app, prisma) {
     } catch (error) {
       console.error('Error anonimizando usuario:', error);
       fail(res, 500, 'No se pudo anonimizar el vocero.');
+    }
+  });
+
+  // Elimina manualmente un VOCERO: procesa sus datos de inmediato (no espera la retención).
+  // Reutiliza la misma lógica que la anonimización. No confundir con suspender.
+  app.delete('/api/users/:id', auth('system', 'admin'), async (req, res) => {
+    try {
+      const target = await prisma.user.findUnique({ where: { id: req.params.id } });
+      if (!target) return fail(res, 404, 'Usuario no encontrado.');
+      if (target.role !== 'VOCERO') return fail(res, 403, 'Solo se pueden eliminar voceros.');
+      if (req.apiRole === 'admin' && target.tenantId !== req.user.tenantId) {
+        return fail(res, 403, 'Solo puedes eliminar voceros de tu organización.');
+      }
+      const result = await anonymizeUser(prisma, target.id);
+      res.json({ status: 'ok', result });
+    } catch (error) {
+      console.error('Error eliminando usuario:', error);
+      fail(res, 500, 'No se pudo eliminar el vocero.');
     }
   });
 

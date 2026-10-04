@@ -22,7 +22,7 @@ export default function VoceroHome() {
   const firstName = user.name?.split(' ')[0];
 
   const history = useApiData('/api/sessions');
-  const scenariosData = useApiData(`/api/scenarios/my?email=${encodeURIComponent(user.email || '')}`);
+  const scenariosData = useApiData('/api/scenarios/my');
   const sessions = history.data?.sessions || [];
   const scenarios = scenariosData.data?.scenarios || [];
 

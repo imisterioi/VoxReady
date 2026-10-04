@@ -63,6 +63,10 @@ model User {
   deletionRequestsMade     DeletionRequest[] @relation("DeletionRequestedBy")
   deletionRequestsTargeted DeletionRequest[] @relation("DeletionRequestTarget")
   deletionRequestsResolved DeletionRequest[] @relation("DeletionRequestResolvedBy")
+
+  // Intervalos en que la retención de este usuario estuvo PAUSADA
+  // (por suspensión propia y/o de su tenant; se registra la unión, sin solapamientos)
+  retentionPauses RetentionPause[]
 }
 
 // 3. Tema / Escenario
@@ -251,5 +255,19 @@ model DeletionRequest {
 
   resolvedById String?
   resolvedBy   User?   @relation("DeletionRequestResolvedBy", fields: [resolvedById], references: [id])
+}
+
+// 11. Intervalo de pausa de la retención de un usuario (por suspensión del vocero
+// y/o de su tenant). La unión de intervalos de un usuario no se solapa: se abre un
+// intervalo cuando el usuario queda efectivamente suspendido y se cierra cuando deja
+// de estarlo (vocero y tenant activos). Permite reconstruir el tiempo de retención real.
+model RetentionPause {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  @@index([userId, endedAt])
 }
 

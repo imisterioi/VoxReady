@@ -4,31 +4,128 @@ const path = require('path');
 const { requireAuth } = require('../auth');
 const { evaluateSession } = require('../ai/evaluator');
 const { removeVideoFiles } = require('../lib/anonymize');
+const { effectiveElapsedMs, reconcilePauses } = require('../lib/retentionPause');
 
 // Mismo directorio donde el endpoint de tu compañero guarda las grabaciones
 const SESSIONS_DIR = path.join(__dirname, '..', 'uploads', 'sessions');
 const videoPath = (id) => path.join(SESSIONS_DIR, `${id}.webm`);
 
-// Política de retención: borra videos vencidos o de organizaciones que solo guardan métricas
-async function purgeVideos(prisma) {
-  if (!fs.existsSync(SESSIONS_DIR)) return;
-  const files = fs.readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.webm'));
-  if (!files.length) return;
-  const sessions = await prisma.session.findMany({
-    where: { id: { in: files.map((f) => f.replace('.webm', '')) } },
-    include: { tenant: true },
-  });
-  let removed = 0;
-  for (const s of sessions) {
-    const days = s.tenant?.retentionDays ?? 90;
-    const expired = Date.now() - new Date(s.createdAt).getTime() > days * 24 * 60 * 60 * 1000;
-    const metricsOnly = s.tenant?.retentionMode === 'METRICS' && s.score != null;
-    if (expired || metricsOnly) {
-      fs.rmSync(videoPath(s.id), { force: true });
-      removed += 1;
+// Limpieza del reporte para retención (independiente de la anonimización):
+// elimina el texto derivado de la respuesta del vocero y conserva la parte numérica/técnica.
+// NO se anonimiza (no se sustituye por texto): los campos sensibles se borran.
+// Se conserva todo lo demás: global, areas, weights, pattern, patternVersion, strictness,
+// mensajesClave, lineasRojas (línea/cruzada), porPregunta (pregunta/puntaje), measured numérico, ai, generatedAt.
+function cleanReportForRetention(report) {
+  if (!report || typeof report !== 'object') return { report, changed: false };
+  let changed = false;
+  const out = { ...report };
+
+  // Texto derivado de la intervención del vocero
+  for (const key of ['resumen', 'cita', 'fortalezas', 'mejoras']) {
+    if (key in out) {
+      delete out[key];
+      changed = true;
     }
   }
-  if (removed) console.log(`[Retención] ${removed} grabación(es) eliminada(s) según la política de retención`);
+
+  if (Array.isArray(out.porPregunta)) {
+    out.porPregunta = out.porPregunta.map((p) => {
+      if (!p || typeof p !== 'object' || !('comentario' in p)) return p;
+      const { comentario, ...rest } = p; // conserva pregunta (nº) y puntaje
+      changed = true;
+      return rest;
+    });
+  }
+
+  if (Array.isArray(out.lineasRojas)) {
+    out.lineasRojas = out.lineasRojas.map((l) => {
+      if (!l || typeof l !== 'object' || !('evidencia' in l)) return l;
+      const { evidencia, ...rest } = l; // conserva linea (del escenario) y cruzada
+      changed = true;
+      return rest;
+    });
+  }
+
+  if (out.measured && typeof out.measured === 'object' && out.measured.voice && typeof out.measured.voice === 'object' && 'fillerWords' in out.measured.voice) {
+    const { fillerWords, ...voiceRest } = out.measured.voice; // conserva el resto de métricas numéricas
+    out.measured = { ...out.measured, voice: voiceRest };
+    changed = true;
+  }
+
+  return { report: changed ? out : report, changed };
+}
+
+// Retención automática por tenant — SOLO por VENCIMIENTO de retentionDays.
+// FULL y METRICS se comportan igual:
+//  - vigente → se conserva TODO (video, transcripción, report, métricas, score, review).
+//  - vencida → se elimina el .webm, la transcripción (null) y el texto sensible del report;
+//              se conservan la sesión, el score, las métricas y la parte cuantitativa del report.
+// El score, la revisión humana, el report o una evaluación manual NO adelantan la retención.
+async function applyRetention(prisma) {
+  const [sessions, users] = await Promise.all([
+    prisma.session.findMany({ select: { id: true, createdAt: true, userId: true, tenant: { select: { retentionDays: true } } } }),
+    prisma.user.findMany({ select: { id: true, retentionPauses: { select: { startedAt: true, endedAt: true } } } }),
+  ]);
+  const pausesByUser = new Map(users.map((u) => [u.id, u.retentionPauses]));
+
+  const now = Date.now();
+  const videoFiles = new Set(
+    fs.existsSync(SESSIONS_DIR) ? fs.readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.webm')) : [],
+  );
+
+  let videosRemoved = 0;
+  const eligibleIds = [];
+
+  for (const s of sessions) {
+    // Retención pausada (suspendido ahora): su reloj está detenido → NO se purga.
+    const intervals = pausesByUser.get(s.userId) || [];
+    if (intervals.some((iv) => !iv.endedAt)) continue;
+
+    const days = s.tenant?.retentionDays ?? 90;
+    // Vencimiento por TIEMPO EFECTIVO: excluye los periodos con la retención pausada
+    // (suspensiones del vocero y/o de su tenant).
+    const elapsed = effectiveElapsedMs(s.createdAt, intervals, now);
+    const expired = elapsed > days * 24 * 60 * 60 * 1000;
+    if (!expired) continue; // Solo por vencimiento: ni score, ni review, ni report adelantan la retención.
+
+    // Video: eliminación física del .webm (solo si existe; puede no haber grabación)
+    const fileName = `${s.id}.webm`;
+    if (videoFiles.has(fileName)) {
+      fs.rmSync(videoPath(s.id), { force: true });
+      videoFiles.delete(fileName);
+      videosRemoved += 1;
+    }
+    eligibleIds.push(s.id);
+  }
+
+  // Transcripción: se pone a null con la misma política. Es seguro si ya es null y no toca otras columnas.
+  let transcriptsCleared = 0;
+  if (eligibleIds.length) {
+    const result = await prisma.session.updateMany({
+      where: { id: { in: eligibleIds }, transcript: { not: null } },
+      data: { transcript: null },
+    });
+    transcriptsCleared = result.count;
+  }
+
+  // Reporte: se elimina el texto derivado del vocero y se conserva la parte numérica/técnica.
+  // updateMany no sirve para JSON, así que se procesa cada reporte elegible y se guarda solo si cambió (idempotente).
+  let reportsCleaned = 0;
+  if (eligibleIds.length) {
+    const rows = await prisma.session.findMany({ where: { id: { in: eligibleIds } }, select: { id: true, report: true } });
+    for (const row of rows) {
+      const { report, changed } = cleanReportForRetention(row.report);
+      if (changed) {
+        await prisma.session.update({ where: { id: row.id }, data: { report } });
+        reportsCleaned += 1;
+      }
+    }
+  }
+
+  if (videosRemoved) console.log(`[Retención] ${videosRemoved} grabación(es) eliminada(s) según la política de retención`);
+  if (transcriptsCleared) console.log(`[Retención] ${transcriptsCleared} transcripción(es) eliminada(s) según la política de retención`);
+  if (reportsCleaned) console.log(`[Retención] ${reportsCleaned} reporte(s) limpiado(s) según la política de retención`);
+  return { videosRemoved, transcriptsCleared, reportsCleaned };
 }
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
@@ -54,9 +151,12 @@ const summary = (s) => ({
 module.exports = function registerSessionRoutes(app, prisma) {
   const auth = (...roles) => requireAuth(prisma, roles);
 
-  // Retención: al iniciar y cada 6 horas
-  const runPurge = () => purgeVideos(prisma).catch((e) => console.warn('[Retención] error:', e.message));
-  setTimeout(runPurge, 5000);
+  // Retención: al iniciar (reconciliando las pausas primero) y cada 6 horas
+  const runPurge = () => applyRetention(prisma).catch((e) => console.warn('[Retención] error:', e.message));
+  setTimeout(async () => {
+    try { await reconcilePauses(prisma); } catch (e) { console.warn('[Retención] error al reconciliar pausas:', e.message); }
+    runPurge();
+  }, 5000);
   setInterval(runPurge, 6 * 60 * 60 * 1000).unref();
 
   // Evaluaciones en curso: si llegan dos solicitudes para la misma sesión,
