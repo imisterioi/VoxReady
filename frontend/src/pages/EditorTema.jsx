@@ -161,7 +161,7 @@ export default function EditorTema() {
         if (!response.ok) throw new Error(data.error || data.mensaje || 'No se pudo crear el escenario.');
         toast.success('¡Escenario creado con éxito!');
       }
-      navigate('/admin');
+      navigate('/admin/temas');
     } catch (error) {
       console.error('Error guardando escenario:', error);
       toast.error(error.message || 'No se pudo guardar el escenario.');

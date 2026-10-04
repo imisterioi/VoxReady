@@ -3,6 +3,7 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 
 require('dotenv').config();
 const { seedDemo } = require('./seed-demo');
+const { LIBRARY_SCENARIOS } = require('./library-scenarios');
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -162,6 +163,25 @@ async function main() {
 
   // Cuentas con contraseña, segunda organización y escenario de prueba integral
   await seedDemo(prisma, { tenant, scenarios });
+
+  // Biblioteca de escenarios generales (sin organización, visibles para todos los voceros)
+  for (const s of LIBRARY_SCENARIOS) {
+    const data = {
+      context: s.context,
+      category: s.category,
+      optic: s.optic,
+      keyMessages: JSON.stringify(s.keyMessages),
+      redLines: JSON.stringify(s.redLines),
+      publics: JSON.stringify([]),
+      isGlobal: true,
+      tenantId: null,
+      deletedAt: null,
+    };
+    const existing = await prisma.theme.findFirst({ where: { isGlobal: true, title: s.title }, select: { id: true } });
+    if (existing) await prisma.theme.update({ where: { id: existing.id }, data });
+    else await prisma.theme.create({ data: { ...data, title: s.title } });
+  }
+  console.log(`Escenarios generales: ${LIBRARY_SCENARIOS.length}`);
 
   console.log('Datos creados/verificados correctamente.');
   console.log(`Administrador: ${admin.email}`);

@@ -83,7 +83,7 @@ export default function MainLayout() {
 
   const linkClass = ({ isActive }) =>
     cx(
-      'relative inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-[13.5px] font-medium transition-colors',
+      'relative inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-[13.5px] font-medium whitespace-nowrap transition-colors',
       isActive ? 'text-ink bg-subtle' : 'text-muted hover:text-ink',
     );
 

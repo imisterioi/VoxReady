@@ -4,8 +4,9 @@
 import { DEFAULT_CONFIG, deepMerge } from './patternConfig';
 import { evaluateSession } from './evaluator';
 import { nextQuestion } from './interviewer';
+import { LIBRARY_SCENARIOS } from './library';
 
-const STORAGE_KEY = 'voxready_demo_db_v2';
+const STORAGE_KEY = 'voxready_demo_db_v3';
 export const DEMO_PASSWORD = 'demo1234';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -312,6 +313,24 @@ function buildSeed() {
   ];
   const patternOverrides = [{ themeId: th(t2, 'integral').id, patternId: 'p-4', createdAt: daysAgo(6) }];
   const voceroOverrides = [{ userId: 'u-camila', patternId: 'p-3', createdAt: daysAgo(12) }];
+
+  // Biblioteca de escenarios generales de VoxReady: sin organización, visibles para todos los voceros
+  LIBRARY_SCENARIOS.forEach((x, i) =>
+    themes.push({
+      id: `th-general-${i + 1}`,
+      tenantId: null,
+      isGlobal: true,
+      title: x.title,
+      context: x.context,
+      category: x.category,
+      optic: x.optic,
+      keyMessages: JSON.stringify(x.keyMessages),
+      redLines: JSON.stringify(x.redLines),
+      publics: '[]',
+      availableToAllVoceros: false,
+      createdAt: daysAgo(120),
+    }),
+  );
 
   const db = { tenants: [t1, t2, t3], users, themes, assignments, sessions: [], patterns, patternOverrides, voceroOverrides, seededAt: new Date().toISOString() };
 

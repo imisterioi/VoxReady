@@ -348,7 +348,7 @@ route('GET', '/api/scenarios/my', null, ({ db, query }) => {
   const user = db.users.find((u) => u.email === email.toLowerCase());
   if (!user) fail(404, 'Usuario no encontrado');
   // Los temas "disponibles para todos los voceros" se asignan automáticamente
-  for (const t of db.themes.filter((x) => x.tenantId === user.tenantId && x.availableToAllVoceros)) {
+  for (const t of db.themes.filter((x) => x.tenantId === user.tenantId && x.availableToAllVoceros && !x.deletedAt)) {
     if (!db.assignments.some((a) => a.userId === user.id && a.themeId === t.id)) {
       db.assignments.push({ id: uid(), userId: user.id, themeId: t.id, status: 'PENDING', assignedAt: now() });
     }
@@ -359,7 +359,8 @@ route('GET', '/api/scenarios/my', null, ({ db, query }) => {
     .sort((a, b) => new Date(b.assignedAt) - new Date(a.assignedAt))
     .map((a) => {
       const t = themeById(db, a.themeId);
-      return t && {
+      return t && !t.deletedAt && !t.isGlobal && {
+        scope: 'org',
         assignmentId: a.id,
         id: t.id,
         title: t.title,
@@ -374,13 +375,31 @@ route('GET', '/api/scenarios/my', null, ({ db, query }) => {
       };
     })
     .filter(Boolean);
-  return { status: 'ok', scenarios };
+  // Escenarios generales de la biblioteca de VoxReady: todos los voceros los ven
+  const generales = db.themes
+    .filter((t) => t.isGlobal && !t.deletedAt)
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .map((t) => ({
+      scope: 'general',
+      assignmentId: null,
+      id: t.id,
+      title: t.title,
+      context: t.context,
+      keyMessages: t.keyMessages,
+      redLines: t.redLines,
+      optic: t.optic,
+      publics: t.publics,
+      category: t.category,
+      status: 'PENDING',
+      assignedAt: t.createdAt,
+    }));
+  return { status: 'ok', scenarios: [...scenarios, ...generales] };
 });
 
 route('GET', '/api/themes', ['admin'], ({ db, user }) => ({
   status: 'ok',
   themes: db.themes
-    .filter((t) => t.tenantId === user.tenantId)
+    .filter((t) => t.tenantId === user.tenantId && !t.deletedAt)
     .sort((a, b) => a.title.localeCompare(b.title))
     .map((t) => toApiTheme(db, t)),
 }));
@@ -414,13 +433,34 @@ route('POST', '/api/themes', null, ({ db, body }) => {
 
 route('GET', '/api/themes/:id', ['admin'], ({ db, user, params }) => {
   const theme = themeById(db, params.id);
-  if (!theme || theme.tenantId !== user.tenantId) fail(404, 'Tema no encontrado.');
+  if (!theme || theme.tenantId !== user.tenantId || theme.deletedAt) fail(404, 'Tema no encontrado.');
   return { status: 'ok', theme: toApiTheme(db, theme) };
+});
+
+// Voceros con acceso a un tema
+route('PUT', '/api/themes/:id/assignments', ['admin'], ({ db, user, params, body }) => {
+  const theme = themeById(db, params.id);
+  if (!theme || theme.tenantId !== user.tenantId || theme.deletedAt) fail(404, 'Tema no encontrado.');
+  const { voceroIds = [], availableToAllVoceros } = body || {};
+  if (!Array.isArray(voceroIds)) fail(400, 'Lista de voceros no válida.');
+  if (typeof availableToAllVoceros === 'boolean') theme.availableToAllVoceros = availableToAllVoceros;
+  syncAssignments(db, theme, theme.availableToAllVoceros ? [] : voceroIds);
+  saveDb();
+  return { status: 'ok', theme: toApiTheme(db, theme) };
+});
+
+// Borrado lógico: deja de estar disponible pero conserva el historial
+route('DELETE', '/api/themes/:id', ['admin'], ({ db, user, params }) => {
+  const theme = themeById(db, params.id);
+  if (!theme || theme.tenantId !== user.tenantId || theme.deletedAt) fail(404, 'Tema no encontrado.');
+  theme.deletedAt = now();
+  saveDb();
+  return { status: 'ok' };
 });
 
 route('PUT', '/api/themes/:id', ['admin'], ({ db, user, params, body }) => {
   const theme = themeById(db, params.id);
-  if (!theme || theme.tenantId !== user.tenantId) fail(404, 'Tema no encontrado.');
+  if (!theme || theme.tenantId !== user.tenantId || theme.deletedAt) fail(404, 'Tema no encontrado.');
   const { title, context, keyMessages = [], redLines = [], publics = [], optic, category, availableToAllVoceros, voceroIds = [] } = body || {};
   if (!title?.trim() || !context?.trim()) fail(400, 'El nombre y el contexto son obligatorios.');
   if (!keyMessages.length) fail(400, 'Agrega al menos un mensaje clave.');
@@ -438,6 +478,99 @@ route('PUT', '/api/themes/:id', ['admin'], ({ db, user, params, body }) => {
   syncAssignments(db, theme, voceroIds);
   saveDb();
   return { status: 'ok', theme: toApiTheme(db, theme) };
+});
+
+// ------------------------------------------- Biblioteca de escenarios generales
+const LIBRARY_CATEGORIES = ['CRISIS', 'MEDIOS', 'INSTITUCIONAL', 'GENERAL'];
+const toApiLibraryTheme = (db, t) => ({
+  id: t.id,
+  title: t.title,
+  context: t.context,
+  category: t.category,
+  optic: t.optic,
+  keyMessages: parseList(t.keyMessages),
+  redLines: parseList(t.redLines),
+  publics: parseList(t.publics),
+  sessions: db.sessions.filter((s) => s.themeId === t.id).length,
+  createdAt: t.createdAt,
+});
+
+function readLibraryTheme(body = {}) {
+  const { title, context, category, optic, keyMessages = [], redLines = [] } = body;
+  const clean = (list) => (Array.isArray(list) ? list.map((x) => String(x).trim()).filter(Boolean) : []);
+  if (!title?.trim() || !context?.trim()) fail(400, 'El nombre y el contexto son obligatorios.');
+  if (!clean(keyMessages).length) fail(400, 'Agrega al menos un mensaje clave.');
+  return {
+    title: title.trim(),
+    context: context.trim(),
+    category: LIBRARY_CATEGORIES.includes(category) ? category : 'GENERAL',
+    optic: optic || null,
+    keyMessages: JSON.stringify(clean(keyMessages)),
+    redLines: JSON.stringify(clean(redLines)),
+  };
+}
+const libraryTheme = (db, id) => {
+  const theme = themeById(db, id);
+  if (!theme?.isGlobal || theme.deletedAt) fail(404, 'Escenario general no encontrado.');
+  return theme;
+};
+const libraryTitleTaken = (db, title, exceptId) => db.themes.some((t) => t.isGlobal && !t.deletedAt && t.title === title && t.id !== exceptId);
+
+route('GET', '/api/library/themes', ['system', 'master', 'admin'], ({ db }) => ({
+  status: 'ok',
+  themes: db.themes
+    .filter((t) => t.isGlobal && !t.deletedAt)
+    .sort((a, b) => a.title.localeCompare(b.title))
+    .map((t) => toApiLibraryTheme(db, t)),
+}));
+
+route('POST', '/api/library/themes', ['system'], ({ db, body }) => {
+  const data = readLibraryTheme(body);
+  if (libraryTitleTaken(db, data.title)) fail(409, 'Ya existe un escenario general con ese nombre.');
+  const theme = { id: uid(), ...data, publics: '[]', isGlobal: true, tenantId: null, availableToAllVoceros: false, createdAt: now(), deletedAt: null };
+  db.themes.push(theme);
+  saveDb();
+  return { status: 'ok', theme: toApiLibraryTheme(db, theme) };
+});
+
+route('PUT', '/api/library/themes/:id', ['system'], ({ db, params, body }) => {
+  const theme = libraryTheme(db, params.id);
+  const data = readLibraryTheme(body);
+  if (libraryTitleTaken(db, data.title, theme.id)) fail(409, 'Ya existe un escenario general con ese nombre.');
+  Object.assign(theme, data);
+  saveDb();
+  return { status: 'ok', theme: toApiLibraryTheme(db, theme) };
+});
+
+route('DELETE', '/api/library/themes/:id', ['system'], ({ db, params }) => {
+  libraryTheme(db, params.id).deletedAt = now();
+  saveDb();
+  return { status: 'ok' };
+});
+
+// Copia un escenario general a la organización del administrador para adaptarlo
+route('POST', '/api/library/themes/:id/copy', ['admin'], ({ db, user, params }) => {
+  const source = libraryTheme(db, params.id);
+  const taken = new Set(db.themes.filter((t) => t.tenantId === user.tenantId).map((t) => t.title));
+  let title = source.title;
+  for (let n = 1; taken.has(title); n += 1) title = `${source.title} (copia${n > 1 ? ` ${n}` : ''})`;
+  const theme = {
+    id: uid(),
+    tenantId: user.tenantId,
+    title,
+    context: source.context,
+    category: source.category,
+    optic: source.optic,
+    keyMessages: source.keyMessages,
+    redLines: source.redLines,
+    publics: source.publics,
+    availableToAllVoceros: false,
+    isGlobal: false,
+    createdAt: now(),
+  };
+  db.themes.push(theme);
+  saveDb();
+  return { status: 'ok', theme: { id: theme.id, title: theme.title } };
 });
 
 route('GET', '/api/tenant/settings', ['admin'], ({ db, user }) => {
@@ -479,7 +612,7 @@ route('GET', '/api/admin/overview', ['admin'], ({ db, user }) => {
   const scored = db.sessions.filter((s) => s.tenantId === user.tenantId && s.score != null);
   return {
     status: 'ok',
-    themes: db.themes.filter((t) => t.tenantId === user.tenantId).length,
+    themes: db.themes.filter((t) => t.tenantId === user.tenantId && !t.deletedAt).length,
     voceros: db.users.filter((u) => u.tenantId === user.tenantId && u.role === 'VOCERO' && u.status === 'ACTIVE').length,
     sessionsMonth: db.sessions.filter((s) => s.tenantId === user.tenantId && new Date(s.createdAt).getTime() >= startOfMonth()).length,
     evaluated: scored.length,
@@ -495,8 +628,10 @@ route('POST', '/api/sessions', null, ({ db, body }) => {
   if (!user) fail(404, 'Usuario no encontrado');
   const theme = themeById(db, themeId);
   if (!theme) fail(404, 'Escenario no encontrado');
-  if (theme.tenantId !== user.tenantId) fail(403, 'El escenario no pertenece al tenant del usuario');
-  if (!db.assignments.some((a) => a.userId === user.id && a.themeId === theme.id)) fail(403, 'El escenario no está asignado al usuario');
+  // Los escenarios generales (biblioteca de VoxReady) están disponibles para todos los voceros
+  const isGeneral = theme.isGlobal && !theme.deletedAt;
+  if (!isGeneral && theme.tenantId !== user.tenantId) fail(403, 'El escenario no pertenece al tenant del usuario');
+  if (!isGeneral && !db.assignments.some((a) => a.userId === user.id && a.themeId === theme.id)) fail(403, 'El escenario no está asignado al usuario');
   const session = { id: uid(), status: 'CREATED', createdAt: now(), userId: user.id, themeId: theme.id, tenantId: user.tenantId, completedAt: null, transcript: null, metrics: null, report: null, score: null, review: null, hasVideo: false };
   db.sessions.push(session);
   saveDb();
@@ -678,7 +813,8 @@ route('POST', '/api/patterns/:id/activate', ['master'], ({ db, params }) => {
 route('GET', '/api/patterns/themes', ['master', 'system'], ({ db }) => ({
   status: 'ok',
   themes: db.themes
-    .map((t) => ({ t, tenant: db.tenants.find((x) => x.id === t.tenantId) }))
+    .filter((t) => !t.deletedAt)
+    .map((t) => ({ t, tenant: db.tenants.find((x) => x.id === t.tenantId) || { id: 'general', name: 'Escenarios generales' } }))
     .sort((a, b) => a.tenant.name.localeCompare(b.tenant.name) || a.t.title.localeCompare(b.t.title))
     .map(({ t, tenant }) => {
       const o = db.patternOverrides.find((x) => x.themeId === t.id);
@@ -796,7 +932,7 @@ async function handle(method, url, headers, rawBody) {
     }
     await wait(120 + Math.random() * 180); // latencia de red simulada
     const result = await found.handler({ db, user, apiRole, params, query: url.searchParams, body, rawBody });
-    return { status: method === 'POST' && /\/api\/(tenants|users|themes|patterns)$/.test(url.pathname) ? 201 : 200, body: result };
+    return { status: method === 'POST' && /\/api\/(tenants|users|themes|patterns|library\/themes)$/.test(url.pathname) ? 201 : 200, body: result };
   } catch (error) {
     if (error instanceof HttpError) return { status: error.status, body: { status: 'error', mensaje: error.message } };
     console.error('[Demo] Error en', method, url.pathname, error);

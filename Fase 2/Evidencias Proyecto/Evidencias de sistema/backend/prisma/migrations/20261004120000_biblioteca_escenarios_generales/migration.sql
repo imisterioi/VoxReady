@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Theme" ADD COLUMN     "isGlobal" BOOLEAN NOT NULL DEFAULT false,
+ALTER COLUMN "tenantId" DROP NOT NULL;
+

@@ -17,6 +17,7 @@ const registerSessionRoutes = require('./routes/sessions');
 const registerPatternRoutes = require('./routes/patterns');
 const registerThemeRoutes = require('./routes/themes');
 const registerDeletionRoutes = require('./routes/deletionRequests');
+const registerLibraryRoutes = require('./routes/library');
 
 // Inicializar Express y Prisma
 const app = express();
@@ -38,6 +39,7 @@ registerSessionRoutes(app, prisma);
 registerPatternRoutes(app, prisma);
 registerThemeRoutes(app, prisma);
 registerDeletionRoutes(app, prisma);
+registerLibraryRoutes(app, prisma);
 
 // Endpoint de prueba
 app.get('/api/health', (req, res) => {
@@ -125,7 +127,8 @@ app.get('/api/scenarios/my', async (req, res) => {
       }
     });
 
-    const scenarios = assignments.map((assignment) => ({
+    const orgScenarios = assignments.filter((assignment) => !assignment.theme.isGlobal).map((assignment) => ({
+      scope: 'org', // escenario de la organización del vocero
       assignmentId: assignment.id,
       id: assignment.theme.id,
       title: assignment.theme.title,
@@ -138,6 +141,28 @@ app.get('/api/scenarios/my', async (req, res) => {
       status: assignment.status,
       assignedAt: assignment.assignedAt
     }));
+
+    // Escenarios generales de la biblioteca de VoxReady: todos los voceros los ven
+    const globalThemes = await prisma.theme.findMany({
+      where: { isGlobal: true, deletedAt: null },
+      orderBy: { title: 'asc' }
+    });
+    const generalScenarios = globalThemes.map((theme) => ({
+      scope: 'general',
+      assignmentId: null,
+      id: theme.id,
+      title: theme.title,
+      context: theme.context,
+      keyMessages: theme.keyMessages,
+      redLines: theme.redLines,
+      optic: theme.optic,
+      publics: theme.publics,
+      category: theme.category,
+      status: 'PENDING',
+      assignedAt: theme.createdAt
+    }));
+
+    const scenarios = [...orgScenarios, ...generalScenarios];
 
     res.json({
       status: 'ok',
@@ -195,14 +220,17 @@ app.post('/api/sessions', async (req, res) => {
       });
     }
 
-    if (theme.tenantId !== user.tenantId) {
+    // Los escenarios generales (biblioteca de VoxReady) están disponibles para todos los voceros
+    const isGeneral = theme.isGlobal && !theme.deletedAt;
+
+    if (!isGeneral && theme.tenantId !== user.tenantId) {
       return res.status(403).json({
         status: 'error',
         mensaje: 'El escenario no pertenece al tenant del usuario'
       });
     }
 
-    const assignment = await prisma.scenarioAssignment.findUnique({
+    const assignment = isGeneral ? true : await prisma.scenarioAssignment.findUnique({
       where: {
         userId_themeId: {
           userId: user.id,
@@ -479,7 +507,17 @@ app.post('/api/interviewer/next-question', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+// Express 5 entrega los errores de arranque (por ejemplo, puerto ocupado) al callback:
+// sin este manejo el proceso se cerraba en silencio a los pocos segundos
+app.listen(PORT, (error) => {
+  if (error) {
+    console.error(
+      error.code === 'EADDRINUSE'
+        ? `No se pudo iniciar: el puerto ${PORT} ya lo está usando otro programa. Ciérralo o define otro puerto con PORT en backend/.env`
+        : `No se pudo iniciar el servidor: ${error.message}`,
+    );
+    process.exit(1);
+  }
   console.log(`Servidor backend de VoxReady corriendo en http://localhost:${PORT}`);
   warmUp();
 });

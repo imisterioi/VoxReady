@@ -14,6 +14,7 @@ import InformeCoach from './pages/InformeCoach';
 import MiProgreso from './pages/MiProgreso';
 import PoliticaRetencion from './pages/PoliticaRetencion';
 import Estilo from './pages/Estilo';
+import Temas from './pages/Temas';
 import EditorTema from './pages/EditorTema';
 import EditorRubrica from './pages/EditorRubrica';
 import ColaEtiquetado from './pages/ColaEtiquetado';
@@ -25,6 +26,7 @@ import Practicas from './pages/Practicas';
 import SistemaHome from './pages/sistema/SistemaHome';
 import Organizaciones from './pages/sistema/Organizaciones';
 import Usuarios from './pages/sistema/Usuarios';
+import Biblioteca from './pages/sistema/Biblioteca';
 import DemoEntry from './pages/DemoEntry';
 import VersionSwitch from './components/VersionSwitch';
 import DemoNotice from './components/DemoNotice';
@@ -91,6 +93,7 @@ function App() {
           <Route path="admin" element={<AdminHome />} />
           <Route path="admin/voceros" element={<Voceros />} />
           <Route path="admin/practicas" element={<Practicas />} />
+          <Route path="admin/temas" element={<Temas />} />
           <Route path="admin/informe" element={<InformeCoach audience="admin" />} />
           <Route path="admin/tema" element={<EditorTema />} />
           <Route path="admin/retencion" element={<PoliticaRetencion />} />
@@ -106,6 +109,7 @@ function App() {
           <Route path="sistema" element={<SistemaHome />} />
           <Route path="sistema/organizaciones" element={<Organizaciones />} />
           <Route path="sistema/usuarios" element={<Usuarios />} />
+          <Route path="sistema/biblioteca" element={<Biblioteca />} />
 
           <Route path="*" element={<NotFound />} />
         </Route>

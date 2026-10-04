@@ -26,6 +26,7 @@ import Temas from './pages/Temas';
 import SistemaHome from './pages/sistema/SistemaHome';
 import Organizaciones from './pages/sistema/Organizaciones';
 import Usuarios from './pages/sistema/Usuarios';
+import Biblioteca from './pages/sistema/Biblioteca';
 
 // MediaPipe es pesado: se carga solo al entrar a la prueba
 const MediaPipeTest = lazy(() => import('./pages/MediaPipeTest'));
@@ -98,6 +99,7 @@ function App() {
           <Route path="sistema" element={<SistemaHome />} />
           <Route path="sistema/organizaciones" element={<Organizaciones />} />
           <Route path="sistema/usuarios" element={<Usuarios />} />
+          <Route path="sistema/biblioteca" element={<Biblioteca />} />
 
           <Route path="*" element={<NotFound />} />
         </Route>

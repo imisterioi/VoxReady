@@ -83,8 +83,12 @@ model Theme {
   // su histórico (asignaciones, sesiones, informes y videos)
   deletedAt DateTime?
 
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  // Escenario general de la biblioteca de VoxReady: no pertenece a ninguna
+  // organización (tenantId vacío) y lo ven todos los voceros
+  isGlobal Boolean @default(false)
+
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Restrict)
 
   sessions     Session[]
   assignments  ScenarioAssignment[]

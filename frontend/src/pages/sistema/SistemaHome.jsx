@@ -74,6 +74,9 @@ export default function SistemaHome() {
         description="Visión general de la plataforma: servicios, organizaciones, usuarios y uso."
         actions={
           <>
+            <Button variant="secondary" icon="book" to="/sistema/biblioteca?nuevo=1">
+              Nuevo escenario general
+            </Button>
             <Button variant="secondary" icon="layers" to="/sistema/organizaciones?nueva=1">
               Nueva organización
             </Button>

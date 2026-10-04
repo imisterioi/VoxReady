@@ -22,7 +22,7 @@ const I = {
         { to: '/admin', label: 'Panel', icon: 'home', end: true },
         { to: '/admin/voceros', label: 'Voceros', icon: 'users' },
         { to: '/admin/practicas', label: 'Prácticas', icon: 'activity' },
-        { to: '/admin/tema', label: 'Temas', icon: 'file' },
+        { to: '/admin/temas', label: 'Temas', icon: 'file' },
         { to: '/admin/retencion', label: 'Retención', icon: 'lock' },
         { to: '/admin/estilo', label: 'Estilo', icon: 'palette' },
       ],
@@ -35,6 +35,7 @@ const I = {
         { to: '/sistema', label: 'Resumen', icon: 'activity', end: true },
         { to: '/sistema/organizaciones', label: 'Organizaciones', icon: 'layers' },
         { to: '/sistema/usuarios', label: 'Usuarios', icon: 'users' },
+        { to: '/sistema/biblioteca', label: 'Escenarios generales', icon: 'book' },
       ],
       lab: { to: '/laboratorio', label: 'Laboratorio', icon: 'flask' },
     },
@@ -59,7 +60,7 @@ const I = {
       },
       u2: {
         eyebrow: 'Práctica', title: 'Elige un escenario',
-        sub: 'Escenarios asignados por tu organización. Cada uno simula una entrevista real bajo presión.',
+        sub: 'Escenarios de tu organización y escenarios generales de VoxReady. Cada uno simula una entrevista real bajo presión.',
         search: 'Buscar escenario…', start: 'Comenzar',
         filters: [
           { value: 'TODOS', label: 'Todos' },

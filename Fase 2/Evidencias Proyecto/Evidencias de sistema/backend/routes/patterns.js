@@ -126,7 +126,8 @@ module.exports = function registerPatternRoutes(app, prisma) {
         themes: themes.map((t) => ({
           id: t.id,
           title: t.title,
-          tenant: { id: t.tenant.id, name: t.tenant.name },
+          // Los escenarios generales no pertenecen a ninguna organización
+          tenant: t.tenant ? { id: t.tenant.id, name: t.tenant.name } : { id: 'general', name: 'Escenarios generales' },
           override: t.patternOverride
             ? { patternId: t.patternOverride.patternId, name: t.patternOverride.pattern.name || "Patrón base" }
             : null,
