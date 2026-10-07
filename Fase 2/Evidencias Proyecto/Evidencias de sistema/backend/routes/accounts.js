@@ -13,8 +13,9 @@ const {
   toApiUser,
   requireAuth,
 } = require('../auth');
-const { anonymizeUser, deleteTenantData } = require('../lib/anonymize');
+const { anonymizeUser } = require('../lib/anonymize');
 const { syncUserPause } = require('../lib/retentionPause');
+const { startTenantDeletion, processTenantDeletion } = require('../lib/tenantDeletion');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 6;
@@ -53,6 +54,7 @@ module.exports = function registerAccountRoutes(app, prisma) {
       }
       if (user.status === 'SUSPENDED') return fail(res, 403, 'Esta cuenta está suspendida. Contacta a tu administrador.');
       if (user.tenant?.status === 'SUSPENDED') return fail(res, 403, `La organización ${user.tenant.name} está suspendida.`);
+      if (user.tenant?.status === 'DELETING') return fail(res, 403, `La organización ${user.tenant.name} está siendo eliminada.`);
 
       const updated = await prisma.user.update({
         where: { id: user.id },
@@ -141,6 +143,9 @@ module.exports = function registerAccountRoutes(app, prisma) {
     try {
       const { status } = req.body || {};
       if (!['ACTIVE', 'SUSPENDED'].includes(status)) return fail(res, 400, 'Estado no válido.');
+      const existing = await prisma.tenant.findUnique({ where: { id: req.params.id } });
+      if (!existing) return fail(res, 404, 'Organización no encontrada.');
+      if (existing.status === 'DELETING') return fail(res, 409, 'La organización está en proceso de eliminación.');
       // Cambia el estado y ajusta las pausas de retención de TODOS los voceros del tenant (atómico).
       const tenant = await prisma.$transaction(async (tx) => {
         const updated = await tx.tenant.update({ where: { id: req.params.id }, data: { status } });
@@ -155,14 +160,23 @@ module.exports = function registerAccountRoutes(app, prisma) {
     }
   });
 
-  // Elimina manualmente un tenant y procesa TODOS sus datos de inmediato (no espera la retención).
+  // Elimina manualmente un tenant (marca DELETING y procesa; reintentable si algo falla).
   // No toca los escenarios globales. Acceso: SYSTEM / MASTER. Operación irreversible.
   app.delete('/api/tenants/:id', auth('system', 'master'), async (req, res) => {
     try {
       const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id } });
       if (!tenant) return fail(res, 404, 'Organización no encontrada.');
-      const result = await deleteTenantData(prisma, tenant.id);
-      res.json({ status: 'ok', result });
+      if (tenant.status === 'DELETING') return fail(res, 409, 'La organización ya está en proceso de eliminación.');
+
+      await startTenantDeletion(prisma, tenant.id);
+      // Procesa de inmediato (best-effort); si algo falla queda en DELETING y el job reintenta.
+      let deletion = 'pending';
+      try {
+        deletion = (await processTenantDeletion(prisma, tenant.id)).status;
+      } catch (error) {
+        console.warn('[Eliminación] fallo en el intento inmediato:', error.message);
+      }
+      res.json({ status: 'ok', deletion }); // 'completed' | 'pending' (DELETING)
     } catch (error) {
       console.error('Error eliminando organización:', error);
       fail(res, 500, 'No se pudo eliminar la organización.');

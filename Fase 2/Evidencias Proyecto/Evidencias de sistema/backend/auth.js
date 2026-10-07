@@ -94,8 +94,8 @@ function requireAuth(prisma, roles = []) {
       }
 
       const user = await prisma.user.findUnique({ where: { id: payload.sub }, include: { tenant: true } });
-      if (!user || user.status !== 'ACTIVE' || user.tenant?.status === 'SUSPENDED') {
-        return res.status(401).json({ status: 'error', mensaje: 'Tu cuenta no está activa.' });
+      if (!user || user.status !== 'ACTIVE' || user.tenant?.status === 'SUSPENDED' || user.tenant?.status === 'DELETING') {
+        return res.status(401).json({ status: 'error', mensaje: 'Tu cuenta o tu organización no está activa.' });
       }
 
       const apiRole = ROLE_TO_API[user.role];

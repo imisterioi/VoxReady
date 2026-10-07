@@ -18,6 +18,8 @@ const registerPatternRoutes = require('./routes/patterns');
 const registerThemeRoutes = require('./routes/themes');
 const registerDeletionRoutes = require('./routes/deletionRequests');
 const registerLibraryRoutes = require('./routes/library');
+const registerMetricsRoutes = require('./routes/metrics');
+const { processPendingTenantDeletions } = require('./lib/tenantDeletion');
 
 // Inicializar Express y Prisma
 const app = express();
@@ -40,6 +42,7 @@ registerPatternRoutes(app, prisma);
 registerThemeRoutes(app, prisma);
 registerDeletionRoutes(app, prisma);
 registerLibraryRoutes(app, prisma);
+registerMetricsRoutes(app, prisma);
 
 // Endpoint de prueba
 app.get('/api/health', (req, res) => {
@@ -480,6 +483,12 @@ app.listen(PORT, (error) => {
   }
   console.log(`Servidor backend de VoxReady corriendo en http://localhost:${PORT}`);
   warmUp();
+
+  // Eliminaciones de tenants pendientes (estado DELETING persistente): al arrancar y cada 5 min.
+  // Garantiza que la eliminación continúe tras un fallo o reinicio, sin depender de la petición HTTP.
+  const runPendingDeletions = () => processPendingTenantDeletions(prisma).catch((e) => console.warn('[Eliminación] error:', e.message));
+  setTimeout(runPendingDeletions, 6000);
+  setInterval(runPendingDeletions, 5 * 60 * 1000).unref();
 });
 
 app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {

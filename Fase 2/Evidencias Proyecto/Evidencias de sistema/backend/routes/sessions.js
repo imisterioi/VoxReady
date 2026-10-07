@@ -63,7 +63,7 @@ function cleanReportForRetention(report) {
 // El score, la revisión humana, el report o una evaluación manual NO adelantan la retención.
 async function applyRetention(prisma) {
   const [sessions, users] = await Promise.all([
-    prisma.session.findMany({ select: { id: true, createdAt: true, userId: true, tenant: { select: { retentionDays: true } } } }),
+    prisma.session.findMany({ select: { id: true, createdAt: true, userId: true, tenant: { select: { retentionDays: true, status: true } } } }),
     prisma.user.findMany({ select: { id: true, retentionPauses: { select: { startedAt: true, endedAt: true } } } }),
   ]);
   const pausesByUser = new Map(users.map((u) => [u.id, u.retentionPauses]));
@@ -77,6 +77,7 @@ async function applyRetention(prisma) {
   const eligibleIds = [];
 
   for (const s of sessions) {
+    if (s.tenant?.status === 'DELETING') continue; // el tenant se está eliminando: lo maneja el job de eliminación
     // Retención pausada (suspendido ahora): su reloj está detenido → NO se purga.
     const intervals = pausesByUser.get(s.userId) || [];
     if (intervals.some((iv) => !iv.endedAt)) continue;

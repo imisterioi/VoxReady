@@ -111,6 +111,7 @@ export default function Organizaciones() {
   const [deletingTenant, setDeletingTenant] = useState(null);
   const [suspendingTenant, setSuspendingTenant] = useState(null);
   const [suspending, setSuspending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const creating = params.get('nueva') === '1';
   const setCreating = (v) => setParams(v ? { nueva: '1' } : {}, { replace: true });
@@ -150,16 +151,20 @@ export default function Organizaciones() {
     }
   };
 
-  // Eliminación manual (irreversible): procesa los datos del tenant de inmediato.
+  // Eliminación manual (irreversible): procesa los datos del tenant de inmediato o lo deja en DELETING.
   const remove = async () => {
     const t = deletingTenant;
     try {
-      await apiFetch(`/api/tenants/${t.id}`, { method: 'DELETE' });
-      toast.success(`${t.name} eliminada`);
+      setDeleting(true);
+      const res = await apiFetch(`/api/tenants/${t.id}`, { method: 'DELETE' });
+      if (res?.deletion === 'pending') toast.success(`${t.name}: eliminación en proceso`);
+      else toast.success(`${t.name} eliminada`);
       setDeletingTenant(null);
       reload();
     } catch (err) {
       toast.error(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -209,7 +214,9 @@ export default function Organizaciones() {
                     </p>
                   </div>
                 </div>
-                <Badge tone={t.status === 'ACTIVE' ? 'success' : 'danger'}>{t.status === 'ACTIVE' ? 'Activa' : 'Suspendida'}</Badge>
+                <Badge tone={t.status === 'ACTIVE' ? 'success' : t.status === 'DELETING' ? 'neutral' : 'danger'}>
+                  {t.status === 'ACTIVE' ? 'Activa' : t.status === 'DELETING' ? 'Eliminando…' : 'Suspendida'}
+                </Badge>
               </div>
 
               <div className="grid grid-cols-3 gap-3 mt-6">
@@ -238,10 +245,10 @@ export default function Organizaciones() {
                   <Button variant="ghost" size="sm" icon="plus" onClick={() => setAdminFor(t.id)} disabled={t.status !== 'ACTIVE'}>
                     Admin
                   </Button>
-                  <Button variant="ghost" size="sm" icon={t.status === 'ACTIVE' ? 'lock' : 'refresh'} onClick={() => (t.status === 'ACTIVE' ? setSuspendingTenant(t) : reactivate(t))}>
+                  <Button variant="ghost" size="sm" icon={t.status === 'ACTIVE' ? 'lock' : 'refresh'} onClick={() => (t.status === 'ACTIVE' ? setSuspendingTenant(t) : reactivate(t))} disabled={t.status === 'DELETING'}>
                     {t.status === 'ACTIVE' ? 'Suspender' : 'Reactivar'}
                   </Button>
-                  <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setDeletingTenant(t)}>
+                  <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setDeletingTenant(t)} disabled={t.status === 'DELETING'}>
                     Eliminar
                   </Button>
                 </div>
@@ -256,16 +263,16 @@ export default function Organizaciones() {
       {deletingTenant && (
         <Modal
           open
-          onClose={() => setDeletingTenant(null)}
+          onClose={() => (deleting ? null : setDeletingTenant(null))}
           title="¿Eliminar este cliente?"
           description={deletingTenant.name}
           footer={
             <>
-              <Button variant="ghost" onClick={() => setDeletingTenant(null)}>
+              <Button variant="ghost" onClick={() => setDeletingTenant(null)} disabled={deleting}>
                 Cancelar
               </Button>
-              <Button variant="danger" icon="trash" onClick={remove}>
-                Eliminar
+              <Button variant="danger" icon="trash" onClick={remove} disabled={deleting}>
+                {deleting ? 'Eliminando…' : 'Eliminar'}
               </Button>
             </>
           }

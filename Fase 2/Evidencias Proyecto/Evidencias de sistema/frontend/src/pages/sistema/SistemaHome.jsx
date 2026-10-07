@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { checkEndpoint } from '../../lib/api';
 import { ROLE_META, timeAgo } from '../../data/directory';
 import useApiData from '../../hooks/useApiData';
+import MetricsDashboard from '../../components/MetricsDashboard';
 import Icon from '../../components/Icon';
 import { Badge, Button, Card, CardHeader, PageHeader, Stat, cx } from '../../components/ui';
 
@@ -286,6 +287,9 @@ export default function SistemaHome() {
           })}
         </ul>
       </Card>
+
+      {/* Métricas administrativas */}
+      <MetricsDashboard />
     </>
   );
 }

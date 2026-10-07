@@ -2,7 +2,7 @@ const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 
 require('dotenv').config();
-const { seedDemo } = require('./seed-demo');
+const { seedDemo, seedMetricsDemo } = require('./seed-demo');
 const { LIBRARY_SCENARIOS } = require('./library-scenarios');
 
 const adapter = new PrismaPg({
@@ -182,6 +182,13 @@ async function main() {
     else await prisma.theme.create({ data: { ...data, title: s.title } });
   }
   console.log(`Escenarios generales: ${LIBRARY_SCENARIOS.length}`);
+
+  // Datos demo para las métricas administrativas (organizaciones, usuarios, temas, asignaciones y sesiones)
+  const demoCounts = await seedMetricsDemo(prisma);
+  console.log(
+    `Datos demo de métricas: ${demoCounts.tenants} organizaciones, ${demoCounts.admins} admins, ` +
+      `${demoCounts.voceros} voceros, ${demoCounts.themes} temas, ${demoCounts.assignments} asignaciones, ${demoCounts.sessions} sesiones`,
+  );
 
   console.log('Datos creados/verificados correctamente.');
   console.log(`Administrador: ${admin.email}`);

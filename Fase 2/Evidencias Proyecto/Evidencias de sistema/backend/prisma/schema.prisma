@@ -12,8 +12,12 @@ model Tenant {
   id        String   @id @default(uuid())
   name      String
   sector    String?
-  status    String   @default("ACTIVE") // ACTIVE | SUSPENDED
+  status    String   @default("ACTIVE") // ACTIVE | SUSPENDED | DELETING
   createdAt DateTime @default(now())
+
+  // Eliminación manual en curso (estado DELETING): momento en que se solicitó.
+  // Permite reintentar la eliminación tras reinicios (estado persistente).
+  deletionRequestedAt DateTime?
 
   // Política de retención (la define el admin del cliente)
   retentionMode String @default("FULL") // FULL = video + métricas | METRICS = solo métricas
