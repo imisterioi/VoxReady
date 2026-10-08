@@ -2,6 +2,7 @@
 // - Contraseñas cifradas con scrypt + salt.
 // - Token firmado con HMAC-SHA256 (formato similar a un JWT), válido 7 días.
 const crypto = require('crypto');
+const presence = require('./lib/presence');
 
 const SECRET = process.env.AUTH_SECRET || 'voxready-dev-secret-cambiar-en-produccion';
 const TOKEN_DAYS = 7;
@@ -105,6 +106,7 @@ function requireAuth(prisma, roles = []) {
 
       req.user = user;
       req.apiRole = apiRole;
+      presence.touch(user); // indicador de usuarios conectados
       next();
     } catch (error) {
       console.error('Error de autenticación:', error);

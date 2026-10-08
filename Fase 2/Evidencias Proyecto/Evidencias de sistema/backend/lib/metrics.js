@@ -12,6 +12,8 @@
 //     nunca del frontend. Se aplica en scopeFromRequest(req).
 //   * No modifica datos. No toca retención, suspensión, anonimización ni eliminación.
 
+const presence = require('./presence');
+
 // Presets de período (días). El frontend envía ?period=<clave>.
 const PERIOD_PRESETS = { '7': 7, '30': 30, '90': 90, '365': 365 };
 const DEFAULT_PERIOD_DAYS = 30;
@@ -176,7 +178,47 @@ async function trainingFrequency(prisma, { tenantId = null, from = null, to = nu
   const end = to || new Date();
   const days = from ? Math.max(1, Math.round((end - from) / (24 * 60 * 60 * 1000))) : null;
   const perWeek = days ? Math.round((sessions / days) * 7 * 10) / 10 : null;
-  return { sessions, voceros, avgPerVocero, perWeek };
+  const avgDaysBetween = await averageDaysBetweenTrainings(prisma, { tenantId, from, to });
+  return { sessions, voceros, avgPerVocero, perWeek, avgDaysBetween };
+}
+
+// "Cada cuánto se entrenan": promedio de días entre dos entrenamientos consecutivos
+// del mismo vocero dentro del período. null si nadie entrenó al menos dos veces.
+async function averageDaysBetweenTrainings(prisma, { tenantId = null, from = null, to = null } = {}) {
+  const rows = await prisma.session.findMany({
+    where: trainingSessionWhere({ tenantId, from, to }),
+    select: { userId: true, createdAt: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const last = new Map();
+  let gapsMs = 0;
+  let gaps = 0;
+  for (const row of rows) {
+    const previous = last.get(row.userId);
+    if (previous) {
+      gapsMs += row.createdAt - previous;
+      gaps += 1;
+    }
+    last.set(row.userId, row.createdAt);
+  }
+  return gaps ? Math.round((gapsMs / gaps / (24 * 60 * 60 * 1000)) * 10) / 10 : null;
+}
+
+// Clientes ganados y perdidos en el período.
+//   Ganados  = organizaciones creadas en el período (incluye las que después se eliminaron).
+//   Perdidos = organizaciones eliminadas en el período (historial TenantEvent).
+//   Suspendidas = suspensiones registradas en el período (clientes en riesgo, no perdidos).
+// El historial empieza cuando se agregó TenantEvent: eliminaciones anteriores no se cuentan.
+async function clientFlow(prisma, { from = null, to = null } = {}) {
+  const range = from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : null;
+  const [createdAlive, createdThenDeleted, lost, suspended] = await Promise.all([
+    prisma.tenant.count({ where: range ? { createdAt: range } : {} }),
+    prisma.tenantEvent.count({ where: { type: 'DELETED', ...(range ? { tenantCreatedAt: range } : {}) } }),
+    prisma.tenantEvent.count({ where: { type: 'DELETED', ...(range ? { at: range } : {}) } }),
+    prisma.tenantEvent.count({ where: { type: 'SUSPENDED', ...(range ? { at: range } : {}) } }),
+  ]);
+  const won = createdAlive + createdThenDeleted;
+  return { won, lost, suspended, net: won - lost };
 }
 
 // Resumen de clientes/tenants (solo alcance global): actuales, creados en el período
@@ -208,8 +250,14 @@ async function metricsOverview(prisma, { scope, from = null, to = null } = {}) {
       sessions: frequency.sessions,
       avgPerVocero: frequency.avgPerVocero,
       perWeek: frequency.perWeek,
+      avgDaysBetween: frequency.avgDaysBetween,
+      // Usuarios con actividad en los últimos minutos (del alcance: organización o todas)
+      connected: presence.connected({ tenantId }),
       organizations: null,
       organizationsCreated: null,
+      organizationsWon: null,
+      organizationsLost: null,
+      organizationsSuspended: null,
     },
     voceros,
     themes,
@@ -217,9 +265,12 @@ async function metricsOverview(prisma, { scope, from = null, to = null } = {}) {
   };
 
   if (scope.mode === 'global') {
-    const ts = await tenantSummary(prisma, { from, to });
+    const [ts, flow] = await Promise.all([tenantSummary(prisma, { from, to }), clientFlow(prisma, { from, to })]);
     result.summary.organizations = ts.currentCount;
     result.summary.organizationsCreated = ts.createdCount;
+    result.summary.organizationsWon = flow.won;
+    result.summary.organizationsLost = flow.lost;
+    result.summary.organizationsSuspended = flow.suspended;
   }
 
   // Solo el Administrador del Sistema (SYSTEM) recibe la lista de organizaciones
@@ -242,6 +293,8 @@ module.exports = {
   activeVoceroWhere,
   activeVoceroCount,
   trainingFrequency,
+  averageDaysBetweenTrainings,
+  clientFlow,
   tenantSummary,
   voceroRankings,
   themePreference,

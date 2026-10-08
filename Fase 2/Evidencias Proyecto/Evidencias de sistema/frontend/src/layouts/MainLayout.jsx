@@ -7,7 +7,7 @@ import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
 import Icon from '../components/Icon';
 import { Avatar, Button, cx } from '../components/ui';
-import { apiFetch, clearSession, getCurrentUser, getToken, saveSession } from '../lib/api';
+import { API_URL, apiFetch, clearSession, getCurrentUser, getToken, saveSession } from '../lib/api';
 import { setOrgPalette, setPaletteLocked } from '../lib/palette';
 
 export default function MainLayout() {
@@ -41,6 +41,14 @@ export default function MainLayout() {
       });
   }, [navigate]);
 
+  // Latido: mantiene al usuario como "conectado" en las métricas mientras tenga la plataforma abierta
+  useEffect(() => {
+    const beat = setInterval(() => {
+      if (getToken() && !document.hidden) apiFetch('/api/auth/heartbeat', { method: 'POST' }).catch(() => {});
+    }, 2 * 60 * 1000);
+    return () => clearInterval(beat);
+  }, []);
+
   // Colores de la organización (configuración "Estilo" del administrador del cliente).
   // Los voceros y su administrador ven siempre la paleta de la organización.
   useEffect(() => {
@@ -64,6 +72,9 @@ export default function MainLayout() {
   }, []);
 
   const handleLogout = () => {
+    // Avisa al backend antes de borrar el token (deja de contarse como conectado)
+    const token = getToken();
+    if (token) fetch(`${API_URL}/api/auth/logout`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
     clearSession();
     navigate('/login');
   };

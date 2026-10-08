@@ -5,6 +5,7 @@
 // - El administrador del cliente puede copiar uno a su organización para adaptarlo.
 const { requireAuth } = require('../auth');
 const { parseList } = require('../ai/interviewer');
+const { normalizeInterviewConfig, resolveInterviewConfig } = require('../ai/interviewConfig');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
 const CATEGORIES = ['CRISIS', 'MEDIOS', 'INSTITUCIONAL', 'GENERAL'];
@@ -18,6 +19,7 @@ const toApiLibraryTheme = (t) => ({
   keyMessages: parseList(t.keyMessages),
   redLines: parseList(t.redLines),
   publics: parseList(t.publics),
+  interview: resolveInterviewConfig(t),
   sessions: t._count?.sessions ?? 0,
   createdAt: t.createdAt,
 });
@@ -37,6 +39,7 @@ function readTheme(body = {}) {
       keyMessages: JSON.stringify(clean(keyMessages)),
       redLines: JSON.stringify(clean(redLines)),
       publics: JSON.stringify(clean(publics)),
+      interviewConfig: normalizeInterviewConfig(body.interview),
     },
   };
 }
@@ -126,6 +129,7 @@ module.exports = function registerLibraryRoutes(app, prisma) {
           keyMessages: source.keyMessages,
           redLines: source.redLines,
           publics: source.publics,
+          interviewConfig: source.interviewConfig ?? undefined,
           tenantId: req.user.tenantId,
           isGlobal: false,
         },

@@ -9,6 +9,9 @@
 // En el plan gratuito la disponibilidad de cada modelo cambia minuto a minuto,
 // por eso se consultan varios a la vez y se usa el primero que responda.
 
+const { AGGRESSIVENESS, normalizeInterviewConfig, turnPlan } = require('./interviewConfig');
+const { recordAi } = require('../lib/runtimeStatus');
+
 const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
 const DEFAULT_MODEL = 'deepseek-ai/deepseek-v4.1-flash';
@@ -27,9 +30,12 @@ function parseList(value) {
   return [String(value)];
 }
 
-// Instrucciones del periodista. El escenario se completa con datos de la tabla Theme.
-function buildSystemPrompt(theme) {
-  const lines = ['Eres un periodista chileno, incisivo pero respetuoso, entrevistando en vivo al vocero de una organización.'];
+// Instrucciones del entrevistador. El escenario se completa con datos de la tabla Theme;
+// el tono y la estructura (preguntas y repreguntas) vienen de su configuración de entrevista.
+function buildSystemPrompt(theme, cfg, plan) {
+  const level = AGGRESSIVENESS[cfg.aggressiveness];
+  const who = cfg.interviewerRole || 'un periodista chileno';
+  const lines = [`Eres ${who} y entrevistas en vivo al vocero de una organización.`, level.persona];
 
   if (theme) {
     lines.push(`Escenario: ${theme.title}.`, `Contexto: ${theme.context}`);
@@ -38,26 +44,41 @@ function buildSystemPrompt(theme) {
     if (keyMessages.length) lines.push(`Mensajes que el vocero intentará sostener: ${keyMessages.join(' | ')}`);
     if (redLines.length) {
       lines.push(`Cosas que el vocero NO debe decir (líneas rojas): ${redLines.join(' | ')}`);
-      lines.push('De vez en cuando formula preguntas que tienten al vocero a cruzar esas líneas rojas.');
+      if (cfg.aggressiveness === 'ALTA' || cfg.aggressiveness === 'EXTREMA') {
+        lines.push('Busca activamente que el vocero cruce esas líneas rojas con preguntas que lo tienten a hacerlo.');
+      } else if (cfg.aggressiveness === 'MEDIA') {
+        lines.push('De vez en cuando formula preguntas que tienten al vocero a cruzar esas líneas rojas.');
+      }
     }
   } else {
     lines.push('Escenario: una empresa enfrenta una crisis que afecta a sus clientes.');
   }
 
+  lines.push('Reglas:', '- Haz UNA sola pregunta, en español, de máximo 35 palabras.');
+  if (cfg.followUps > 0) {
+    // Estructura fija: cada pregunta principal va seguida de sus repreguntas
+    lines.push(
+      plan.kind === 'followup'
+        ? `- Este turno es una REPREGUNTA sobre la última respuesta del vocero. ${level.followUp}`
+        : '- Este turno es una pregunta NUEVA: aborda un aspecto de la situación que todavía no se haya tratado.',
+      '- Si el vocero no dijo nada, insiste en la pregunta anterior de forma más directa.',
+    );
+  } else {
+    lines.push(
+      `- Si el vocero evade o responde de forma genérica, repregunta. ${level.followUp}`,
+      '- Si el vocero no dijo nada, reformula la pregunta anterior de forma más directa.',
+    );
+  }
   lines.push(
-    'Reglas:',
-    '- Haz UNA sola pregunta, en español, de máximo 35 palabras.',
-    '- Si el vocero evade o responde de forma genérica, repregunta sobre lo que no contestó.',
-    '- Si el vocero no dijo nada, reformula la pregunta anterior de forma más directa.',
-    '- No repitas preguntas que ya hiciste; avanza hacia otros aspectos de la crisis.',
+    '- No repitas preguntas que ya hiciste.',
     '- Responde solo con la pregunta: sin saludos, comillas, explicaciones ni etiquetas.',
   );
   return lines.join('\n');
 }
 
 // history: [{ role: 'interviewer' | 'vocero', text: string }]
-function buildMessages(theme, history = []) {
-  const messages = [{ role: 'system', content: buildSystemPrompt(theme) }];
+function buildMessages(theme, history = [], cfg, plan) {
+  const messages = [{ role: 'system', content: buildSystemPrompt(theme, cfg, plan) }];
 
   for (const turn of history.slice(-10)) {
     const text = (turn.text || '').trim();
@@ -121,6 +142,8 @@ async function callModel(model, messages, timeoutMs, raceSignal) {
         max_tokens: 200,
         // Desactiva el modo "razonamiento" de DeepSeek: es mucho más lento
         ...(model.startsWith('deepseek') ? { chat_template_kwargs: { thinking: false } } : {}),
+        // Nemotron razona por defecto y gasta ahí los 200 tokens sin llegar a escribir la pregunta
+        ...(model.includes('nemotron') ? { chat_template_kwargs: { enable_thinking: false } } : {}),
       }),
     });
 
@@ -147,7 +170,10 @@ async function generateQuestion({ theme, history }) {
     throw error;
   }
 
-  const messages = buildMessages(theme, history);
+  // La estructura de la entrevista depende de cuántas preguntas ya hizo el entrevistador
+  const cfg = normalizeInterviewConfig(theme?.interviewConfig);
+  const plan = turnPlan(cfg, history.filter((turn) => turn.role === 'interviewer').length);
+  const messages = buildMessages(theme, history, cfg, plan);
   const timeoutMs = Number(process.env.AI_TIMEOUT_MS) || 20000;
   const extra = (process.env.AI_EXTRA_MODELS ?? DEFAULT_EXTRA).split(',').map((m) => m.trim()).filter(Boolean);
   const models = [...new Set([process.env.AI_MODEL || DEFAULT_MODEL, process.env.AI_FALLBACK_MODEL || DEFAULT_FALLBACK, ...extra])];
@@ -156,7 +182,7 @@ async function generateQuestion({ theme, history }) {
 
   const attempts = models.map((model) =>
     callModel(model, messages, timeoutMs, race.signal)
-      .then((question) => ({ question, model, ms: Date.now() - start }))
+      .then((question) => ({ question, model, ms: Date.now() - start, plan }))
       .catch((error) => {
         if (race.signal.aborted) throw new Error(`${model}: cancelado`); // otro modelo ganó
         const reason = error.name === 'AbortError' ? `sin respuesta en ${timeoutMs} ms` : error.message;
@@ -168,8 +194,10 @@ async function generateQuestion({ theme, history }) {
   try {
     const winner = await Promise.any(attempts);
     race.abort(); // cancela las consultas que siguen pendientes
+    recordAi('interviewer', true, winner);
     return winner;
   } catch (aggregate) {
+    recordAi('interviewer', false, { error: 'Ningún modelo respondió' });
     throw new Error(`Ningún modelo respondió (${aggregate.errors.map((e) => e.message).join(' | ')})`);
   }
 }
@@ -183,4 +211,4 @@ function warmUp() {
     .catch(() => console.warn('[IA] No se pudo precalentar el modelo; se reintentará en la primera pregunta'));
 }
 
-module.exports = { generateQuestion, warmUp, parseList };
+module.exports = { generateQuestion, warmUp, parseList, buildSystemPrompt };

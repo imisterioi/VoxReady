@@ -4,6 +4,7 @@ import { checkEndpoint } from '../../lib/api';
 import { ROLE_META, timeAgo } from '../../data/directory';
 import useApiData from '../../hooks/useApiData';
 import MetricsDashboard from '../../components/MetricsDashboard';
+import JobsPanel from '../../components/JobsPanel';
 import Icon from '../../components/Icon';
 import { Badge, Button, Card, CardHeader, PageHeader, Stat, cx } from '../../components/ui';
 
@@ -15,6 +16,8 @@ const SERVICE_STATE = {
   error: { label: 'Con errores', tone: 'danger', dot: 'bg-danger' },
   offline: { label: 'Sin conexión', tone: 'danger', dot: 'bg-danger' },
   client: { label: 'En navegador', tone: 'success', dot: 'bg-success' },
+  idle: { label: 'Sin actividad aún', tone: 'neutral', dot: 'bg-faint' },
+  running: { label: 'En ejecución', tone: 'success', dot: 'bg-success animate-pulse' },
   pending: { label: 'No conectado', tone: 'neutral', dot: 'bg-faint' },
 };
 
@@ -28,29 +31,52 @@ export default function SistemaHome() {
   const DAILY_SESSIONS = ov?.sessions.daily.map((d) => d.count) || Array(14).fill(0);
   const [api, setApi] = useState({ state: 'loading' });
   const [db, setDb] = useState({ state: 'loading' });
+  const status = useApiData('/api/system/status');
+  const reloadStatus = status.reload;
 
   const runChecks = useCallback(async () => {
     setApi({ state: 'loading' });
     setDb({ state: 'loading' });
+    reloadStatus();
     const [a, d] = await Promise.all([checkEndpoint('/api/health'), checkEndpoint('/api/db-test')]);
     setApi(a);
     // Si la API no responde, la base de datos tampoco se puede comprobar
     setDb(a.state === 'offline' ? { state: 'offline' } : d);
-  }, []);
+  }, [reloadStatus]);
 
   useEffect(() => {
     runChecks();
   }, [runChecks]);
 
+  // Estado real de cada proceso crítico (GET /api/system/status). Si la API no responde,
+  // los procesos que dependen de ella se muestran con el estado de la API.
+  const processes = Object.fromEntries((status.data?.processes || []).map((p) => [p.key, p]));
+  const fromBackend = (key, describe) => {
+    const p = processes[key];
+    if (!p) return { state: api.state === 'ok' ? 'loading' : api.state };
+    return { state: p.state === 'pending' ? 'idle' : p.state, ms: p.ms ?? p.lastMs, extra: p.detail || describe?.(p) };
+  };
+  const aiDetail = (p) => (p.lastModel ? `Último modelo: ${p.lastModel} · ${p.failures} fallo(s) de ${p.calls} consulta(s)` : null);
+  const jobDetail = (p) => (p.lastError ? p.lastError.message : p.lastRunAt ? `Última ejecución ${timeAgo(p.lastRunAt)}` : null);
+
   const services = [
     { name: 'API VoxReady', detail: 'Express · /api/health', icon: 'server', ...api },
     { name: 'Base de datos', detail: 'PostgreSQL · Prisma', icon: 'database', ...db },
-    { name: 'Almacenamiento de grabaciones', detail: 'backend/uploads', icon: 'video', state: api.state === 'ok' ? 'ok' : api.state },
-    { name: 'Análisis de pose', detail: 'MediaPipe · se ejecuta en el navegador', icon: 'person', state: 'client' },
+    {
+      name: 'Almacenamiento de grabaciones',
+      detail: 'backend/uploads',
+      icon: 'video',
+      ...fromBackend('storage', (p) => `${p.recordings} grabación(es) · ${p.megabytes} MB`),
+    },
+    { name: 'IA entrevistadora', detail: 'API de NVIDIA', icon: 'sparkles', ...fromBackend('interviewer', aiDetail) },
+    { name: 'IA evaluadora', detail: 'API de NVIDIA', icon: 'sparkles', ...fromBackend('evaluator', aiDetail) },
+    { name: 'Retención de datos', detail: 'Borrado automático por vencimiento', icon: 'clock', ...fromBackend('job-retention', jobDetail) },
+    { name: 'Eliminación de organizaciones', detail: 'Proceso reintentable', icon: 'trash', ...fromBackend('job-tenant-deletion', jobDetail) },
+    { name: 'Análisis de pose y rostro', detail: 'MediaPipe · se ejecuta en el navegador', icon: 'person', state: 'client' },
     { name: 'Transcripción de voz', detail: 'Reconocimiento de voz del navegador (Chrome/Edge)', icon: 'mic', state: 'client' },
-    { name: 'IA entrevistadora y evaluadora', detail: 'API de NVIDIA · DeepSeek/Gemma y Kimi K3', icon: 'sparkles', state: api.state === 'ok' ? 'ok' : api.state },
   ];
-  const operational = services.filter((s) => s.state === 'ok' || s.state === 'client').length;
+  // Un proceso sin actividad todavía (por ejemplo, la IA evaluadora antes de la primera práctica) no está caído
+  const operational = services.filter((s) => ['ok', 'client', 'idle', 'running'].includes(s.state)).length;
   const checking = api.state === 'loading';
 
   const usersTotal = ov?.users.total || 0;
@@ -157,7 +183,10 @@ export default function SistemaHome() {
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-ink">{s.name}</div>
-                    <div className="text-xs text-faint truncate">{s.detail}</div>
+                    <div className="text-xs text-faint truncate">
+                      {s.detail}
+                      {s.extra ? ` · ${s.extra}` : ''}
+                    </div>
                   </div>
                   {s.ms != null && s.state === 'ok' && <span className="hidden sm:inline text-xs text-faint font-mono">{s.ms} ms</span>}
                   <span className="inline-flex items-center gap-1.5 text-xs text-muted whitespace-nowrap">
@@ -287,6 +316,11 @@ export default function SistemaHome() {
           })}
         </ul>
       </Card>
+
+      {/* Jobs de borrado y anonimización, por organización */}
+      <div className="mt-6">
+        <JobsPanel />
+      </div>
 
       {/* Métricas administrativas */}
       <MetricsDashboard />

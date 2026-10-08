@@ -136,9 +136,41 @@ export default function MetricsDashboard() {
         {isSystem && !isTenantScope && (
           <Stat label="Organizaciones creadas en el período" value={loading && !data ? '—' : (summary.organizationsCreated ?? 0)} icon="plus" hint="Según su fecha de creación" />
         )}
+        {isSystem && !isTenantScope && (
+          <Stat
+            label="Clientes ganados"
+            value={loading && !data ? '—' : (summary.organizationsWon ?? 0)}
+            icon="plus"
+            hint="Organizaciones creadas en el período, incluidas las que luego se eliminaron"
+          />
+        )}
+        {isSystem && !isTenantScope && (
+          <Stat
+            label="Clientes perdidos"
+            value={loading && !data ? '—' : (summary.organizationsLost ?? 0)}
+            icon="trash"
+            hint={`Organizaciones eliminadas en el período · ${summary.organizationsSuspended ?? 0} suspensión(es)`}
+          />
+        )}
+        <Stat
+          label="Usuarios conectados"
+          value={loading && !data ? '—' : (summary.connected?.total ?? 0)}
+          icon="zap"
+          hint={`Con actividad en los últimos ${summary.connected?.windowMinutes ?? 5} min · ${summary.connected?.byRole?.VOCERO ?? 0} vocero(s)`}
+        />
         <Stat label="Voceros activos" value={loading && !data ? '—' : (summary.vocerosActive ?? 0)} icon="users" />
         <Stat label="Entrenamientos" value={loading && !data ? '—' : (summary.sessions ?? 0)} icon="activity" hint="Prácticas completadas en el período" />
         <Stat label="Frecuencia" value={loading && !data ? '—' : (summary.avgPerVocero ?? 0)} icon="target" hint="Promedio de entrenamientos por vocero" />
+        <Stat
+          label="Cada cuánto entrenan"
+          value={loading && !data ? '—' : summary.avgDaysBetween != null ? `${summary.avgDaysBetween} d` : '—'}
+          icon="calendar"
+          hint={
+            summary.avgDaysBetween != null
+              ? `Días entre dos entrenamientos del mismo vocero${summary.perWeek != null ? ` · ${summary.perWeek} por semana en total` : ''}`
+              : 'Nadie entrenó dos veces en el período'
+          }
+        />
       </div>
 
       {/* Entrenamiento de voceros */}

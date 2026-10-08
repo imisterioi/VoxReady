@@ -5,6 +5,7 @@ import Icon from '../../components/Icon';
 import { Badge, Button, Card, EmptyState, Field, Modal, PageHeader, Segmented } from '../../components/ui';
 import useApiData from '../../hooks/useApiData';
 import { apiFetch } from '../../lib/api';
+import { DEFAULT_INTERVIEW, InterviewConfigFields, InterviewSummary, toInterviewForm, toInterviewPayload, totalTurns } from '../../components/InterviewConfig';
 
 // Biblioteca de escenarios generales (GET/POST/PUT/DELETE /api/library/themes).
 // Los crea el equipo de VoxReady, no pertenecen a ninguna organización y todos los
@@ -16,7 +17,7 @@ const CATEGORIES = [
 ];
 const OPTICS = ['Empática', 'Formal', 'Técnica'];
 const FILTERS = [{ value: 'TODOS', label: 'Todos' }, ...CATEGORIES];
-const EMPTY = { title: '', category: 'CRISIS', optic: 'Empática', context: '', keyMessages: '', redLines: '' };
+const EMPTY = { title: '', category: 'CRISIS', optic: 'Empática', context: '', keyMessages: '', redLines: '', interview: DEFAULT_INTERVIEW };
 
 const toLines = (text) => text.split('\n').map((l) => l.trim()).filter(Boolean);
 
@@ -40,6 +41,7 @@ function ScenarioModal({ open, scenario, onClose, onSaved }) {
             context: scenario.context,
             keyMessages: scenario.keyMessages.join('\n'),
             redLines: scenario.redLines.join('\n'),
+            interview: toInterviewForm(scenario.interview),
           }
         : EMPTY,
     );
@@ -49,9 +51,11 @@ function ScenarioModal({ open, scenario, onClose, onSaved }) {
 
   const save = async () => {
     setError('');
-    const body = { ...form, keyMessages: toLines(form.keyMessages), redLines: toLines(form.redLines) };
+    const body = { ...form, keyMessages: toLines(form.keyMessages), redLines: toLines(form.redLines), interview: toInterviewPayload(form.interview) };
     if (!body.title.trim() || !body.context.trim()) return setError('El nombre y el contexto son obligatorios.');
     if (!body.keyMessages.length) return setError('Agrega al menos un mensaje clave.');
+    if (!(body.interview.questionCount >= 1)) return setError('La entrevista debe tener al menos una pregunta.');
+    if (totalTurns(body.interview) > 30) return setError('La entrevista no puede superar los 30 turnos entre preguntas y repreguntas.');
     try {
       setSaving(true);
       if (scenario) await apiFetch(`/api/library/themes/${scenario.id}`, { method: 'PUT', body });
@@ -115,6 +119,10 @@ function ScenarioModal({ open, scenario, onClose, onSaved }) {
         <Field label="Líneas rojas" hint="Una por línea. Lo que el vocero nunca debe decir.">
           <textarea className="textarea min-h-[72px]" value={form.redLines} onChange={set('redLines')} />
         </Field>
+        <div className="pt-4 border-t border-line">
+          <h3 className="text-sm font-semibold text-ink mb-4">Configuración de la entrevista</h3>
+          <InterviewConfigFields value={form.interview} onChange={(interview) => setForm((f) => ({ ...f, interview }))} />
+        </div>
         {error && (
           <p className="flex items-center gap-2 text-[13px] text-danger">
             <Icon name="alert" size={14} />
@@ -205,6 +213,7 @@ export default function Biblioteca() {
                   </div>
                 </div>
                 <p className="text-[13px] text-muted mt-2 leading-relaxed line-clamp-3 flex-1">{t.context}</p>
+                <InterviewSummary interview={t.interview} className="mt-4 flex flex-wrap items-center gap-2" />
                 <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                   <span>{t.keyMessages.length} mensaje(s) clave</span>
                   <span>{t.redLines.length} línea(s) roja(s)</span>

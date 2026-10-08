@@ -3,6 +3,7 @@
 // (La creación de temas es POST /api/themes, en index.js.)
 const { requireAuth } = require('../auth');
 const { parseList } = require('../ai/interviewer');
+const { normalizeInterviewConfig, resolveInterviewConfig } = require('../ai/interviewConfig');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
 
@@ -16,6 +17,7 @@ const toApiTheme = (t) => ({
   redLines: parseList(t.redLines),
   publics: parseList(t.publics),
   availableToAllVoceros: t.availableToAllVoceros,
+  interview: resolveInterviewConfig(t),
   voceroIds: (t.assignments || []).map((a) => a.userId),
   sessions: t._count?.sessions ?? 0,
 });
@@ -98,6 +100,8 @@ module.exports = function registerThemeRoutes(app, prisma) {
           optic: optic || null,
           category: category || theme.category,
           availableToAllVoceros: Boolean(availableToAllVoceros),
+          // Si no se envía, se conserva la configuración de entrevista actual
+          ...(req.body.interview !== undefined ? { interviewConfig: normalizeInterviewConfig(req.body.interview) } : {}),
         },
       });
       await syncAssignments(prisma, updated, voceroIds);

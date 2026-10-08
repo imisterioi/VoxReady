@@ -11,6 +11,13 @@ import SessionVideo from '../components/SessionVideo';
 
 const AREA_ICONS = { expression: 'person', voice: 'mic', coherence: 'message', empathy: 'users' };
 
+// 75 → "1 min 15 s" · 8.4 → "8 s"
+function formatSeconds(value) {
+  if (value == null) return '—';
+  const total = Math.round(value);
+  return total >= 60 ? `${Math.floor(total / 60)} min ${total % 60} s` : `${total} s`;
+}
+
 // Informe tipo coach de una sesión real (GET /api/sessions/:id).
 // Sin ?sesion= muestra la práctica más reciente del vocero.
 // audience: 'user' (vocero), 'admin' (admin del cliente) o 'master' (configurador maestro).
@@ -75,6 +82,9 @@ export default function InformeCoach({ audience = 'user' }) {
   const weakest = measuredAreas.length ? measuredAreas.reduce((a, b) => (b.score < a.score ? b : a)).key : null;
   const transcript = session.transcript || [];
   const perQuestion = Object.fromEntries((report.porPregunta || []).map((p) => [Number(p.pregunta), p]));
+
+  const sens = report.sensibilidad; // las prácticas anteriores a este análisis no lo tienen
+  const perQuestionVideo = Object.fromEntries((sens?.porPregunta || []).map((p) => [Number(p.pregunta), p]));
 
   const lessons = lessonsForArea(weakest, 2);
   const review = session.review;
@@ -253,6 +263,54 @@ export default function InformeCoach({ audience = 'user' }) {
         ))}
       </div>
 
+      {/* Análisis de sensibilidad del video: mirada y risa */}
+      {sens && (
+        <Card className="mb-6">
+          <CardHeader
+            title="Análisis de sensibilidad del video"
+            description={`Medido con la cámara durante ${formatSeconds(sens.totalSeconds)} de entrevista`}
+          />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[
+              { label: 'Mirando a la cámara', value: formatSeconds(sens.facingSeconds), hint: sens.facingPct != null ? `${sens.facingPct}% del tiempo` : null, icon: 'eye' },
+              { label: 'Mirando a otro lado', value: formatSeconds(sens.awaySeconds), hint: sens.awayPct != null ? `${sens.awayPct}% del tiempo` : null, icon: 'search' },
+              {
+                label: 'Sonriendo o riendo',
+                value: sens.smileSeconds != null ? formatSeconds(sens.smileSeconds) : '—',
+                hint: sens.smileSeconds != null ? (sens.smilePct != null ? `${sens.smilePct}% del tiempo` : null) : 'No se detectó el rostro',
+                icon: 'sparkles',
+              },
+              {
+                label: 'Coherencia de la risa',
+                value: sens.risa?.detectada ? (sens.risa.consistencia != null ? `${sens.risa.consistencia}` : '—') : '—',
+                suffix: sens.risa?.detectada && sens.risa.consistencia != null ? ' /100' : '',
+                hint: !sens.risa ? 'No se pudo medir' : sens.risa.detectada ? 'Qué tan acorde fue con lo que decías' : 'No te reíste durante la entrevista',
+                icon: 'message',
+                alert: sens.risa?.detectada && sens.risa.consistencia != null && sens.risa.consistencia < 50,
+              },
+            ].map((item) => (
+              <div key={item.label} className={cx('rounded-xl border p-4', item.alert ? 'border-danger/25 bg-danger/[0.04]' : 'border-line')}>
+                <div className="flex items-center justify-between text-muted">
+                  <span className="text-[13px]">{item.label}</span>
+                  <Icon name={item.icon} size={15} className="text-faint" />
+                </div>
+                <div className="text-[24px] font-semibold tracking-tight text-ink tabular-nums mt-2">
+                  {item.value}
+                  {item.suffix && <span className="text-sm text-faint font-normal">{item.suffix}</span>}
+                </div>
+                {item.hint && <div className="text-xs text-faint mt-1">{item.hint}</div>}
+              </div>
+            ))}
+          </div>
+          {sens.risa?.detectada && sens.risa.comentario && (
+            <p className="text-[13px] text-ink rounded-xl bg-subtle/60 p-3 flex gap-2 mt-4">
+              <Icon name="sparkles" size={14} className="text-accent-fg mt-0.5 shrink-0" />
+              {sens.risa.comentario}
+            </p>
+          )}
+        </Card>
+      )}
+
       {/* Mensajes clave y líneas rojas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         <Card>
@@ -325,6 +383,12 @@ export default function InformeCoach({ audience = 'user' }) {
                       <Badge tone={turn.metrics?.fillers ? 'warning' : 'outline'}>{turn.metrics?.fillers || 0} muletillas</Badge>
                       {turn.metrics?.latencyMs != null && <Badge tone="outline">Empezaste en {(turn.metrics.latencyMs / 1000).toFixed(1)} s</Badge>}
                       {turn.metrics?.longPauses > 0 && <Badge tone="outline">{turn.metrics.longPauses} pausas largas</Badge>}
+                      {perQuestionVideo[i + 1]?.awaySeconds >= 1 && (
+                        <Badge tone="outline">Miraste a otro lado {formatSeconds(perQuestionVideo[i + 1].awaySeconds)}</Badge>
+                      )}
+                      {perQuestionVideo[i + 1]?.smileSeconds >= 0.5 && (
+                        <Badge tone="warning">Sonreíste o reíste {formatSeconds(perQuestionVideo[i + 1].smileSeconds)}</Badge>
+                      )}
                     </div>
                     {feedback?.comentario && (
                       <p className="text-[13px] text-ink rounded-xl bg-subtle/60 p-3 flex gap-2">

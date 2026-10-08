@@ -67,6 +67,11 @@ function scrubReport(report) {
     out.measured = { ...out.measured };
     if (out.measured.voice && typeof out.measured.voice === 'object') out.measured.voice = scrubTurnMetrics(out.measured.voice);
   }
+  // Análisis de sensibilidad: se conservan los tiempos, no el comentario sobre la risa
+  if (out.sensibilidad?.risa && typeof out.sensibilidad.risa === 'object') {
+    const { comentario, ...rest } = out.sensibilidad.risa;
+    out.sensibilidad = { ...out.sensibilidad, risa: rest };
+  }
   return out;
 }
 

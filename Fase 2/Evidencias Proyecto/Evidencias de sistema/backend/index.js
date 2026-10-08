@@ -11,6 +11,7 @@ require('dotenv').config();
 // Claves privadas (API de IA) en un archivo que git ignora
 require('dotenv').config({ path: path.join(__dirname, '.env.local') });
 const { generateQuestion, warmUp } = require('./ai/interviewer');
+const { LIMITS: INTERVIEW_LIMITS, normalizeInterviewConfig, resolveInterviewConfig, turnPlan } = require('./ai/interviewConfig');
 const { requireAuth } = require('./auth');
 const registerAccountRoutes = require('./routes/accounts');
 const registerSessionRoutes = require('./routes/sessions');
@@ -19,7 +20,9 @@ const registerThemeRoutes = require('./routes/themes');
 const registerDeletionRoutes = require('./routes/deletionRequests');
 const registerLibraryRoutes = require('./routes/library');
 const registerMetricsRoutes = require('./routes/metrics');
+const registerSystemRoutes = require('./routes/system');
 const { processPendingTenantDeletions } = require('./lib/tenantDeletion');
+const { registerJob, runJob } = require('./lib/runtimeStatus');
 
 // Inicializar Express y Prisma
 const app = express();
@@ -43,6 +46,7 @@ registerThemeRoutes(app, prisma);
 registerDeletionRoutes(app, prisma);
 registerLibraryRoutes(app, prisma);
 registerMetricsRoutes(app, prisma);
+registerSystemRoutes(app, prisma);
 
 // Endpoint de prueba
 app.get('/api/health', (req, res) => {
@@ -123,6 +127,7 @@ app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
       optic: assignment.theme.optic,
       publics: assignment.theme.publics,
       category: assignment.theme.category,
+      interview: resolveInterviewConfig(assignment.theme),
       status: assignment.status,
       assignedAt: assignment.assignedAt
     }));
@@ -143,6 +148,7 @@ app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
       optic: theme.optic,
       publics: theme.publics,
       category: theme.category,
+      interview: resolveInterviewConfig(theme),
       status: 'PENDING',
       assignedAt: theme.createdAt
     }));
@@ -439,15 +445,69 @@ app.post('/api/master-pattern', requireAuth(prisma, ['master', 'system']), async
   }
 });
 
-// Entrevistador IA: devuelve la siguiente pregunta según el escenario y la conversación
-// Body: { themeId?: string, history?: [{ role: 'interviewer' | 'vocero', text: string }] }
-app.post('/api/interviewer/next-question', async (req, res) => {
+// Límite de preguntas por usuario: la IA es un recurso compartido (cuota de NVIDIA)
+const QUESTION_WINDOW_MS = 5 * 60 * 1000;
+const QUESTION_LIMIT = 60;
+const questionLog = new Map(); // userId → momentos de las últimas solicitudes
+
+function questionAllowed(userId, now = Date.now()) {
+  const recent = (questionLog.get(userId) || []).filter((at) => now - at < QUESTION_WINDOW_MS);
+  if (recent.length >= QUESTION_LIMIT) {
+    questionLog.set(userId, recent);
+    return false;
+  }
+  recent.push(now);
+  questionLog.set(userId, recent);
+  return true;
+}
+
+// La conversación la envía el navegador: se acota antes de pasarla a la IA
+function cleanHistory(history) {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter((turn) => turn && typeof turn === 'object')
+    .slice(-2 * INTERVIEW_LIMITS.totalTurns)
+    .map((turn) => ({
+      role: turn.role === 'interviewer' ? 'interviewer' : 'vocero',
+      text: String(turn.text ?? '').slice(0, 2000)
+    }));
+}
+
+// Entrevistador IA: devuelve la siguiente pregunta según el escenario y la conversación.
+// Body: { sessionId?: string, history?: [{ role: 'interviewer' | 'vocero', text: string }] }
+//  - Con sessionId: la sesión debe ser del usuario autenticado y estar en curso; el
+//    escenario (y su configuración de entrevista) se toma de la sesión, no del cliente.
+//  - Sin sessionId: entrevista genérica de prueba (Laboratorio).
+app.post('/api/interviewer/next-question', requireAuth(prisma), async (req, res) => {
   try {
-    const { themeId, history = [] } = req.body || {};
+    const { sessionId } = req.body || {};
+    const history = cleanHistory(req.body?.history);
 
     let theme = null;
-    if (themeId) {
-      theme = await prisma.theme.findUnique({ where: { id: themeId } });
+    if (sessionId) {
+      const session = await prisma.session.findUnique({
+        where: { id: String(sessionId) },
+        include: { theme: true }
+      });
+      if (!session || session.userId !== req.user.id) {
+        return res.status(404).json({ status: 'error', mensaje: 'Sesión no encontrada.' });
+      }
+      if (session.score != null) {
+        return res.status(409).json({ status: 'error', mensaje: 'Esta entrevista ya fue evaluada.' });
+      }
+      theme = session.theme;
+
+      const plan = turnPlan(
+        normalizeInterviewConfig(theme.interviewConfig),
+        history.filter((turn) => turn.role === 'interviewer').length
+      );
+      if (plan.done) {
+        return res.status(409).json({ status: 'error', mensaje: 'La entrevista ya completó todas sus preguntas.' });
+      }
+    }
+
+    if (!questionAllowed(req.user.id)) {
+      return res.status(429).json({ status: 'error', mensaje: 'Demasiadas preguntas en poco tiempo. Espera unos minutos.' });
     }
 
     const result = await generateQuestion({ theme, history });
@@ -455,6 +515,11 @@ app.post('/api/interviewer/next-question', async (req, res) => {
     res.json({
       status: 'ok',
       question: result.question,
+      // Posición dentro de la entrevista: número de turno, total y si es repregunta
+      kind: result.plan.kind,
+      number: result.plan.number,
+      total: result.plan.total,
+      interview: theme ? resolveInterviewConfig(theme) : null,
       model: result.model,
       ms: result.ms
     });
@@ -486,9 +551,12 @@ app.listen(PORT, (error) => {
 
   // Eliminaciones de tenants pendientes (estado DELETING persistente): al arrancar y cada 5 min.
   // Garantiza que la eliminación continúe tras un fallo o reinicio, sin depender de la petición HTTP.
-  const runPendingDeletions = () => processPendingTenantDeletions(prisma).catch((e) => console.warn('[Eliminación] error:', e.message));
+  const DELETION_EVERY_MS = 5 * 60 * 1000;
+  registerJob('tenant-deletion', { label: 'Eliminación de organizaciones', everyMs: DELETION_EVERY_MS });
+  const runPendingDeletions = () =>
+    runJob('tenant-deletion', () => processPendingTenantDeletions(prisma)).catch((e) => console.warn('[Eliminación] error:', e.message));
   setTimeout(runPendingDeletions, 6000);
-  setInterval(runPendingDeletions, 5 * 60 * 1000).unref();
+  setInterval(runPendingDeletions, DELETION_EVERY_MS).unref();
 });
 
 app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {
@@ -539,6 +607,8 @@ app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {
 
         availableToAllVoceros:
           Boolean(availableToAllVoceros),
+
+        interviewConfig: normalizeInterviewConfig(req.body.interview),
 
         tenantId: user.tenantId,
       },

@@ -16,6 +16,7 @@ const {
 const { anonymizeUser } = require('../lib/anonymize');
 const { syncUserPause } = require('../lib/retentionPause');
 const { startTenantDeletion, processTenantDeletion } = require('../lib/tenantDeletion');
+const presence = require('../lib/presence');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 6;
@@ -71,6 +72,17 @@ module.exports = function registerAccountRoutes(app, prisma) {
 
   app.get('/api/auth/me', auth(), (req, res) => {
     res.json({ status: 'ok', user: toApiUser(req.user) });
+  });
+
+  // Latido del frontend: mantiene al usuario como "conectado" (lo registra requireAuth)
+  app.post('/api/auth/heartbeat', auth(), (req, res) => {
+    res.json({ status: 'ok' });
+  });
+
+  // Cierre de sesión: el usuario deja de contarse como conectado de inmediato
+  app.post('/api/auth/logout', auth(), (req, res) => {
+    presence.forget(req.user.id);
+    res.json({ status: 'ok' });
   });
 
   // ---------------------------------------------------- Organizaciones
@@ -151,6 +163,12 @@ module.exports = function registerAccountRoutes(app, prisma) {
         const updated = await tx.tenant.update({ where: { id: req.params.id }, data: { status } });
         const users = await tx.user.findMany({ where: { tenantId: updated.id }, select: { id: true } });
         for (const u of users) await syncUserPause(tx, u.id);
+        // Historial para las métricas de clientes (solo si el estado realmente cambió)
+        if (existing.status !== status) {
+          await tx.tenantEvent.create({
+            data: { tenantId: updated.id, type: status === 'SUSPENDED' ? 'SUSPENDED' : 'REACTIVATED', tenantCreatedAt: updated.createdAt },
+          });
+        }
         return updated;
       });
       res.json({ status: 'ok', tenant });

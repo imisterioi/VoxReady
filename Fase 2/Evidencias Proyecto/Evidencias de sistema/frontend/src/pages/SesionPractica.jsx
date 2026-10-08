@@ -18,7 +18,7 @@ import { analyzeText, createRecognizer, speechRecognitionSupported } from '../li
 //  3. Tras cada respuesta la IA repregunta según lo que dijiste.
 //  4. Al terminar se sube la grabación y se pasa al análisis con la IA evaluadora.
 
-const TOTAL_QUESTIONS = 5;
+const DEFAULT_QUESTIONS = 5; // hasta que el backend informe el total configurado en el escenario
 const NO_ANSWER_MS = 12000; // sin hablar tras la pregunta → el entrevistador interviene
 const END_SILENCE_MS = 6000; // silencio después de hablar → se da por terminada la respuesta
 export const RESULT_KEY = 'voxready_practice_result';
@@ -81,6 +81,14 @@ export default function SesionPractica() {
   const [mediaWarning, setMediaWarning] = useState('');
   const [textMode, setTextModeState] = useState(!speechRecognitionSupported);
   const textModeRef = useRef(!speechRecognitionSupported);
+
+  // Configuración de la entrevista del escenario (preguntas, repreguntas, tiempo por respuesta).
+  // La confirma el backend con cada pregunta; lo guardado en el navegador es solo el valor inicial.
+  const interviewRef = useRef(scenario?.interview || null);
+  const totalRef = useRef(scenario?.interview?.totalTurns || DEFAULT_QUESTIONS);
+  const [total, setTotal] = useState(totalRef.current);
+  const [isFollowUp, setIsFollowUp] = useState(false);
+  const [answerLeft, setAnswerLeft] = useState(null); // segundos que quedan para responder (si hay límite)
 
   const setPhase = (p) => {
     phaseRef.current = p;
@@ -186,16 +194,23 @@ export default function SesionPractica() {
       { role: 'interviewer', text: turn.question },
       { role: 'vocero', text: turn.answer },
     ]);
+    // El escenario lo determina el backend a partir de la sesión (no se envía el tema)
     const data = await apiFetch('/api/interviewer/next-question', {
       method: 'POST',
-      body: { themeId: scenario?.id, history },
-      auth: false,
+      body: { sessionId: sessionIdRef.current, history },
     });
+    if (data.total) {
+      totalRef.current = data.total;
+      setTotal(data.total);
+    }
+    if (data.interview) interviewRef.current = data.interview;
+    setIsFollowUp(data.kind === 'followup');
     return data.question;
   }
 
   function askQuestion(text) {
     questionRef.current = text;
+    poseRef.current?.beginSegment(); // el tramo incluye la pregunta: también importa cómo la escucha
     setQuestion(text);
     setAnswerLive({ finalText: '', interim: '' });
     setTyped('');
@@ -236,6 +251,15 @@ export default function SesionPractica() {
       if (textModeRef.current) return; // respondiendo por escrito no hay límite de tiempo
 
       const now = performance.now();
+
+      // Tiempo máximo por respuesta (si el escenario lo define)
+      const maxAnswerMs = (interviewRef.current?.maxAnswerSeconds || 0) * 1000;
+      if (maxAnswerMs) {
+        const left = maxAnswerMs - (now - listenStartRef.current);
+        setAnswerLeft(Math.max(0, Math.ceil(left / 1000)));
+        if (left <= 0) return finishAnswer();
+      }
+
       const lastVoice = audioRef.current.lastVoiceAt;
       const spoke = lastVoice > listenStartRef.current;
       const quietFor = now - (spoke ? lastVoice : listenStartRef.current);
@@ -249,6 +273,7 @@ export default function SesionPractica() {
     if (phaseRef.current !== 'listening') return;
     clearInterval(watchdogRef.current);
     setSilenceIn(null);
+    setAnswerLeft(null);
     setPhase('thinking');
 
     const spoken = recognizerRef.current?.stop() || '';
@@ -270,11 +295,13 @@ export default function SesionPractica() {
         speakingMs: audio?.speakingMs ?? null,
         longPauses: audio?.longPauses ?? 0,
         volumeVariation: audio?.volumeVariation ?? null,
+        // Mirada y risa durante esta pregunta y su respuesta (análisis de sensibilidad)
+        video: poseRef.current?.endSegment() ?? null,
       },
     });
     setTurnCount(turnsRef.current.length);
 
-    if (endInterview || turnsRef.current.length >= TOTAL_QUESTIONS) {
+    if (endInterview || turnsRef.current.length >= totalRef.current) {
       finishInterview();
       return;
     }
@@ -432,7 +459,7 @@ export default function SesionPractica() {
   }[phase];
 
   const liveText = [answerLive.finalText, answerLive.interim].filter(Boolean).join(' ');
-  const currentNumber = Math.min(turnCount + (phase === 'thinking' || phase === 'finishing' ? 0 : 1), TOTAL_QUESTIONS);
+  const currentNumber = Math.min(turnCount + (phase === 'thinking' || phase === 'finishing' ? 0 : 1), total);
 
   return (
     <>
@@ -518,7 +545,7 @@ export default function SesionPractica() {
         {/* Pregunta y respuesta en vivo */}
         <div className="px-4 md:px-8 pt-8 pb-6 text-center min-h-[180px]">
           <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-4">
-            {phase === 'loading' ? 'Preparando' : `${t.qL} · ${currentNumber} de ${TOTAL_QUESTIONS}`}
+            {phase === 'loading' ? 'Preparando' : `${isFollowUp ? 'Repregunta' : t.qL} · ${currentNumber} de ${total}`}
           </div>
           <p className="font-display font-medium text-[22px] md:text-[28px] leading-[1.35] tracking-[-0.015em] text-white max-w-3xl mx-auto">
             {question ? `“${question}”` : '…'}
@@ -546,7 +573,11 @@ export default function SesionPractica() {
           )}
 
           <p className="mt-4 text-xs text-white/40 flex items-center justify-center gap-1.5">
-            {phase === 'listening' && silenceIn ? (
+            {phase === 'listening' && !textMode && answerLeft != null && answerLeft <= 10 ? (
+              <>
+                <Icon name="clock" size={12} /> Te quedan {answerLeft}s para responder
+              </>
+            ) : phase === 'listening' && silenceIn ? (
               <>
                 <Icon name="clock" size={12} /> Silencio detectado · continuamos en {silenceIn}s
               </>
@@ -598,10 +629,10 @@ export default function SesionPractica() {
 
           <div className="flex items-center gap-3 md:flex-1 md:max-w-xs md:mx-auto">
             <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-              <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${(turnCount / TOTAL_QUESTIONS) * 100}%` }} />
+              <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${(turnCount / total) * 100}%` }} />
             </div>
             <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
-              {turnCount} de {TOTAL_QUESTIONS} respondidas
+              {turnCount} de {total} respondidas
             </span>
           </div>
 

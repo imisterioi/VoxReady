@@ -12,6 +12,8 @@
 //   AI_EVAL_FALLBACK_MODEL=nvidia/nemotron-3-super-120b-a12b
 const { parseList } = require('./interviewer');
 const { resolveConfig } = require('./patternConfig');
+const { AGGRESSIVENESS, normalizeInterviewConfig } = require('./interviewConfig');
+const { recordAi } = require('../lib/runtimeStatus');
 
 const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 const DEFAULT_EVAL_MODEL = 'moonshotai/kimi-k3';
@@ -107,6 +109,60 @@ function scoreBody(body = {}, cfg) {
   return { score: round(average(details)), details };
 }
 
+// ------------------------------------- Análisis de sensibilidad del video
+
+// Por debajo de esto no se considera que el vocero se haya reído (parpadeos del detector)
+const MIN_SMILE_SECONDS = 1;
+const seconds = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 10) / 10 : null);
+
+// ¿Se midió la risa y hubo suficiente como para juzgar si fue coherente con el mensaje?
+const smileDetected = (body) => Boolean(body?.available && body.faceAvailable && num(body.smileSeconds, 0) >= MIN_SMILE_SECONDS);
+
+// Cuánto tiempo miró a la cámara, cuánto a otro lado, cuánto se rió y qué tan
+// coherente fue esa risa con lo que decía (esto último lo juzga la IA evaluadora).
+function buildSensitivity(body, transcript, judged) {
+  if (!body?.available || body.analyzedSeconds == null) return null;
+  const total = num(body.analyzedSeconds, 0);
+  const pct = (v) => (total > 0 && v != null ? round(clamp((v / total) * 100)) : null);
+  const facing = seconds(body.facingSeconds);
+  const away = seconds(body.awaySeconds);
+  const smile = body.faceAvailable ? seconds(body.smileSeconds) : null;
+
+  let risa = null; // null = no se pudo medir (sin detección de rostro)
+  if (smile != null) {
+    risa = smileDetected(body)
+      ? {
+          detectada: true,
+          consistencia: judged?.consistencia != null && Number.isFinite(Number(judged.consistencia)) ? round(clamp(Number(judged.consistencia))) : null,
+          comentario: String(judged?.comentario || ''),
+        }
+      : { detectada: false, consistencia: null, comentario: '' };
+  }
+
+  return {
+    totalSeconds: seconds(total),
+    facingSeconds: facing,
+    awaySeconds: away,
+    smileSeconds: smile,
+    facingPct: pct(facing),
+    awayPct: pct(away),
+    smilePct: pct(smile),
+    risa,
+    porPregunta: transcript
+      .map((t, i) =>
+        t?.metrics?.video
+          ? {
+              pregunta: i + 1,
+              facingSeconds: seconds(t.metrics.video.facingSeconds),
+              awaySeconds: seconds(t.metrics.video.awaySeconds),
+              smileSeconds: body.faceAvailable ? seconds(t.metrics.video.smileSeconds) : null,
+            }
+          : null,
+      )
+      .filter(Boolean),
+  };
+}
+
 // ------------------------------------------------------ IA (contenido)
 
 const STRICTNESS = {
@@ -126,10 +182,14 @@ function buildPrompt({ theme, transcript, voice, body, lighting, cfg }) {
   const keyMessages = parseList(theme.keyMessages);
   const redLines = parseList(theme.redLines);
 
+  const withSmile = smileDetected(body);
+  const pressure = AGGRESSIVENESS[normalizeInterviewConfig(theme.interviewConfig).aggressiveness];
+
   const conversation = transcript
     .map((t, i) => {
+      const smiled = withSmile && num(t.metrics?.video?.smileSeconds, 0) >= 0.5 ? `, sonrió o rió ${num(t.metrics.video.smileSeconds, 0).toFixed(1)} s` : '';
       const extra = t.metrics
-        ? ` [${t.metrics.wpm ? `${Math.round(t.metrics.wpm)} pal/min, ` : ''}${t.metrics.fillers ?? 0} muletillas${t.metrics.latencyMs != null ? `, tardó ${(t.metrics.latencyMs / 1000).toFixed(1)} s en empezar` : ''}]`
+        ? ` [${t.metrics.wpm ? `${Math.round(t.metrics.wpm)} pal/min, ` : ''}${t.metrics.fillers ?? 0} muletillas${t.metrics.latencyMs != null ? `, tardó ${(t.metrics.latencyMs / 1000).toFixed(1)} s en empezar` : ''}${smiled}]`
         : '';
       return `P${i + 1} (periodista): ${t.question}\nR${i + 1} (vocero): ${t.answer?.trim() || '(no respondió)'}${extra}`;
     })
@@ -142,6 +202,11 @@ function buildPrompt({ theme, transcript, voice, body, lighting, cfg }) {
     body?.available
       ? `Cuerpo: mirada a cámara ${Math.round(body.facingCamera * 100)}% del tiempo, presencia ${Math.round(body.presence * 100)}%, inclinación de hombros ${body.shoulderTilt?.toFixed(1)}°, movimiento de cabeza ${body.headMovement > 0.006 ? 'alto (nervioso)' : body.headMovement < 0.001 ? 'muy bajo (rígido)' : 'adecuado'}, gestos de manos ${body.handActivity > 0.012 ? 'excesivos' : body.handActivity < 0.002 ? 'casi nulos' : 'moderados'}.`
       : 'Cuerpo: no se pudo medir (sin cámara).',
+    body?.available && body.analyzedSeconds != null
+      ? `Mirada: ${num(body.facingSeconds, 0).toFixed(0)} s mirando a la cámara y ${num(body.awaySeconds, 0).toFixed(0)} s mirando a otro lado (de ${num(body.analyzedSeconds, 0).toFixed(0)} s).${
+          body.faceAvailable ? ` Sonrisa o risa: ${num(body.smileSeconds, 0).toFixed(1)} s en total.` : ''
+        }`
+      : '',
     lighting?.average != null ? `Iluminación promedio: ${Math.round(lighting.average)}/255.` : '',
   ]
     .filter(Boolean)
@@ -156,6 +221,7 @@ function buildPrompt({ theme, transcript, voice, body, lighting, cfg }) {
   const user = `Escenario: ${theme.title}
 Contexto: ${theme.context}
 Óptica institucional esperada: ${theme.optic || 'no definida'}
+Nivel de presión del entrevistador: ${pressure.label}. Evalúa el desempeño considerando ese nivel de presión.
 Mensajes clave que debía sostener:
 ${keyMessages.map((m, i) => `${i + 1}. ${m}`).join('\n') || '(no definidos)'}
 Líneas rojas (no debía decir):
@@ -186,7 +252,12 @@ ${criteriaText(cfg.empathy)}
   "mejoras": ["<3 acciones concretas para mejorar>"],
   "mensajesClave": [{"mensaje": "<mensaje clave>", "cubierto": true|false}],
   "lineasRojas": [{"linea": "<línea roja>", "cruzada": true|false, "evidencia": "<frase del vocero o vacío>"}],
-  "porPregunta": [{"pregunta": <número>, "puntaje": <0-100>, "comentario": "<1 frase>"}]
+  "porPregunta": [{"pregunta": <número>, "puntaje": <0-100>, "comentario": "<1 frase>"}]${
+    withSmile
+      ? `,
+  "risa": {"consistencia": <0-100: qué tan coherente fue sonreír o reír con lo que se estaba diciendo en ese momento; 0 = totalmente fuera de lugar para la gravedad del tema, 100 = apropiado>, "comentario": "<1 frase que explique en qué momento sonrió o rió y si correspondía>"}`
+      : ''
+  }
 }`;
 
   return [
@@ -281,8 +352,10 @@ async function judgeContent(input) {
       ),
     );
     race.abort(); // cancela las evaluaciones que siguen pendientes
+    recordAi('evaluator', true, winner);
     return winner;
   } catch {
+    recordAi('evaluator', false, { error: 'Ningún modelo entregó una evaluación válida' });
     throw new Error('La IA evaluadora no respondió. Intenta nuevamente.');
   }
 }
@@ -297,6 +370,7 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
   }
 
   const cfg = resolveConfig(pattern);
+  const interview = normalizeInterviewConfig(theme.interviewConfig);
   const voice = scoreVoice(metrics?.voice, cfg);
   const body = scoreBody(metrics?.body, cfg);
   const { judgement, model, ms } = await judgeContent({
@@ -356,10 +430,12 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
     mensajesClave: judgement.mensajesClave || [],
     lineasRojas: judgement.lineasRojas || [],
     porPregunta: judgement.porPregunta || [],
+    sensibilidad: buildSensitivity(metrics?.body, transcript, judgement.risa),
+    interview: { aggressiveness: interview.aggressiveness, questionCount: interview.questionCount, followUps: interview.followUps },
     measured: { voice: metrics?.voice || null, body: metrics?.body || null, lighting: metrics?.lighting || null },
     ai: { evaluator: model, ms },
     generatedAt: new Date().toISOString(),
   };
 }
 
-module.exports = { evaluateSession };
+module.exports = { evaluateSession, buildSensitivity };

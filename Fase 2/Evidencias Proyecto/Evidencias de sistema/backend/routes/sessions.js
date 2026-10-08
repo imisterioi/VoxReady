@@ -5,6 +5,10 @@ const { requireAuth } = require('../auth');
 const { evaluateSession } = require('../ai/evaluator');
 const { removeVideoFiles } = require('../lib/anonymize');
 const { effectiveElapsedMs, reconcilePauses } = require('../lib/retentionPause');
+const { registerJob, runJob } = require('../lib/runtimeStatus');
+
+const RETENTION_JOB = 'retention';
+const RETENTION_EVERY_MS = 6 * 60 * 60 * 1000;
 
 // Mismo directorio donde el endpoint de tu compañero guarda las grabaciones
 const SESSIONS_DIR = path.join(__dirname, '..', 'uploads', 'sessions');
@@ -52,6 +56,13 @@ function cleanReportForRetention(report) {
     changed = true;
   }
 
+  // Análisis de sensibilidad: se conservan los tiempos; el comentario sobre la risa es texto derivado del vocero
+  if (out.sensibilidad?.risa && typeof out.sensibilidad.risa === 'object' && 'comentario' in out.sensibilidad.risa) {
+    const { comentario, ...risaRest } = out.sensibilidad.risa;
+    out.sensibilidad = { ...out.sensibilidad, risa: risaRest };
+    changed = true;
+  }
+
   return { report: changed ? out : report, changed };
 }
 
@@ -61,11 +72,24 @@ function cleanReportForRetention(report) {
 //  - vencida → se elimina el .webm, la transcripción (null) y el texto sensible del report;
 //              se conservan la sesión, el score, las métricas y la parte cuantitativa del report.
 // El score, la revisión humana, el report o una evaluación manual NO adelantan la retención.
-async function applyRetention(prisma) {
+//
+// Opciones:
+//  - tenantId: aplica la retención solo a esa organización (ejecución manual por tenant).
+//  - dryRun: no borra nada; solo cuenta qué sesiones están vencidas (para el panel del sistema).
+// Devuelve además el detalle por organización en `byTenant`.
+async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) {
   const [sessions, users] = await Promise.all([
-    prisma.session.findMany({ select: { id: true, createdAt: true, userId: true, tenant: { select: { retentionDays: true, status: true } } } }),
-    prisma.user.findMany({ select: { id: true, retentionPauses: { select: { startedAt: true, endedAt: true } } } }),
+    prisma.session.findMany({
+      where: tenantId ? { tenantId } : {},
+      select: { id: true, createdAt: true, userId: true, tenantId: true, tenant: { select: { retentionDays: true, status: true } } },
+    }),
+    prisma.user.findMany({
+      where: tenantId ? { tenantId } : {},
+      select: { id: true, retentionPauses: { select: { startedAt: true, endedAt: true } } },
+    }),
   ]);
+  const byTenant = {};
+  const tally = (id) => (byTenant[id] ||= { sessions: 0, expired: 0, videos: 0, videosRemoved: 0 });
   const pausesByUser = new Map(users.map((u) => [u.id, u.retentionPauses]));
 
   const now = Date.now();
@@ -77,6 +101,10 @@ async function applyRetention(prisma) {
   const eligibleIds = [];
 
   for (const s of sessions) {
+    const stats = tally(s.tenantId);
+    const fileName = `${s.id}.webm`;
+    stats.sessions += 1;
+    if (videoFiles.has(fileName)) stats.videos += 1;
     if (s.tenant?.status === 'DELETING') continue; // el tenant se está eliminando: lo maneja el job de eliminación
     // Retención pausada (suspendido ahora): su reloj está detenido → NO se purga.
     const intervals = pausesByUser.get(s.userId) || [];
@@ -88,16 +116,20 @@ async function applyRetention(prisma) {
     const elapsed = effectiveElapsedMs(s.createdAt, intervals, now);
     const expired = elapsed > days * 24 * 60 * 60 * 1000;
     if (!expired) continue; // Solo por vencimiento: ni score, ni review, ni report adelantan la retención.
+    stats.expired += 1;
+    if (dryRun) continue;
 
     // Video: eliminación física del .webm (solo si existe; puede no haber grabación)
-    const fileName = `${s.id}.webm`;
     if (videoFiles.has(fileName)) {
       fs.rmSync(videoPath(s.id), { force: true });
       videoFiles.delete(fileName);
       videosRemoved += 1;
+      stats.videos -= 1;
+      stats.videosRemoved += 1;
     }
     eligibleIds.push(s.id);
   }
+  if (dryRun) return { dryRun: true, byTenant };
 
   // Transcripción: se pone a null con la misma política. Es seguro si ya es null y no toca otras columnas.
   let transcriptsCleared = 0;
@@ -126,7 +158,7 @@ async function applyRetention(prisma) {
   if (videosRemoved) console.log(`[Retención] ${videosRemoved} grabación(es) eliminada(s) según la política de retención`);
   if (transcriptsCleared) console.log(`[Retención] ${transcriptsCleared} transcripción(es) eliminada(s) según la política de retención`);
   if (reportsCleaned) console.log(`[Retención] ${reportsCleaned} reporte(s) limpiado(s) según la política de retención`);
-  return { videosRemoved, transcriptsCleared, reportsCleaned };
+  return { videosRemoved, transcriptsCleared, reportsCleaned, byTenant };
 }
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
@@ -153,12 +185,13 @@ module.exports = function registerSessionRoutes(app, prisma) {
   const auth = (...roles) => requireAuth(prisma, roles);
 
   // Retención: al iniciar (reconciliando las pausas primero) y cada 6 horas
-  const runPurge = () => applyRetention(prisma).catch((e) => console.warn('[Retención] error:', e.message));
+  registerJob(RETENTION_JOB, { label: 'Retención de datos (borrado por vencimiento)', everyMs: RETENTION_EVERY_MS });
+  const runPurge = () => runJob(RETENTION_JOB, () => applyRetention(prisma)).catch((e) => console.warn('[Retención] error:', e.message));
   setTimeout(async () => {
     try { await reconcilePauses(prisma); } catch (e) { console.warn('[Retención] error al reconciliar pausas:', e.message); }
     runPurge();
   }, 5000);
-  setInterval(runPurge, 6 * 60 * 60 * 1000).unref();
+  setInterval(runPurge, RETENTION_EVERY_MS).unref();
 
   // Evaluaciones en curso: si llegan dos solicitudes para la misma sesión,
   // la segunda espera el resultado de la primera (no se evalúa dos veces)
@@ -384,3 +417,7 @@ module.exports = function registerSessionRoutes(app, prisma) {
     }
   });
 };
+
+// Para el panel del sistema (estado y ejecución manual de la retención por organización)
+module.exports.applyRetention = applyRetention;
+module.exports.RETENTION_JOB = RETENTION_JOB;

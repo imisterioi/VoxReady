@@ -53,7 +53,11 @@ async function deleteTenantRecords(prisma, tenantId) {
     ? (await prisma.scenarioAssignment.findMany({ where: { themeId: { in: themeIds } }, select: { id: true } })).map((a) => a.id)
     : [];
 
+  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { createdAt: true } });
+
   await prisma.$transaction(async (tx) => {
+    // Cliente perdido: queda solo el hecho (id y fechas), ningún dato de la organización
+    if (tenant) await tx.tenantEvent.create({ data: { tenantId, type: 'DELETED', tenantCreatedAt: tenant.createdAt } });
     if (assignmentIds.length) await tx.scenarioRubric.deleteMany({ where: { assignmentId: { in: assignmentIds } } });
     if (themeIds.length) await tx.scenarioAssignment.deleteMany({ where: { themeId: { in: themeIds } } });
     await tx.deletionRequest.deleteMany({ where: { tenantId } });            // requestedBy es Restrict
