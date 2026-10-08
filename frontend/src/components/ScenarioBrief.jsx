@@ -1,5 +1,6 @@
 import Icon from './Icon';
 import { Badge, Button, Modal } from './ui';
+import { InterviewSummary } from './InterviewConfig';
 
 const CATEGORY = { CRISIS: 'Crisis', MEDIOS: 'Medios', INSTITUCIONAL: 'Institucional', GENERAL: 'General' };
 
@@ -26,6 +27,7 @@ function BriefContent({ scenario, compact = false }) {
         <div className="flex flex-wrap items-center gap-2 mb-2">
           <Badge tone="accent">{CATEGORY[scenario.category] || scenario.category || 'Escenario'}</Badge>
           {scenario.optic && <Badge tone="outline">Óptica {scenario.optic.toLowerCase()}</Badge>}
+          <InterviewSummary interview={scenario.interview} className="contents" />
         </div>
         {!compact && <h2 className="font-display text-[22px] font-semibold tracking-[-0.02em] text-ink">{scenario.title}</h2>}
         <p className="text-[15px] text-muted leading-relaxed mt-2">{scenario.context}</p>

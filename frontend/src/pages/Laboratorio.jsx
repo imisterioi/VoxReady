@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { API_URL, DEMO_MODE } from '../lib/api';
+import { API_URL, DEMO_MODE, getToken } from '../lib/api';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, PageHeader, cx } from '../components/ui';
 import { useRive } from '@rive-app/react-canvas';
@@ -155,9 +155,10 @@ export default function Laboratorio() {
       try {
         setAiLoading(true);
         setAiInfo(null);
+        // El endpoint exige sesión iniciada (sin sessionId usa un escenario genérico de prueba)
         const res = await fetch(`${API_URL}/api/interviewer/next-question`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() || ''}` },
           body: JSON.stringify({ history: nextHistory }),
         });
         const data = await res.json();

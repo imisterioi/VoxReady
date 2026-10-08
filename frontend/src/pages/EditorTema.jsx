@@ -6,6 +6,7 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import { Avatar, Badge, Button, Card, ChoiceChips, EmptyState, Field, PageHeader, Segmented, cx } from '../components/ui';
 import { ScenarioBriefModal } from '../components/ScenarioBrief';
+import { DEFAULT_INTERVIEW, InterviewConfigFields, toInterviewForm, toInterviewPayload, totalTurns, autoMinutes } from '../components/InterviewConfig';
 import useApiData from '../hooks/useApiData';
 import { initialsOf } from '../data/directory';
 
@@ -93,6 +94,7 @@ export default function EditorTema() {
   const [publics, setPublics] = useState([t.pubs[0]]);
   const [messages, setMessages] = useState([]);
   const [redLines, setRedLines] = useState([]);
+  const [interview, setInterview] = useState(DEFAULT_INTERVIEW);
 
   const [availableToAllVoceros, setAvailableToAllVoceros] = useState(false);
   const [voceroIds, setVoceroIds] = useState([]);
@@ -116,6 +118,7 @@ export default function EditorTema() {
         setPublics(theme.publics.length ? theme.publics : [t.pubs[0]]);
         setMessages(theme.keyMessages);
         setRedLines(theme.redLines);
+        setInterview(toInterviewForm(theme.interview));
         setAvailableToAllVoceros(theme.availableToAllVoceros);
         setVoceroIds(theme.voceroIds);
       })
@@ -133,6 +136,8 @@ export default function EditorTema() {
       if (!availableToAllVoceros && voceroIds.length === 0) {
         return toast.error('Elige "Disponible para todos los voceros" o selecciona al menos un vocero.');
       }
+      if (!(Number(interview.questionCount) >= 1)) return toast.error('La entrevista debe tener al menos una pregunta.');
+      if (totalTurns(interview) > 30) return toast.error('La entrevista no puede superar los 30 turnos entre preguntas y repreguntas.');
 
       setSaving(true);
       const payload = {
@@ -143,6 +148,7 @@ export default function EditorTema() {
         optic,
         publics,
         redLines,
+        interview: toInterviewPayload(interview),
         availableToAllVoceros,
         voceroIds: availableToAllVoceros ? [] : voceroIds,
       };
@@ -291,12 +297,30 @@ export default function EditorTema() {
             </Field>
           </div>
         </Card>
+
+        {/* Fila 4: cómo se desarrolla la entrevista */}
+        <Card>
+          <StepTitle
+            n={6}
+            title="Configuración de la entrevista"
+            description="Qué tan agresivo es el entrevistador, cuántas preguntas y repreguntas hace y cuánto dura."
+          />
+          <InterviewConfigFields value={interview} onChange={setInterview} />
+        </Card>
       </div>
 
       <ScenarioBriefModal
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
-        scenario={{ title: name || 'Escenario sin nombre', context: context || 'Sin contexto aún.', category, optic, keyMessages: messages, redLines }}
+        scenario={{
+          title: name || 'Escenario sin nombre',
+          context: context || 'Sin contexto aún.',
+          category,
+          optic,
+          keyMessages: messages,
+          redLines,
+          interview: { ...toInterviewPayload(interview), totalTurns: totalTurns(interview), estimatedMinutes: Number(interview.estimatedMinutes) || autoMinutes(interview) },
+        }}
       />
     </>
   );

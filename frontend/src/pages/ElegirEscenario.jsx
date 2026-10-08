@@ -4,6 +4,7 @@ import I from '../data/dictionary';
 import { apiGet, getCurrentUser } from '../lib/api';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
+import { InterviewSummary } from '../components/InterviewConfig';
 import { Badge, Button, Card, EmptyState, PageHeader, Segmented, cx } from '../components/ui';
 
 const CATEGORY = {
@@ -203,6 +204,7 @@ export default function ElegirEscenario() {
                 </div>
                 <h3 className="text-[17px] font-semibold tracking-tight text-ink">{escenario.title}</h3>
                 <p className="text-[13px] text-muted mt-2 leading-relaxed flex-1">{escenario.context}</p>
+                <InterviewSummary interview={escenario.interview} className="mt-4 flex flex-wrap items-center gap-2" />
                 <div className="mt-6 pt-5 border-t border-line flex items-center justify-between">
                   <span className="text-xs text-faint">
                     {isGeneral(escenario)

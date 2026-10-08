@@ -7,6 +7,7 @@ import { DEMO_PASSWORD, getDb, patternFor, saveDb, uid } from './db';
 import { DEFAULT_CONFIG, deepMerge, parseList, resolveConfig } from './patternConfig';
 import { evaluateSession } from './evaluator';
 import { nextQuestion } from './interviewer';
+import { normalizeInterviewConfig, resolveInterviewConfig, turnPlan } from './interviewConfig';
 
 const ROLE_TO_API = { VOCERO: 'user', ADMIN: 'admin', MASTER: 'master', SYSTEM: 'system' };
 const ROLE_FROM_API = { user: 'VOCERO', admin: 'ADMIN', master: 'MASTER', system: 'SYSTEM' };
@@ -99,6 +100,7 @@ function toApiTheme(db, t) {
     redLines: parseList(t.redLines),
     publics: parseList(t.publics),
     availableToAllVoceros: t.availableToAllVoceros,
+    interview: resolveInterviewConfig(t),
     voceroIds: db.assignments.filter((a) => a.themeId === t.id).map((a) => a.userId),
     sessions: db.sessions.filter((s) => s.themeId === t.id).length,
   };
@@ -189,6 +191,27 @@ route('POST', '/api/auth/login', null, ({ db, body }) => {
 
 route('GET', '/api/auth/me', [], ({ db, user }) => ({ status: 'ok', user: toApiUser(db, user) }));
 
+// Usuarios conectados: quien hizo una petición en los últimos minutos (lo registra el despachador)
+const PRESENCE_WINDOW_MS = 5 * 60 * 1000;
+const lastSeen = new Map(); // userId → momento de la última petición
+function connectedUsers(db, tenantId = null) {
+  const byRole = { VOCERO: 0, ADMIN: 0, MASTER: 0, SYSTEM: 0 };
+  let total = 0;
+  for (const [userId, at] of lastSeen) {
+    const u = userById(db, userId);
+    if (!u || Date.now() - at > PRESENCE_WINDOW_MS || (tenantId && u.tenantId !== tenantId)) continue;
+    total += 1;
+    byRole[u.role] += 1;
+  }
+  return { total, byRole, windowMinutes: PRESENCE_WINDOW_MS / 60000 };
+}
+
+route('POST', '/api/auth/heartbeat', [], () => ({ status: 'ok' }));
+route('POST', '/api/auth/logout', [], ({ user }) => {
+  lastSeen.delete(user.id);
+  return { status: 'ok' };
+});
+
 route('GET', '/api/tenants', ['system'], ({ db }) => {
   const month = startOfMonth();
   return {
@@ -229,6 +252,10 @@ route('PATCH', '/api/tenants/:id', ['system'], ({ db, params, body }) => {
   if (!['ACTIVE', 'SUSPENDED'].includes(body?.status)) fail(400, 'Estado no válido.');
   const tenant = db.tenants.find((t) => t.id === params.id);
   if (!tenant) fail(404, 'Organización no encontrada.');
+  // Historial para las métricas de clientes (solo si el estado realmente cambió)
+  if (tenant.status !== body.status) {
+    (db.tenantEvents ||= []).push({ tenantId: tenant.id, type: body.status === 'SUSPENDED' ? 'SUSPENDED' : 'REACTIVATED', at: now() });
+  }
   tenant.status = body.status;
   saveDb();
   return { status: 'ok', tenant };
@@ -341,6 +368,186 @@ route('GET', '/api/system/overview', ['system'], ({ db }) => {
   };
 });
 
+// ------------------------------------- Procesos críticos y jobs (simulados)
+const startedAt = Date.now();
+const DAY_MS = 24 * 60 * 60 * 1000;
+const aiStats = { interviewer: { calls: 0, lastOkAt: null, lastMs: null }, evaluator: { calls: 0, lastOkAt: null, lastMs: null } };
+const recordAi = (kind, ms) => Object.assign(aiStats[kind], { calls: aiStats[kind].calls + 1, lastOkAt: now(), lastMs: ms });
+const jobs = {
+  retention: { name: 'retention', label: 'Retención de datos (borrado por vencimiento)', everyMinutes: 360, runs: 0, lastRunAt: null, lastMs: null, lastResult: null },
+  'tenant-deletion': { name: 'tenant-deletion', label: 'Eliminación de organizaciones', everyMinutes: 5, runs: 0, lastRunAt: null, lastMs: null, lastResult: null },
+};
+const publicJob = (job) => ({ ...job, state: job.lastRunAt ? 'ok' : 'pending', lastOkAt: job.lastRunAt, lastError: null });
+
+const isExpired = (db, s) => {
+  const tenant = db.tenants.find((t) => t.id === s.tenantId);
+  return Date.now() - new Date(s.createdAt).getTime() > (tenant?.retentionDays ?? 90) * DAY_MS;
+};
+
+// Retención: en las prácticas fuera de plazo se eliminan la grabación y la transcripción
+function applyRetention(db, tenantId = null) {
+  const result = { videosRemoved: 0, transcriptsCleared: 0, reportsCleaned: 0 };
+  for (const s of db.sessions) {
+    if ((tenantId && s.tenantId !== tenantId) || !isExpired(db, s)) continue;
+    if (s.hasVideo) {
+      s.hasVideo = false;
+      videos.delete(s.id);
+      result.videosRemoved += 1;
+    }
+    if (s.transcript) {
+      s.transcript = null;
+      result.transcriptsCleared += 1;
+    }
+    if (s.report && ('resumen' in s.report || 'cita' in s.report)) {
+      s.report = { ...s.report };
+      for (const key of ['resumen', 'cita', 'fortalezas', 'mejoras']) delete s.report[key];
+      result.reportsCleaned += 1;
+    }
+  }
+  saveDb();
+  return result;
+}
+
+function runJob(name, fn) {
+  const start = performance.now();
+  const result = fn();
+  Object.assign(jobs[name], { runs: jobs[name].runs + 1, lastRunAt: now(), lastMs: Math.round(performance.now() - start), lastResult: result });
+  return result;
+}
+
+route('GET', '/api/system/status', ['system'], ({ db }) => {
+  // En la demo los jobs corren al consultar el estado (no hay un proceso en segundo plano)
+  if (!jobs.retention.lastRunAt) runJob('retention', () => applyRetention(db));
+  if (!jobs['tenant-deletion'].lastRunAt) runJob('tenant-deletion', () => ({ total: 0, done: 0, pending: 0 }));
+  const ai = (kind) => ({
+    state: aiStats[kind].calls ? 'ok' : 'pending',
+    lastOkAt: aiStats[kind].lastOkAt,
+    lastModel: aiStats[kind].calls ? `${kind === 'interviewer' ? 'Entrevistador' : 'Evaluador'} de demostración` : null,
+    lastMs: aiStats[kind].lastMs,
+    calls: aiStats[kind].calls,
+    failures: 0,
+  });
+  const uptimeSeconds = Math.round((Date.now() - startedAt) / 1000);
+  return {
+    status: 'ok',
+    startedAt: new Date(startedAt).toISOString(),
+    uptimeSeconds,
+    down: 0,
+    processes: [
+      { key: 'api', name: 'API VoxReady', state: 'ok', uptimeSeconds },
+      { key: 'database', name: 'Base de datos', state: 'ok', ms: 1 },
+      { key: 'storage', name: 'Almacenamiento de grabaciones', state: 'ok', recordings: videos.size, megabytes: 0 },
+      { key: 'interviewer', name: 'IA entrevistadora', ...ai('interviewer') },
+      { key: 'evaluator', name: 'IA evaluadora', ...ai('evaluator') },
+      ...Object.values(jobs).map((job) => ({ ...publicJob(job), key: `job-${job.name}`, name: job.label })),
+    ],
+    connected: connectedUsers(db),
+  };
+});
+
+route('GET', '/api/system/jobs', ['system'], ({ db }) => ({
+  status: 'ok',
+  jobs: Object.values(jobs).map(publicJob),
+  tenants: [...db.tenants]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((t) => {
+      const sessions = db.sessions.filter((s) => s.tenantId === t.id);
+      return {
+        id: t.id,
+        name: t.name,
+        status: t.status,
+        retentionMode: t.retentionMode,
+        retentionDays: t.retentionDays,
+        deletionRequestedAt: null,
+        sessions: sessions.length,
+        expiredSessions: sessions.filter((s) => isExpired(db, s)).length,
+        recordings: sessions.filter((s) => hasVideo(db, s)).length,
+        anonymizedUsers: db.users.filter((u) => u.tenantId === t.id && u.anonymizedAt).length,
+        openDeletionRequests: 0,
+      };
+    }),
+}));
+
+route('POST', '/api/system/jobs/retention/run', ['system'], ({ db, body }) => {
+  const tenantId = body?.tenantId || null;
+  if (tenantId && !db.tenants.some((t) => t.id === tenantId)) fail(404, 'Organización no encontrada.');
+  const result = tenantId ? applyRetention(db, tenantId) : runJob('retention', () => applyRetention(db));
+  return { status: 'ok', tenantId, result };
+});
+
+// ------------------------------------------------- Métricas administrativas
+// Mismo formato que GET /api/metrics/overview del backend (lib/metrics.js)
+const PERIOD_DAYS = { 7: 7, 30: 30, 90: 90, 365: 365 };
+
+route('GET', '/api/metrics/overview', ['admin', 'system'], ({ db, user, apiRole, query }) => {
+  const raw = String(query.get('period') || '30').toLowerCase();
+  const all = raw === 'all' || raw === 'todo';
+  const days = PERIOD_DAYS[raw] || 30;
+  const from = all ? null : Date.now() - days * DAY_MS;
+  const inPeriod = (iso) => from == null || new Date(iso).getTime() >= from;
+
+  // ADMIN: solo su organización. SYSTEM: global, o la organización que elija
+  let tenant = null;
+  if (apiRole === 'admin') tenant = db.tenants.find((t) => t.id === user.tenantId);
+  else if (query.get('tenantId')) {
+    tenant = db.tenants.find((t) => t.id === query.get('tenantId'));
+    if (!tenant) fail(400, 'La organización indicada no existe.');
+  }
+  const inScope = (row) => !tenant || row.tenantId === tenant.id;
+
+  const trainings = db.sessions.filter((s) => s.status === 'COMPLETED' && inScope(s) && inPeriod(s.createdAt));
+  const countBy = (key) => trainings.reduce((map, s) => map.set(s[key], (map.get(s[key]) || 0) + 1), new Map());
+  const byUser = countBy('userId');
+  const byTheme = countBy('themeId');
+
+  const voceros = db.users
+    .filter((u) => u.role === 'VOCERO' && u.status === 'ACTIVE' && !u.anonymizedAt && inScope(u))
+    .map((u) => ({ id: u.id, name: u.name, sessions: byUser.get(u.id) || 0 }));
+  const themes = db.themes
+    .filter((t) => !t.deletedAt && (!tenant || t.tenantId === tenant.id || t.isGlobal))
+    .map((t) => ({ id: t.id, title: t.title, sessions: byTheme.get(t.id) || 0 }));
+  const ranked = (rows, label, direction) => [...rows].sort((a, b) => direction * (a.sessions - b.sessions) || a[label].localeCompare(b[label])).slice(0, 5);
+
+  // Cada cuánto entrenan: días entre dos entrenamientos consecutivos del mismo vocero
+  const last = new Map();
+  let gapsMs = 0;
+  let gaps = 0;
+  for (const s of [...trainings].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))) {
+    const at = new Date(s.createdAt).getTime();
+    if (last.has(s.userId)) {
+      gapsMs += at - last.get(s.userId);
+      gaps += 1;
+    }
+    last.set(s.userId, at);
+  }
+
+  const global = !tenant;
+  const events = (db.tenantEvents || []).filter((e) => inPeriod(e.at));
+  const created = db.tenants.filter((t) => inPeriod(t.createdAt)).length;
+  return {
+    status: 'ok',
+    period: { key: all ? 'all' : String(days), label: all ? 'Todo el tiempo' : `Últimos ${days} días` },
+    scope: global ? 'global' : 'tenant',
+    tenant: tenant ? { id: tenant.id, name: tenant.name } : null,
+    summary: {
+      vocerosActive: voceros.length,
+      sessions: trainings.length,
+      avgPerVocero: voceros.length ? Math.round((trainings.length / voceros.length) * 10) / 10 : 0,
+      perWeek: all ? null : Math.round((trainings.length / days) * 7 * 10) / 10,
+      avgDaysBetween: gaps ? Math.round((gapsMs / gaps / DAY_MS) * 10) / 10 : null,
+      connected: connectedUsers(db, tenant?.id),
+      organizations: global ? db.tenants.filter((t) => t.status === 'ACTIVE').length : null,
+      organizationsCreated: global ? created : null,
+      organizationsWon: global ? created : null,
+      organizationsLost: global ? events.filter((e) => e.type === 'DELETED').length : null,
+      organizationsSuspended: global ? events.filter((e) => e.type === 'SUSPENDED').length : null,
+    },
+    voceros: { top: ranked(voceros, 'name', -1), bottom: ranked(voceros, 'name', 1), total: voceros.length },
+    themes: { preferred: ranked(themes, 'title', -1), least: ranked(themes, 'title', 1), total: themes.length },
+    organizations: apiRole === 'system' ? [...db.tenants].sort((a, b) => a.name.localeCompare(b.name)).map((t) => ({ id: t.id, name: t.name, status: t.status })) : null,
+  };
+});
+
 // ------------------------------------------------------ Escenarios y temas
 route('GET', '/api/scenarios/my', null, ({ db, query }) => {
   const email = query.get('email');
@@ -370,6 +577,7 @@ route('GET', '/api/scenarios/my', null, ({ db, query }) => {
         optic: t.optic,
         publics: t.publics,
         category: t.category,
+        interview: resolveInterviewConfig(t),
         status: a.status,
         assignedAt: a.assignedAt,
       };
@@ -390,6 +598,7 @@ route('GET', '/api/scenarios/my', null, ({ db, query }) => {
       optic: t.optic,
       publics: t.publics,
       category: t.category,
+      interview: resolveInterviewConfig(t),
       status: 'PENDING',
       assignedAt: t.createdAt,
     }));
@@ -423,6 +632,7 @@ route('POST', '/api/themes', null, ({ db, body }) => {
     publics: publics ? JSON.stringify(publics) : null,
     redLines: redLines ? JSON.stringify(redLines) : null,
     availableToAllVoceros: Boolean(availableToAllVoceros),
+    interviewConfig: normalizeInterviewConfig(body.interview),
     createdAt: now(),
   };
   db.themes.push(theme);
@@ -474,6 +684,7 @@ route('PUT', '/api/themes/:id', ['admin'], ({ db, user, params, body }) => {
     optic: optic || null,
     category: category || theme.category,
     availableToAllVoceros: Boolean(availableToAllVoceros),
+    ...(body.interview !== undefined ? { interviewConfig: normalizeInterviewConfig(body.interview) } : {}),
   });
   syncAssignments(db, theme, voceroIds);
   saveDb();
@@ -491,6 +702,7 @@ const toApiLibraryTheme = (db, t) => ({
   keyMessages: parseList(t.keyMessages),
   redLines: parseList(t.redLines),
   publics: parseList(t.publics),
+  interview: resolveInterviewConfig(t),
   sessions: db.sessions.filter((s) => s.themeId === t.id).length,
   createdAt: t.createdAt,
 });
@@ -507,6 +719,7 @@ function readLibraryTheme(body = {}) {
     optic: optic || null,
     keyMessages: JSON.stringify(clean(keyMessages)),
     redLines: JSON.stringify(clean(redLines)),
+    interviewConfig: normalizeInterviewConfig(body.interview),
   };
 }
 const libraryTheme = (db, id) => {
@@ -564,6 +777,7 @@ route('POST', '/api/library/themes/:id/copy', ['admin'], ({ db, user, params }) 
     keyMessages: source.keyMessages,
     redLines: source.redLines,
     publics: source.publics,
+    interviewConfig: source.interviewConfig,
     availableToAllVoceros: false,
     isGlobal: false,
     createdAt: now(),
@@ -651,12 +865,33 @@ route('POST', '/api/sessions/:id/video', null, ({ db, params, rawBody }) => {
   return { status: 'ok', mensaje: 'Video guardado correctamente', file: `${session.id}.webm` };
 });
 
-route('POST', '/api/interviewer/next-question', null, async ({ db, body }) => {
+// Igual que el backend: exige sesión iniciada y toma el escenario de la práctica en curso
+// (sin sessionId usa un escenario genérico, para el Laboratorio)
+route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) => {
   const start = performance.now();
+  const history = Array.isArray(body?.history) ? body.history : [];
+  let theme = null;
+  if (body?.sessionId) {
+    const session = db.sessions.find((s) => s.id === body.sessionId);
+    if (!session || session.userId !== user.id) fail(404, 'Sesión no encontrada.');
+    if (session.score != null) fail(409, 'Esta entrevista ya fue evaluada.');
+    theme = themeById(db, session.themeId);
+  }
+  const plan = turnPlan(normalizeInterviewConfig(theme?.interviewConfig), history.filter((h) => h.role === 'interviewer').length);
+  if (theme && plan.done) fail(409, 'La entrevista ya completó todas sus preguntas.');
   await wait(700 + Math.random() * 700);
-  const theme = body?.themeId ? themeById(db, body.themeId) : null;
-  const question = nextQuestion({ theme, history: body?.history || [] });
-  return { status: 'ok', question, model: 'Entrevistador de demostración', ms: Math.round(performance.now() - start) };
+  const question = nextQuestion({ theme, history, plan });
+  recordAi('interviewer', Math.round(performance.now() - start));
+  return {
+    status: 'ok',
+    question,
+    kind: plan.kind,
+    number: plan.number,
+    total: plan.total,
+    interview: theme ? resolveInterviewConfig(theme) : null,
+    model: 'Entrevistador de demostración',
+    ms: Math.round(performance.now() - start),
+  };
 });
 
 route('POST', '/api/sessions/:id/evaluate', ['user'], async ({ db, user, params, body }) => {
@@ -669,6 +904,7 @@ route('POST', '/api/sessions/:id/evaluate', ['user'], async ({ db, user, params,
   await wait(4500);
   const { pattern, source } = patternFor(db, session.themeId, session.userId);
   const report = evaluateSession({ theme: themeById(db, session.themeId), transcript, metrics, pattern, patternSource: source });
+  recordAi('evaluator', report.ai.ms);
   Object.assign(session, { status: 'COMPLETED', completedAt: now(), transcript, metrics, report, score: report.global });
   saveDb();
   return { status: 'ok', session: fullSession(db, session) };
@@ -929,6 +1165,7 @@ async function handle(method, url, headers, rawBody) {
       if (user.status !== 'ACTIVE' || tenant?.status === 'SUSPENDED') fail(401, 'Tu cuenta no está activa.');
       apiRole = ROLE_TO_API[user.role];
       if (found.roles.length && !found.roles.includes(apiRole)) fail(403, 'No tienes permiso para esta acción.');
+      lastSeen.set(user.id, Date.now());
     }
     await wait(120 + Math.random() * 180); // latencia de red simulada
     const result = await found.handler({ db, user, apiRole, params, query: url.searchParams, body, rawBody });

@@ -265,6 +265,57 @@ function scoreFromCriteria(area, judged) {
   return { score: average(details), details };
 }
 
+// ------------------------------------- Análisis de sensibilidad del video
+// Mismo formato que el backend (ai/evaluator.js): cuánto miró a la cámara, cuánto a otro
+// lado y cuánto se rió. La coherencia de la risa, que en producción juzga la IA, aquí se
+// estima con una regla: reír en un escenario de crisis está fuera de lugar.
+
+const MIN_SMILE_SECONDS = 1;
+const seconds = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 10) / 10 : null);
+
+function judgeSmile(theme, transcript) {
+  const turns = transcript.map((t, i) => ({ n: i + 1, smile: num(t?.metrics?.video?.smileSeconds, 0) })).filter((t) => t.smile >= 0.5);
+  const where = turns.length ? `en la${turns.length > 1 ? 's' : ''} pregunta${turns.length > 1 ? 's' : ''} ${turns.map((t) => t.n).join(', ')}` : 'durante la entrevista';
+  return theme?.category === 'CRISIS'
+    ? { consistencia: 25, comentario: `Sonreíste o reíste ${where}: en un escenario de crisis, con personas afectadas, eso se percibe como falta de empatía.` }
+    : { consistencia: 75, comentario: `Sonreíste o reíste ${where}; en este tipo de escenario una sonrisa breve transmite cercanía, siempre que no coincida con un tema delicado.` };
+}
+
+function buildSensitivity(body, transcript, theme) {
+  if (!body?.available || body.analyzedSeconds == null) return null;
+  const total = num(body.analyzedSeconds, 0);
+  const pct = (v) => (total > 0 && v != null ? round(clamp((v / total) * 100)) : null);
+  const facing = seconds(body.facingSeconds);
+  const away = seconds(body.awaySeconds);
+  const smile = body.faceAvailable ? seconds(body.smileSeconds) : null;
+
+  let risa = null; // null = no se pudo medir (sin detección de rostro)
+  if (smile != null) risa = smile >= MIN_SMILE_SECONDS ? { detectada: true, ...judgeSmile(theme, transcript) } : { detectada: false, consistencia: null, comentario: '' };
+
+  return {
+    totalSeconds: seconds(total),
+    facingSeconds: facing,
+    awaySeconds: away,
+    smileSeconds: smile,
+    facingPct: pct(facing),
+    awayPct: pct(away),
+    smilePct: pct(smile),
+    risa,
+    porPregunta: transcript
+      .map((t, i) =>
+        t?.metrics?.video
+          ? {
+              pregunta: i + 1,
+              facingSeconds: seconds(t.metrics.video.facingSeconds),
+              awaySeconds: seconds(t.metrics.video.awaySeconds),
+              smileSeconds: body.faceAvailable ? seconds(t.metrics.video.smileSeconds) : null,
+            }
+          : null,
+      )
+      .filter(Boolean),
+  };
+}
+
 // ------------------------------------------------------ Informe completo
 
 export function evaluateSession({ theme, transcript, metrics, pattern, patternSource = 'active', at = new Date() }) {
@@ -317,6 +368,7 @@ export function evaluateSession({ theme, transcript, metrics, pattern, patternSo
     mensajesClave: judgement.mensajesClave,
     lineasRojas: judgement.lineasRojas,
     porPregunta: judgement.porPregunta,
+    sensibilidad: buildSensitivity(metrics?.body, transcript, theme),
     measured: { voice: metrics?.voice || null, body: metrics?.body || null, lighting: metrics?.lighting || null },
     ai: { evaluator: model, ms },
     generatedAt: new Date(at).toISOString(),

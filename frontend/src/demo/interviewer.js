@@ -3,6 +3,7 @@
 // abre con los hechos, repregunta si el vocero evade, tienta a cruzar las líneas
 // rojas y avanza hacia otros aspectos de la crisis.
 import { parseList } from './patternConfig';
+import { normalizeInterviewConfig } from './interviewConfig';
 
 const OPENERS = {
   CRISIS: [
@@ -44,12 +45,42 @@ function temptationFor(line) {
 
 const pick = (list, seed) => list[Math.abs(seed) % list.length];
 
-export function nextQuestion({ theme, history = [] }) {
+// Una frase de la última respuesta del vocero (la más larga), recortada para citarla
+function quoteFrom(answer) {
+  const sentences = answer.split(/[.!?]+/).map((s) => s.trim()).filter((s) => s.split(/\s+/).length >= 4);
+  const longest = sentences.sort((a, b) => b.length - a.length)[0] || answer.trim();
+  const words = longest.split(/\s+/).slice(0, 16).join(' ');
+  return words.charAt(0).toLowerCase() + words.slice(1);
+}
+
+// Repregunta sobre la última respuesta, según el nivel de agresividad del escenario
+const FOLLOW_UPS = {
+  BAJA: [
+    (q) => `Para que quede claro a quienes nos escuchan: cuando dice que "${q}", ¿a qué se refiere exactamente?`,
+    () => '¿Podría profundizar un poco más en lo que acaba de explicar?',
+  ],
+  MEDIA: [
+    (q) => `Usted dice que "${q}", pero eso no responde lo que le pregunté. ¿Puede ser más preciso?`,
+    (q) => `¿Qué respaldo concreto tiene para afirmar que "${q}"?`,
+  ],
+  ALTA: [
+    (q) => `Usted afirma que "${q}". ¿Quién responde por eso, con nombre y cargo?`,
+    (q) => `Eso de que "${q}" no calza con lo que cuentan los afectados. ¿Quién está diciendo la verdad?`,
+  ],
+  EXTREMA: [
+    (q) => `¿Dice entonces que "${q}" y que con eso las personas afectadas deberían quedar conformes?`,
+    (q) => `¿Está reconociendo que "${q}" es todo lo que su organización tiene para ofrecer?`,
+  ],
+};
+
+// plan: qué toca en este turno (pregunta nueva o repregunta) según la configuración del escenario
+export function nextQuestion({ theme, history = [], plan = null }) {
   const t = theme || { title: 'la crisis que enfrenta su empresa', category: 'CRISIS' };
   const asked = history.filter((h) => h.role === 'interviewer').map((h) => h.text);
   const lastAnswer = [...history].reverse().find((h) => h.role === 'vocero')?.text?.trim() || '';
   const turn = asked.length;
   const openers = OPENERS[t.category] || OPENERS.GENERAL;
+  const level = normalizeInterviewConfig(t.interviewConfig).aggressiveness;
 
   // 1) Apertura
   if (turn === 0) return openers[0](t);
@@ -59,14 +90,17 @@ export function nextQuestion({ theme, history = [] }) {
     return `No respondió a mi pregunta. Se lo planteo de forma directa: ${asked[asked.length - 1].replace(/^.*?¿/, '¿')}`;
   }
 
-  // 3) Cada cierto turno, tentar a cruzar una línea roja
-  const redLines = parseList(t.redLines);
+  // 3) Turno de repregunta: toma una frase de la respuesta y la cuestiona
+  if (plan?.kind === 'followup') return pick(FOLLOW_UPS[level], turn)(quoteFrom(lastAnswer));
+
+  // 4) Cada cierto turno, tentar a cruzar una línea roja (con presión baja no se tienta)
+  const redLines = level === 'BAJA' ? [] : parseList(t.redLines);
   if (redLines.length && turn % 2 === 0) {
     const candidate = temptationFor(redLines[(turn / 2 - 1) % redLines.length]);
     if (!asked.includes(candidate)) return candidate;
   }
 
-  // 4) Preguntas de presión que aún no se han hecho
+  // 5) Preguntas de presión que aún no se han hecho
   const pool = [openers[1](t), ...PRESSURE].filter((q) => !asked.includes(q));
   return pick(pool.length ? pool : PRESSURE, turn * 7 + lastAnswer.length);
 }
