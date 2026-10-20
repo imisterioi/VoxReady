@@ -1,0 +1,9 @@
+# Contexto de desarrollo del backend: nunca hornear secretos ni grabaciones en la imagen.
+node_modules
+uploads
+.env
+.env.local
+.git
+.gitignore
+*.log
+coverage

@@ -20,13 +20,30 @@ const DEFAULT_EVAL_MODEL = 'moonshotai/kimi-k3';
 const DEFAULT_EVAL_FALLBACK = 'nvidia/nemotron-3-super-120b-a12b';
 const DEFAULT_EVAL_BACKUP = 'google/gemma-4-31b-it'; // tercer respaldo
 
+// Versión del evaluador y del prompt: se guardan en el informe para rastrear cómo se produjo
+// cada puntaje. NO implican reproducibilidad exacta (el proveedor no es determinista).
+const EVALUATOR_VERSION = '2.0.0';
+const PROMPT_VERSION = 'eval-es-2026-10-v2';
+
+// La IA respondió algo que no se puede usar como informe (estructura o puntajes inválidos).
+class EvaluationResponseError extends Error {
+  constructor(message, issues = []) {
+    super(message);
+    this.name = 'EvaluationResponseError';
+    this.code = 'INVALID_AI_RESPONSE';
+    this.issues = issues;
+  }
+}
+
 const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
-const round = (v) => (v == null || Number.isNaN(v) ? null : Math.round(v));
+// Solo números finitos: NaN/Infinity se convierten en null (nunca en 0 ni en 100).
+const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
 const num = (v, fallback) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
 
-// Puntaje 100 dentro del rango ideal y decae linealmente fuera de él
+// Puntaje 100 dentro del rango ideal y decae linealmente fuera de él.
+// Solo números finitos: NaN/Infinity no producen puntaje (no se inventan valores).
 function rangeScore(value, idealMin, idealMax, zeroBelow, zeroAbove) {
-  if (value == null || Number.isNaN(value)) return null;
+  if (!Number.isFinite(value)) return null;
   if (value >= idealMin && value <= idealMax) return 100;
   if (value < idealMin) return clamp(((value - zeroBelow) / Math.max(idealMin - zeroBelow, 1e-9)) * 100);
   return clamp(((zeroAbove - value) / Math.max(zeroAbove - idealMax, 1e-9)) * 100);
@@ -41,7 +58,7 @@ const average = (items) => {
 // ------------------------------------------------------ Tono de voz (reglas)
 
 function scoreVoice(voice = {}, cfg) {
-  if (!voice.available) return { score: null, details: [] };
+  if (!voice.available) return { score: null, details: [], coverage: 0 };
   const c = cfg.voice.criteria;
 
   const wpmMin = num(c.wpm.idealMin, 120);
@@ -52,28 +69,43 @@ function scoreVoice(voice = {}, cfg) {
   const varMax = num(c.variation.idealMax, 90) / 100;
   const latMax = num(c.latency.idealMaxSec, 2.5) * 1000;
 
+  // La velocidad SOLO puntúa si viene del audio de la sesión (Whisper). Si no está
+  // verificada, el criterio queda EXCLUIDO: no vale 0 ni 100, simplemente no entra en la
+  // media ponderada (que reparte su peso entre los criterios que sí se midieron).
+  const wpmVerified = voice.wpmSource === 'audio' && Number.isFinite(voice.wpm);
+
   const details = [
-    { key: 'wpm', label: c.wpm.label, value: round(voice.wpm), unit: 'palabras/min', weight: num(c.wpm.weight, 0), score: rangeScore(voice.wpm, wpmMin, wpmMax, wpmMin * 0.5, wpmMax * 1.4) },
+    {
+      key: 'wpm',
+      label: c.wpm.label,
+      value: wpmVerified ? round(voice.wpm) : null,
+      unit: 'palabras/min',
+      weight: num(c.wpm.weight, 0),
+      score: wpmVerified ? rangeScore(voice.wpm, wpmMin, wpmMax, wpmMin * 0.5, wpmMax * 1.4) : null,
+      verified: wpmVerified,
+      // Motivo legible para la interfaz y para la auditoría (p. ej. NO_AUDIO, TIMEOUT).
+      reason: wpmVerified ? null : voice.wpmReason || 'UNVERIFIED',
+    },
     {
       key: 'fillers',
       label: c.fillers.label,
-      value: voice.fillersPerMin != null ? Number(voice.fillersPerMin.toFixed(1)) : null,
+      value: Number.isFinite(voice.fillersPerMin) ? Number(voice.fillersPerMin.toFixed(1)) : null,
       unit: 'por minuto',
       weight: num(c.fillers.weight, 0),
-      score: voice.fillersPerMin == null ? null : clamp(100 - Math.max(0, voice.fillersPerMin - fillerTol) * 12),
+      score: Number.isFinite(voice.fillersPerMin) ? clamp(100 - Math.max(0, voice.fillersPerMin - fillerTol) * 12) : null,
     },
     {
       key: 'pauses',
       label: c.pauses.label,
-      value: voice.longPauses,
+      value: Number.isFinite(voice.longPauses) ? voice.longPauses : null,
       unit: 'en total',
       weight: num(c.pauses.weight, 0),
-      score: voice.longPausesPerAnswer == null ? null : clamp(100 - Math.max(0, voice.longPausesPerAnswer - pauseTol) * 20),
+      score: Number.isFinite(voice.longPausesPerAnswer) ? clamp(100 - Math.max(0, voice.longPausesPerAnswer - pauseTol) * 20) : null,
     },
     {
       key: 'variation',
       label: c.variation.label,
-      value: voice.volumeVariation != null ? round(voice.volumeVariation * 100) : null,
+      value: Number.isFinite(voice.volumeVariation) ? round(voice.volumeVariation * 100) : null,
       unit: '%',
       weight: num(c.variation.weight, 0),
       score: rangeScore(voice.volumeVariation, varMin, varMax, varMin * 0.3, varMax * 1.7),
@@ -81,13 +113,23 @@ function scoreVoice(voice = {}, cfg) {
     {
       key: 'latency',
       label: c.latency.label,
-      value: voice.avgLatencyMs != null ? Number((voice.avgLatencyMs / 1000).toFixed(1)) : null,
+      value: Number.isFinite(voice.avgLatencyMs) ? Number((voice.avgLatencyMs / 1000).toFixed(1)) : null,
       unit: 's',
       weight: num(c.latency.weight, 0),
       score: rangeScore(voice.avgLatencyMs, 300, latMax, 0, latMax * 3),
     },
   ];
-  return { score: round(average(details)), details };
+  return { score: round(average(details)), details, coverage: coverageOf(details) };
+}
+
+// Proporción del peso configurado que se pudo medir de verdad. Sirve para que un área con
+// un criterio excluido no se presente como si estuviera completa (ni a favor ni en contra).
+function coverageOf(details = []) {
+  const weighted = details.filter((detail) => detail.weight > 0);
+  const total = weighted.reduce((sum, detail) => sum + detail.weight, 0);
+  if (!total) return null;
+  const scored = weighted.filter((detail) => detail.score != null).reduce((sum, detail) => sum + detail.weight, 0);
+  return Math.round((scored / total) * 1000) / 1000;
 }
 
 // ------------------------------------------------ Expresión corporal (reglas)
@@ -106,7 +148,7 @@ function scoreBody(body = {}, cfg) {
     { key: 'head', label: c.head.label, value: body.headMovement != null ? Number((body.headMovement * 1000).toFixed(1)) : null, unit: 'mov.', weight: num(c.head.weight, 0), score: rangeScore(body.headMovement, 0.001, 0.006, 0, 0.02) },
     { key: 'hands', label: c.hands.label, value: body.handActivity != null ? Number((body.handActivity * 1000).toFixed(1)) : null, unit: 'mov.', weight: num(c.hands.weight, 0), score: rangeScore(body.handActivity, 0.002, 0.012, 0, 0.035) },
   ];
-  return { score: round(average(details)), details };
+  return { score: round(average(details)), details, coverage: coverageOf(details) };
 }
 
 // ------------------------------------- Análisis de sensibilidad del video
@@ -176,6 +218,118 @@ function criteriaText(area) {
     .filter(([, c]) => num(c.weight, 0) > 0)
     .map(([key, c]) => `    "${key}": <0-100>  // ${c.label} (peso ${c.weight})`)
     .join(',\n');
+}
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const asText = (value, maxChars = 600) => (typeof value === 'string' ? value.trim().slice(0, maxChars) : '');
+const asList = (value, maxItems = 6) =>
+  Array.isArray(value)
+    ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 600)).slice(0, maxItems)
+    : [];
+
+// Valida la respuesta del modelo ANTES de puntuar.
+//
+// Reglas:
+//  - Los criterios con peso > 0 de coherencia y empatía son OBLIGATORIOS y deben ser números
+//    finitos entre 0 y 100. Si falta uno o está fuera de rango se rechaza el informe completo
+//    (no se recorta 150→100 ni se rellena con un valor inventado).
+//  - Los campos no críticos (resumen, listas, mensajes clave, líneas rojas, por pregunta, risa)
+//    se limpian y los elementos inválidos se descartan dejando constancia en `warnings`.
+function validateJudgement(judgement, cfg) {
+  if (!isPlainObject(judgement)) {
+    throw new EvaluationResponseError('La IA devolvió una respuesta con estructura inválida (no es un objeto JSON).');
+  }
+
+  const issues = [];
+  const areaScores = (area, key) => {
+    const judged = judgement[key];
+    if (!isPlainObject(judged)) {
+      issues.push(`${key}: falta el objeto de puntajes`);
+      return null;
+    }
+    const scores = {};
+    for (const [criterion, config] of Object.entries(area.criteria)) {
+      if (!(num(config.weight, 0) > 0)) continue;
+      const raw = judged[criterion];
+      if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || raw > 100) {
+        issues.push(`${key}.${criterion}: se esperaba un número finito entre 0 y 100`);
+        continue;
+      }
+      scores[criterion] = raw;
+    }
+    return scores;
+  };
+
+  const coherencia = areaScores(cfg.coherence, 'coherencia');
+  const empatia = areaScores(cfg.empathy, 'empatia');
+  if (issues.length) {
+    throw new EvaluationResponseError('La IA devolvió puntajes inválidos o incompletos.', issues);
+  }
+
+  const warnings = [];
+  const cleanMessages = Array.isArray(judgement.mensajesClave)
+    ? judgement.mensajesClave.filter(
+        (item) => isPlainObject(item) && typeof item.mensaje === 'string' && item.mensaje.trim() && typeof item.cubierto === 'boolean',
+      )
+    : [];
+  const cleanRedLines = Array.isArray(judgement.lineasRojas)
+    ? judgement.lineasRojas.filter(
+        (item) => isPlainObject(item) && typeof item.linea === 'string' && item.linea.trim() && typeof item.cruzada === 'boolean',
+      )
+    : [];
+  const cleanPerQuestion = Array.isArray(judgement.porPregunta)
+    ? judgement.porPregunta.filter(
+        (item) =>
+          isPlainObject(item) &&
+          Number.isInteger(item.pregunta) &&
+          item.pregunta > 0 &&
+          typeof item.puntaje === 'number' &&
+          Number.isFinite(item.puntaje) &&
+          item.puntaje >= 0 &&
+          item.puntaje <= 100,
+      )
+    : [];
+
+  if (Array.isArray(judgement.mensajesClave) && cleanMessages.length !== judgement.mensajesClave.length) {
+    warnings.push({ code: 'AI_MESSAGES_DROPPED', message: 'Se descartaron mensajes clave con formato inválido.' });
+  }
+  if (Array.isArray(judgement.lineasRojas) && cleanRedLines.length !== judgement.lineasRojas.length) {
+    warnings.push({ code: 'AI_REDLINES_DROPPED', message: 'Se descartaron líneas rojas con formato inválido.' });
+  }
+  if (Array.isArray(judgement.porPregunta) && cleanPerQuestion.length !== judgement.porPregunta.length) {
+    warnings.push({ code: 'AI_POR_PREGUNTA_DROPPED', message: 'Se descartaron puntajes por pregunta inválidos.' });
+  }
+
+  const risa =
+    isPlainObject(judgement.risa) &&
+    typeof judgement.risa.consistencia === 'number' &&
+    Number.isFinite(judgement.risa.consistencia) &&
+    judgement.risa.consistencia >= 0 &&
+    judgement.risa.consistencia <= 100
+      ? { consistencia: judgement.risa.consistencia, comentario: asText(judgement.risa.comentario) }
+      : null;
+
+  return {
+    judgement: {
+      coherencia,
+      empatia,
+      resumen: asText(judgement.resumen),
+      cita: asText(judgement.cita),
+      fortalezas: asList(judgement.fortalezas),
+      mejoras: asList(judgement.mejoras),
+      mensajesClave: cleanMessages
+        .map((item) => ({ mensaje: asText(item.mensaje, 400), cubierto: item.cubierto }))
+        .slice(0, 30),
+      lineasRojas: cleanRedLines
+        .map((item) => ({ linea: asText(item.linea, 400), cruzada: item.cruzada, evidencia: asText(item.evidencia, 500) }))
+        .slice(0, 30),
+      porPregunta: cleanPerQuestion
+        .map((item) => ({ pregunta: item.pregunta, puntaje: item.puntaje, comentario: asText(item.comentario, 500) }))
+        .slice(0, 60),
+      risa,
+    },
+    warnings,
+  };
 }
 
 function buildPrompt({ theme, transcript, voice, body, lighting, cfg }) {
@@ -266,19 +420,24 @@ ${criteriaText(cfg.empathy)}
   ];
 }
 
-// Puntaje de un área evaluada por la IA, ponderando sus criterios
+// Puntaje de un área evaluada por la IA, ponderando sus criterios YA VALIDADOS.
+// Si falta un criterio queda null: no se rellena con un valor inventado y no se recorta un
+// valor fuera de rango (validateJudgement ya rechazó ese caso).
 function scoreFromCriteria(area, judged) {
-  if (typeof judged === 'number') return { score: clamp(judged), details: [] };
   const details = Object.entries(area.criteria)
     .filter(([, c]) => num(c.weight, 0) > 0)
-    .map(([key, c]) => ({
-      key,
-      label: c.label,
-      value: judged?.[key] != null ? round(clamp(Number(judged[key]))) : null,
-      unit: '/100',
-      weight: num(c.weight, 0),
-      score: judged?.[key] != null ? clamp(Number(judged[key])) : null,
-    }));
+    .map(([key, c]) => {
+      const raw = judged?.[key];
+      const valid = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 100;
+      return {
+        key,
+        label: c.label,
+        value: valid ? round(raw) : null,
+        unit: '/100',
+        weight: num(c.weight, 0),
+        score: valid ? raw : null,
+      };
+    });
   return { score: average(details), details };
 }
 
@@ -324,8 +483,9 @@ async function callEvaluator(model, messages, timeoutMs, raceSignal) {
   }
 }
 
-// Consulta varios modelos en paralelo y usa el primero que entregue un JSON válido
-async function judgeContent(input) {
+// Consulta varios modelos en paralelo y usa el primero que entregue un JSON válido.
+// `call` se inyecta en las pruebas (sin red). Devuelve el ganador y el estado de los demás.
+async function judgeContent(input, { call = callEvaluator } = {}) {
   const messages = buildPrompt(input);
   const timeoutMs = Number(process.env.AI_EVAL_TIMEOUT_MS) || 90000;
   const models = [
@@ -337,32 +497,41 @@ async function judgeContent(input) {
   ];
   const start = Date.now();
   const race = new AbortController();
+  const failures = [];
 
   try {
     const winner = await Promise.any(
       models.map((model) =>
-        callEvaluator(model, messages, timeoutMs, race.signal)
+        call(model, messages, timeoutMs, race.signal)
           .then((judgement) => ({ judgement, model, ms: Date.now() - start }))
           .catch((error) => {
-            if (!race.signal.aborted) {
-              console.warn(`[IA evaluadora] ${model} falló: ${error.name === 'AbortError' ? 'tiempo agotado' : error.message}`);
-            }
+            const reason = error?.name === 'AbortError' ? 'tiempo agotado' : error?.message || 'error desconocido';
+            failures.push({ model, reason });
+            if (!race.signal.aborted) console.warn(`[IA evaluadora] ${model} falló: ${reason}`);
             throw error;
           }),
       ),
     );
     race.abort(); // cancela las evaluaciones que siguen pendientes
     recordAi('evaluator', true, winner);
-    return winner;
+    // Todos los modelos que no ganaron quedan registrados (fallidos o cancelados): sus
+    // errores nunca se mezclan con el resultado final.
+    const failed = models
+      .filter((model) => model !== winner.model)
+      .map((model) => failures.find((item) => item.model === model) || { model, reason: 'cancelado al ganar otro modelo' });
+    return { ...winner, failed };
   } catch {
     recordAi('evaluator', false, { error: 'Ningún modelo entregó una evaluación válida' });
-    throw new Error('La IA evaluadora no respondió. Intenta nuevamente.');
+    const error = new Error('La IA evaluadora no respondió. Intenta nuevamente.');
+    error.code = 'AI_UNAVAILABLE';
+    error.failed = failures;
+    throw error;
   }
 }
 
 // ------------------------------------------------------ Informe completo
 
-async function evaluateSession({ theme, transcript, metrics, pattern, patternSource = 'active' }) {
+async function evaluateSession({ theme, transcript, metrics, pattern, patternSource = 'active', inputAudit = null, judge = judgeContent }) {
   if (!process.env.NVIDIA_API_KEY) {
     const error = new Error('Falta NVIDIA_API_KEY en backend/.env.local');
     error.code = 'NO_API_KEY';
@@ -373,7 +542,8 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
   const interview = normalizeInterviewConfig(theme.interviewConfig);
   const voice = scoreVoice(metrics?.voice, cfg);
   const body = scoreBody(metrics?.body, cfg);
-  const { judgement, model, ms } = await judgeContent({
+  // `judge` se inyecta en las pruebas (sin red); en producción es judgeContent.
+  const winner = await judge({
     theme,
     transcript,
     voice: metrics?.voice,
@@ -381,6 +551,12 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
     lighting: metrics?.lighting,
     cfg,
   });
+  const { model, ms, failed } = winner;
+
+  // La respuesta del modelo se valida ANTES de puntuar: si un puntaje obligatorio falta o
+  // está fuera de 0-100 se lanza INVALID_AI_RESPONSE y no se guarda ningún informe.
+  const validated = validateJudgement(winner.judgement, cfg);
+  const judgement = validated.judgement;
 
   const coherence = scoreFromCriteria(cfg.coherence, judgement.coherencia);
   const empathyContent = scoreFromCriteria(cfg.empathy, judgement.empatia);
@@ -400,21 +576,26 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
   };
 
   const areas = [
-    { key: 'expression', label: 'Expresión', score: body.score, weight: weights.expression, details: body.details, source: 'Cámara (MediaPipe)' },
-    { key: 'voice', label: 'Tono de voz', score: voice.score, weight: weights.voice, details: voice.details, source: 'Micrófono' },
-    { key: 'coherence', label: 'Coherencia', score: round(coherence.score), weight: weights.coherence, details: coherence.details, source: 'IA evaluadora' },
+    { key: 'expression', label: 'Expresión', score: body.score, weight: weights.expression, details: body.details, coverage: body.coverage, source: 'Cámara (MediaPipe)' },
+    { key: 'voice', label: 'Tono de voz', score: voice.score, weight: weights.voice, details: voice.details, coverage: voice.coverage, source: 'Micrófono' },
+    { key: 'coherence', label: 'Coherencia', score: round(coherence.score), weight: weights.coherence, details: coherence.details, coverage: 1, source: 'IA evaluadora' },
     {
       key: 'empathy',
       label: 'Empatía',
       score: round(empathy),
       weight: weights.empathy,
       details: empathyContent.details,
+      coverage: 1,
       source: facing == null ? 'IA evaluadora' : `IA evaluadora + mirada (${Math.round(visualShare * 100)}%)`,
     },
   ];
 
   // Si un área no se pudo medir (sin cámara/micrófono), su peso se reparte entre las demás
   const global = round(average(areas));
+  // Cobertura efectiva: qué parte del peso configurado se pudo medir de verdad. No altera
+  // el puntaje; deja constancia (p. ej. si la velocidad quedó fuera por falta de audio).
+  const wpmDetail = voice.details.find((detail) => detail.key === 'wpm');
+  const wpmVerified = Boolean(wpmDetail?.verified);
 
   return {
     global,
@@ -433,9 +614,45 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
     sensibilidad: buildSensitivity(metrics?.body, transcript, judgement.risa),
     interview: { aggressiveness: interview.aggressiveness, questionCount: interview.questionCount, followUps: interview.followUps },
     measured: { voice: metrics?.voice || null, body: metrics?.body || null, lighting: metrics?.lighting || null },
+    // Cobertura efectiva por área (0-1) y del criterio de velocidad. Aditivo: la interfaz
+    // actual lo ignora y los informes históricos simplemente no lo tienen.
+    coverage: {
+      expression: body.coverage ?? 0,
+      voice: voice.coverage ?? 0,
+      coherence: 1,
+      empathy: 1,
+      wpmVerified,
+    },
     ai: { evaluator: model, ms },
-    generatedAt: new Date().toISOString(),
+    generatedAt: new Date().toISOString(), // fecha/hora de la evaluación (ya era suficiente)
+    // Trazabilidad: cómo se produjo este informe y de dónde salió cada métrica.
+    // Campo NUEVO y compatible: las evaluaciones históricas simplemente no lo tienen.
+    audit: {
+      evaluatorVersion: EVALUATOR_VERSION,
+      promptVersion: PROMPT_VERSION,
+      model, // modelo que entregó la evaluación finalmente usada
+      ms, // tiempo hasta la primera respuesta válida
+      failedModels: failed, // los demás modelos y por qué no se usaron
+      metricSources: inputAudit?.sources ?? null,
+      metricSourceNotes: inputAudit?.sourceNotes ?? null,
+      inputWarnings: inputAudit?.warnings ?? [],
+      inputCoverage: inputAudit?.coverage ?? null,
+      // Evidencia del audio (Whisper): veredicto, motivo y cobertura. Solo números.
+      speech: inputAudit?.speech ?? null,
+      responseWarnings: validated.warnings,
+    },
   };
 }
 
-module.exports = { evaluateSession, buildSensitivity };
+module.exports = {
+  EVALUATOR_VERSION,
+  PROMPT_VERSION,
+  EvaluationResponseError,
+  buildSensitivity,
+  coverageOf,
+  evaluateSession,
+  judgeContent,
+  scoreBody,
+  scoreVoice,
+  validateJudgement,
+};

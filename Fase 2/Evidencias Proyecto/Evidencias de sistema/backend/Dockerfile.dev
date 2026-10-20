@@ -1,0 +1,26 @@
+# Imagen de DESARROLLO del backend (Express + Prisma).
+# - Las dependencias se instalan en la imagen; en runtime el código se monta desde el host
+#   y node_modules se conserva en un volumen anónimo (los binarios de Prisma son de Linux).
+# - nodemon vigila los cambios y reinicia el proceso (--legacy-watch = sondeo, fiable con
+#   bind mounts de Windows).
+FROM node:22-bookworm-slim
+
+WORKDIR /app
+
+# Prisma necesita OpenSSL en Debian slim
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY prisma ./prisma
+RUN npx prisma generate
+
+COPY . .
+
+ENV NODE_ENV=development
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]

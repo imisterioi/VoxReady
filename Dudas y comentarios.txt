@@ -1,4 +1,14 @@
-cd "Fase 2\Evidencias Proyecto\Evidencias de sistema"
+CATEGORIAS POR APARTADO, SALIDA PEDAGOJICA, SALIDA DE ESTUDIOS, 
+PAGO DE MATRICULAS, 
+DEPENDIENDO DE COMO AVANCE, HACER UN SISTEMA DE MENSAJERIA CON LOS APODERADOS,
+DIAGRAMA LOGICO, DIAGRAMA DE FLUJO, DIAGRAMA DE FUNCIONAMIENTO, MANUAL DE USO
+QUE SEA ADMINISTRABLE(CONTROL TOTAL), QUE SEA ESCALABLE, Y QUE SEA SEGURO
+
+
+Reunión con cliente Vox Ready: 9:03
+
+¿poner un panel en el administrador del sistema, donde se muestren los errores de servicios externos? con el proposito de que puedan saber si algun servicio esta fallando o falló recientemente en alguna sesion y poder identificar el modulo, servicio, etc, que esta causando el problema.
+
 La eliminación física de los usuarios y las sesiones dentro de una transacción es una decisión razonable, pero el borrado de los archivos se hace antes de la transacción. Si falla la operación de base de datos después de borrar los videos, podría quedar el tenant registrado sin sus grabaciones. (abordar con un mecanismo de reintentos o una cola de eliminación)
 
 Anonimizacion:

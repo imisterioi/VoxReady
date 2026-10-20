@@ -1,3 +1,8 @@
 # Claves privadas y archivos locales (no subir a GitHub)
 .env.local
+# Configuración local del servicio Whisper (se versiona whisper/.env.example)
+whisper/.env
+# Audio y modelos locales de evaluación (se regeneran con whisper/herramientas)
+whisper/muestras/
+whisper/modelos/
 uploads/

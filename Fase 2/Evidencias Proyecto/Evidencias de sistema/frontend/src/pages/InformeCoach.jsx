@@ -8,6 +8,7 @@ import { apiFetch } from '../lib/api';
 import { formatDate } from '../data/directory';
 import { lessonsForArea } from '../data/lessons';
 import SessionVideo from '../components/SessionVideo';
+import { reportAccess } from '../lib/practice/reportAccess';
 
 const AREA_ICONS = { expression: 'person', voice: 'mic', coherence: 'message', empathy: 'users' };
 
@@ -28,24 +29,27 @@ export default function InformeCoach({ audience = 'user' }) {
   const [params] = useSearchParams();
   const sessionId = params.get('sesion');
 
-  const [state, setState] = useState({ loading: true, error: '', session: null });
+  const [state, setState] = useState({ loading: true, error: '', session: null, evaluation: null });
   const [openTurn, setOpenTurn] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
+    // Al cambiar de sesión se descarta la anterior: nunca se muestra el informe ni el
+    // vídeo de otra práctica mientras llega la nueva.
+    setState({ loading: true, error: '', session: null, evaluation: null });
     (async () => {
       try {
         let id = sessionId;
-        if (!id && !isVocero) return !cancelled && setState({ loading: false, error: 'No se indicó la práctica.', session: null });
+        if (!id && !isVocero) return !cancelled && setState({ loading: false, error: 'No se indicó la práctica.', session: null, evaluation: null });
         if (!id) {
           const { sessions } = await apiFetch('/api/sessions');
           id = sessions[0]?.id;
-          if (!id) return !cancelled && setState({ loading: false, error: '', session: null });
+          if (!id) return !cancelled && setState({ loading: false, error: '', session: null, evaluation: null });
         }
-        const { session } = await apiFetch(`/api/sessions/${id}`);
-        if (!cancelled) setState({ loading: false, error: '', session });
+        const { session, evaluation } = await apiFetch(`/api/sessions/${id}`);
+        if (!cancelled) setState({ loading: false, error: '', session, evaluation: evaluation || null });
       } catch (err) {
-        if (!cancelled) setState({ loading: false, error: err.message, session: null });
+        if (!cancelled) setState({ loading: false, error: err.message, session: null, evaluation: null });
       }
     })();
     return () => {
@@ -53,26 +57,50 @@ export default function InformeCoach({ audience = 'user' }) {
     };
   }, [sessionId, isVocero]);
 
-  const { loading, error, session } = state;
+  const { loading, error, session, evaluation } = state;
   const report = session?.report;
+  const access = reportAccess({ session, evaluation, error });
 
-  if (loading || error || !report) {
+  // Sin prácticas todavía (el vocero no tiene ninguna sesión): mensaje de bienvenida.
+  const noSessions = !loading && !error && !session && !sessionId;
+
+  if (loading) {
     return (
       <>
         {isVocero && <PracticeSteps />}
         <Card className="max-w-xl mx-auto">
-          {loading ? (
-            <EmptyState icon="refresh" title="Cargando tu informe…" />
-          ) : error ? (
-            <EmptyState tone="danger" icon="alert" title="No se pudo cargar el informe" description={error} />
-          ) : (
-            <EmptyState
-              icon="file"
-              title="Aún no tienes informes"
-              description="Completa una práctica para recibir tu evaluación. Te recomendamos la “Prueba integral”."
-              action={<Button to="/vocero/escenarios" iconRight="arrowRight">Practicar ahora</Button>}
-            />
-          )}
+          <EmptyState icon="refresh" title="Cargando tu informe…" />
+        </Card>
+      </>
+    );
+  }
+
+  // El informe solo se muestra cuando el backend confirma que ESA sesión está completa.
+  if (!access.canOpen) {
+    const retryable = access.state === 'processing' || access.state === 'pending';
+    return (
+      <>
+        {isVocero && <PracticeSteps />}
+        <Card className="max-w-xl mx-auto">
+          <EmptyState
+            tone={access.state === 'error' || access.state === 'failed' ? 'danger' : undefined}
+            icon={noSessions ? 'file' : retryable ? 'refresh' : 'alert'}
+            title={noSessions ? 'Aún no tienes informes' : access.title}
+            description={
+              noSessions
+                ? 'Completa una práctica para recibir tu evaluación. Te recomendamos la “Prueba integral”.'
+                : access.description
+            }
+            action={
+              noSessions ? (
+                <Button to="/vocero/escenarios" iconRight="arrowRight">Practicar ahora</Button>
+              ) : retryable && isVocero && session?.id ? (
+                <Button to={`/vocero/analizando?sesion=${session.id}`} iconRight="arrowRight">Ver el estado del análisis</Button>
+              ) : access.state === 'failed' ? (
+                <Button to="/vocero/escenarios">Volver a escenarios</Button>
+              ) : undefined
+            }
+          />
         </Card>
       </>
     );
@@ -245,13 +273,18 @@ export default function InformeCoach({ audience = 'user' }) {
             {area.details?.length > 0 && (
               <ul className="mt-4 pt-4 border-t border-line space-y-2">
                 {area.details
-                  .filter((d) => d.value != null)
+                  .filter((d) => d.value != null || d.verified === false)
                   .map((d) => (
                     <li key={d.key} className="flex items-center justify-between gap-2 text-xs">
                       <span className="text-muted truncate">{d.label}</span>
-                      <span className={cx('tabular-nums font-medium', d.score >= 70 ? 'text-ink' : d.score >= 40 ? 'text-warning' : 'text-danger')}>
-                        {d.value} {d.unit === '%' || d.unit === '°' || d.unit === 's' ? d.unit : ''}
-                      </span>
+                      {d.value == null ? (
+                        // Criterio no verificable (p. ej. velocidad sin audio): se dice, no se puntúa.
+                        <span className="text-faint italic" title={d.reason || ''}>sin verificar</span>
+                      ) : (
+                        <span className={cx('tabular-nums font-medium', d.score >= 70 ? 'text-ink' : d.score >= 40 ? 'text-warning' : 'text-danger')}>
+                          {d.value} {d.unit === '%' || d.unit === '°' || d.unit === 's' ? d.unit : ''}
+                        </span>
+                      )}
                     </li>
                   ))}
               </ul>

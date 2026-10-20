@@ -10,6 +10,8 @@ const path = require('path');
 
 const SESSIONS_DIR = path.join(__dirname, '..', 'uploads', 'sessions');
 const videoPathForSession = (id) => path.join(SESSIONS_DIR, `${id}.webm`);
+// Pista de audio separada (solo para verificar el WPM): se borra junto con el video.
+const audioPathForSession = (id) => path.join(SESSIONS_DIR, `${id}.audio.webm`);
 
 const ANON_NAME = 'Usuario anonimizado';
 const anonEmailFor = (userId) => `anon+${userId}@removed.local`;
@@ -102,14 +104,19 @@ function sessionScrubData(session) {
 function removeVideoFiles(sessionIds) {
   let removed = 0;
   for (const id of sessionIds) {
-    try {
-      const file = videoPathForSession(id);
-      if (fs.existsSync(file)) {
-        fs.rmSync(file, { force: true });
-        removed += 1;
+    // Video y audio se tratan como una unidad: si se borra la grabación, se borran los dos.
+    for (const [suffix, file] of [
+      ['.webm', videoPathForSession(id)],
+      ['.audio.webm', audioPathForSession(id)],
+    ]) {
+      try {
+        if (fs.existsSync(file)) {
+          fs.rmSync(file, { force: true });
+          removed += 1;
+        }
+      } catch (error) {
+        console.warn(`[Anonimización] No se pudo borrar ${id}${suffix}:`, error.message);
       }
-    } catch (error) {
-      console.warn(`[Anonimización] No se pudo borrar ${id}.webm:`, error.message);
     }
   }
   return removed;
@@ -181,6 +188,7 @@ module.exports = {
   anonymizeSession,
   deleteUserVideos,
   removeVideoFiles,
+  audioPathForSession,
   videoPathForSession,
   anonEmailFor,
 };

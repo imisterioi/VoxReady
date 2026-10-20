@@ -273,6 +273,39 @@ export default function Laboratorio() {
         </section>
         
       </div>
+      {/* Transcripción */}
+      <section className="mt-8">
+        <div className="mb-4">
+          <h2 className="text-[15px] font-semibold text-ink">Transcripción</h2>
+          <p className="text-[13px] text-muted mt-0.5">Comparación de motores de reconocimiento de voz (experimental)</p>
+        </div>
+
+        <Link to="/laboratorio/transcripcion" className="group block">
+          <Card className="p-0 overflow-hidden hover:shadow-lift hover:border-line-strong transition-all">
+            <div className="p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-ink">Laboratorio de transcripción</h3>
+                <Icon
+                  name="arrowRight"
+                  size={16}
+                  className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all"
+                />
+              </div>
+              <p className="text-[13px] text-muted mt-1.5 leading-relaxed">
+                Graba una intervención y compara la transcripción de Web Speech API con Whisper local sobre el mismo
+                audio, con guion de referencia, WER, sustituciones, omisiones, inserciones y tiempos.
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Badge tone="neutral">Web Speech API</Badge>
+                <Badge tone="neutral">Whisper local</Badge>
+                <Badge tone="neutral">WER / CER</Badge>
+              </div>
+            </div>
+          </Card>
+        </Link>
+      </section>
+
+
       {/* RIVE */}
             <section className="mt-8">
             <div className="mb-4">

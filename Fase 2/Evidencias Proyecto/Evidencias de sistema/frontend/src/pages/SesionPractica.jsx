@@ -9,6 +9,8 @@ import { API_URL, apiFetch, getToken } from '../lib/api';
 import { speak, useInterviewerVoice } from '../lib/voice';
 import AudioMeter from '../lib/practice/audioMeter';
 import PoseTracker from '../lib/practice/poseTracker';
+import { buildBlob, startAudioRecorder, stopAll, stopAndWait, uploadBlob } from '../lib/practice/mediaCapture';
+import { recordingReadiness } from '../lib/practice/sessionStart';
 import { analyzeText, createRecognizer, speechRecognitionSupported } from '../lib/practice/speech';
 
 // Entrevista simulada completa:
@@ -48,6 +50,13 @@ export default function SesionPractica() {
   const streamRef = useRef(null);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
+  // Pista de audio independiente (Opus): se usa para verificar el WPM en el servidor.
+  const audioRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  // Motivo por el que la pista de audio no está disponible (para el diagnóstico).
+  const audioErrorRef = useRef(null);
+  // Evita repetir el mismo aviso en consola durante toda la práctica.
+  const loggedRef = useRef(new Set());
   const audioRef = useRef(null);
   const poseRef = useRef(null);
   const recognizerRef = useRef(null);
@@ -61,6 +70,11 @@ export default function SesionPractica() {
   const secondsRef = useRef(0);
   const phaseRef = useRef('loading');
   const finishingRef = useRef(false);
+  // Estado de preparación: la grabación no arranca hasta que todo esté listo.
+  const mediaReadyRef = useRef(false);
+  const poseReadyRef = useRef(false);
+  const poseFailedRef = useRef(false);
+  const recordingStartedRef = useRef(false);
   const voiceRef = useRef(voice);
 
   useEffect(() => {
@@ -107,6 +121,18 @@ export default function SesionPractica() {
 
   // ------------------------------------------------------------ Medios
 
+  // Diagnóstico de grabación: un mensaje por evento y práctica. Nunca incluye audio,
+  // texto, tokens ni datos personales.
+  const logMedia = (event, detail) => {
+    if (loggedRef.current.size > 40) return;
+    const key = `${event}|${detail ?? ''}`;
+    if (loggedRef.current.has(key)) return;
+    loggedRef.current.add(key);
+    const line = `[grabación] ${event}${detail ? ' · ' + detail : ''}`;
+    if (/(EMPTY|ERROR|MISSING|FAILED|UNSUPPORTED|NOT_STARTED|UNAVAILABLE)/.test(event)) console.error(line);
+    else console.info(line);
+  };
+
   const stopMediaTracks = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -118,6 +144,11 @@ export default function SesionPractica() {
     clearInterval(watchdogRef.current);
     window.speechSynthesis?.cancel();
     recognizerRef.current?.stop();
+    // Se detienen los grabadores ANTES de soltar las pistas: así no queda ningún
+    // MediaRecorder activo al descartar o salir de la práctica.
+    stopAll([recorderRef.current, audioRecorderRef.current]);
+    recorderRef.current = null;
+    audioRecorderRef.current = null;
     audioRef.current?.destroy();
     poseRef.current?.destroy();
     stopMediaTracks();
@@ -136,7 +167,9 @@ export default function SesionPractica() {
     sessionIdRef.current = data.sessionId;
   }
 
-  async function startMedia() {
+  // Prepara cámara, micrófono, medición y modelo de cuerpo. NO graba todavía:
+  // la grabación empieza cuando el entrevistador ya tiene la primera pregunta.
+  async function prepareMedia() {
     const devices = JSON.parse(sessionStorage.getItem('voxready_dispositivos') || '{}');
     let stream;
     try {
@@ -150,11 +183,7 @@ export default function SesionPractica() {
       setMediaWarning('No se pudo acceder a la cámara o al micrófono. Puedes continuar respondiendo por escrito; no se medirán voz ni cuerpo.');
       setTextMode(true);
       setBodyStatus('off');
-      timerRef.current = setInterval(() => {
-        secondsRef.current += 1;
-        setSeconds(secondsRef.current);
-      }, 1000);
-      return;
+      return false;
     }
     streamRef.current = stream;
     if (videoRef.current) {
@@ -162,24 +191,74 @@ export default function SesionPractica() {
       await videoRef.current.play();
     }
 
-    // Grabación (se sube al terminar)
-    const mimeType = ['video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m));
-    const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
-    recorder.ondataavailable = (e) => {
-      if (e.data?.size) chunksRef.current.push(e.data);
-    };
-    recorder.start(1000);
-    recorderRef.current = recorder;
+    // Grabación: se crea y arranca en startRecording(), cuando todo está listo.
+    // (Grabar aquí incluía el tiempo de carga del entrevistador.)
+
+    // Segunda grabación, SOLO de audio (Opus ~32 kbps): es la que se transcribe en el
+    // servidor para medir el tiempo de habla. El video se sigue grabando igual que antes.
+    //
+    // IMPORTANTE: se usa un MediaStream con SOLO la pista de audio. Con el stream mixto
+    // (cámara + micrófono), Chromium acepta el constructor pero `start()` falla con
+    // NotSupportedError (reproducido en Edge 155) y el Blob quedaba vacío en silencio.
+    // Se crea también en startRecording().
 
     // Medición de voz y cuerpo
     audioRef.current = new AudioMeter(stream);
     const pose = new PoseTracker(videoRef.current);
     poseRef.current = pose;
-    pose.load().then((ok) => {
-      if (!ok) return setBodyStatus('off');
+    // El modelo de cuerpo se carga ANTES de grabar. Si tarda demasiado o falla, la
+    // práctica sigue: simplemente no se medirá el cuerpo.
+    const poseOk = await Promise.race([
+      pose.load().catch(() => false),
+      new Promise((resolve) => setTimeout(() => resolve(false), 15000)),
+    ]);
+    if (poseOk) {
       pose.start();
-    });
+      poseReadyRef.current = true;
+    } else {
+      poseFailedRef.current = true;
+      setBodyStatus('off');
+    }
+    mediaReadyRef.current = true;
+    return true;
+  }
 
+  // Crea y arranca los grabadores y el cronómetro. Solo se llama cuando la sesión,
+  // la cámara/micrófono y la primera pregunta están listos.
+  function startRecording() {
+    if (recordingStartedRef.current) return;
+    recordingStartedRef.current = true;
+
+    const stream = streamRef.current;
+    if (stream) {
+      const mimeType = ['video/webm;codecs=vp8,opus', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+      recorder.ondataavailable = (e) => {
+        if (e.data?.size) chunksRef.current.push(e.data);
+      };
+      recorder.start(1000);
+      recorderRef.current = recorder;
+
+      try {
+        const { recorder: audioRecorder, mime } = startAudioRecorder({
+          stream,
+          onData: (data) => audioChunksRef.current.push(data),
+          onError: (error) => {
+            audioErrorRef.current = error?.name || 'AUDIO_RECORDER_ERROR';
+            logMedia('AUDIO_RECORDER_ERROR', audioErrorRef.current);
+          },
+        });
+        audioRecorderRef.current = audioRecorder;
+        logMedia('AUDIO_RECORDING_STARTED', mime);
+      } catch (error) {
+        audioErrorRef.current = error.code || 'AUDIO_RECORDER_ERROR';
+        logMedia(error.code || 'AUDIO_RECORDER_ERROR', error.cause?.name || '');
+      }
+    }
+
+    // El cronómetro y las métricas empiezan a contar con la grabación, no antes.
+    secondsRef.current = 0;
+    setSeconds(0);
     timerRef.current = setInterval(() => {
       secondsRef.current += 1;
       setSeconds(secondsRef.current);
@@ -355,15 +434,32 @@ export default function SesionPractica() {
     };
   }
 
+  // Sube un archivo de la sesión. Nunca lanza: si falla, la evaluación sigue su curso
+  // (la velocidad quedará "sin verificar" en lugar de inventarse).
+  // Devuelve un resultado explícito para no dar por buena una subida que no ocurrió.
+  async function uploadMedia(kind, blob, type) {
+    const label = kind === 'audio' ? 'AUDIO' : 'VIDEO';
+    if (!sessionIdRef.current) {
+      logMedia(`${label}_UPLOAD_FAILED`, 'NO_SESSION');
+      return { ok: false, reason: 'NO_SESSION' };
+    }
+    // El endpoint exige autenticación; el token va en la URL por simetría con el video.
+    const url = `${API_URL}/api/sessions/${sessionIdRef.current}/${kind}?token=${encodeURIComponent(getToken() || '')}`;
+    const result = await uploadBlob({ url, blob, type });
+
+    if (result.ok) logMedia(`${label}_UPLOAD_OK`, `${result.bytes} bytes`);
+    else if (result.reason === 'EMPTY') logMedia(`${label}_BLOB_EMPTY`, kind === 'audio' ? audioErrorRef.current || 'sin datos' : 'sin datos');
+    else if (result.reason === 'HTTP') logMedia(`${label}_UPLOAD_FAILED`, `HTTP ${result.status}`);
+    else logMedia(`${label}_UPLOAD_FAILED`, result.error || 'red');
+    return result;
+  }
+
   async function uploadRecording() {
-    const blob = new Blob(chunksRef.current, { type: 'video/webm' });
-    if (!blob.size || !sessionIdRef.current) return;
-    // El endpoint exige autenticación; el <video> no permite encabezados, así que el token va en la URL
-    await fetch(`${API_URL}/api/sessions/${sessionIdRef.current}/video?token=${encodeURIComponent(getToken() || '')}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'video/webm' },
-      body: blob,
-    });
+    // El video se sube igual que antes; el audio es la evidencia del WPM.
+    // Se esperan AMBAS subidas antes de pedir la evaluación.
+    const video = await uploadMedia('video', buildBlob(chunksRef.current, 'video/webm'), 'video/webm');
+    const audio = await uploadMedia('audio', buildBlob(audioChunksRef.current, 'audio/webm'), 'audio/webm');
+    return { video, audio };
   }
 
   async function finishInterview() {
@@ -382,18 +478,15 @@ export default function SesionPractica() {
       }),
     );
 
-    // Detener la grabación y subirla (si falla, igual se analiza la sesión)
-    const recorder = recorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      await new Promise((resolve) => {
-        recorder.onstop = resolve;
-        recorder.stop();
-      });
-    }
-    try {
-      await uploadRecording();
-    } catch (err) {
-      console.warn('No se pudo subir la grabación:', err);
+    // 1) Detener grabadores y ESPERAR al evento `stop` (el dataavailable final llega antes).
+    await stopAndWait(recorderRef.current);
+    await stopAndWait(audioRecorderRef.current);
+
+    // 2) Subir (se espera a que terminen) antes de navegar a la evaluación.
+    const { audio } = await uploadRecording();
+    if (!audio.ok) {
+      // No se simula éxito: la evaluación recibirá la sesión sin audio verificado.
+      logMedia('AUDIO_NO_DISPONIBLE', audio.reason || 'desconocido');
     }
 
     cleanup();
@@ -429,13 +522,34 @@ export default function SesionPractica() {
       try {
         await createSession();
         if (cancelled) return;
-        await startMedia();
+        // 1) Cámara, micrófono y modelo de cuerpo (sin grabar todavía).
+        await prepareMedia();
         if (cancelled) return;
+        // 2) Primera pregunta: el entrevistador ya está listo (la IA puede tardar).
         const first = await fetchQuestion();
         if (cancelled) return;
+
+        // 3) Solo ahora se comprueba que todo esté listo y se empieza a grabar.
+        const readiness = recordingReadiness({
+          sessionId: sessionIdRef.current,
+          mediaReady: mediaReadyRef.current,
+          textMode: textModeRef.current,
+          question: first,
+          poseReady: poseReadyRef.current,
+          poseFailed: poseFailedRef.current,
+        });
+        if (!readiness.ready) {
+          throw new Error(`No se pudo iniciar la grabación (falta: ${readiness.missing.join(', ')}).`);
+        }
+        startRecording();
         askQuestion(first);
       } catch (err) {
         console.error('Error iniciando sesión:', err);
+        // Si algo falla antes de empezar, no queda ninguna grabación activa.
+        if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+        if (audioRecorderRef.current?.state === 'recording') audioRecorderRef.current.stop();
+        recorderRef.current = null;
+        audioRecorderRef.current = null;
         if (!cancelled) setError(err.message || 'No se pudo iniciar la sesión.');
       }
     }, 50);

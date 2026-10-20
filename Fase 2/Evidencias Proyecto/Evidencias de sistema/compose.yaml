@@ -1,0 +1,157 @@
+# VoxReady — entorno de DESARROLLO (no usar en producción).
+#
+#   docker compose up -d          # levanta los 4 servicios
+#   docker compose logs -f        # logs de todos
+#   docker compose down           # detiene (conserva volúmenes y datos)
+#
+# Recarga automática:
+#   frontend -> HMR de Vite (bind mount + CHOKIDAR_USEPOLLING)
+#   backend  -> nodemon --legacy-watch (sondeo, fiable en bind mounts de Windows)
+#   whisper  -> uvicorn --reload (recarga el proceso; los modelos se leen de la caché)
+#   postgres -> no se reinicia por cambios de código
+#
+# AVISO IMPORTANTE sobre el volumen de PostgreSQL:
+#   El entorno actual (contenedores manuales) guarda los datos en el volumen anónimo
+#   f79952eb178cad11cfcb7a48e122c1b00c21eb96e46fdef5bb9b8839dca7f389.
+#   Aquí se declara como EXTERNO para reutilizar exactamente esos datos.
+#   Dos servidores PostgreSQL NO pueden usar el mismo directorio de datos a la vez:
+#   hay que detener el contenedor manual `voxready-postgres` antes de levantar este
+#   compose (el volumen no se toca). Si algún día cambia ese volumen, actualiza
+#   PGDATA_VOLUME en .env.
+
+name: voxready-dev
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en el archivo .env}
+      POSTGRES_DB: ${POSTGRES_DB:-voxready_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-voxready_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  whisper:
+    build:
+      context: ./backend/whisper
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      WHISPER_HOST: 0.0.0.0
+      WHISPER_PORT: "8001"
+      WHISPER_MODELS: ${WHISPER_MODELS:-base,small,medium}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_MAX_MB: ${WHISPER_MAX_MB:-25}
+      WHISPER_MAX_AUDIO_SECONDS: ${WHISPER_MAX_AUDIO_SECONDS:-600}
+      WHISPER_MAX_CONCURRENCY: ${WHISPER_MAX_CONCURRENCY:-1}
+      PYTHONDONTWRITEBYTECODE: "1"
+    # --reload vigila /app (código montado). Sin watchfiles, uvicorn usa StatReload
+    # (sondeo), que funciona con bind mounts de Windows.
+    command:
+      - python
+      - -m
+      - uvicorn
+      - server:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --reload
+      - --reload-dir
+      - /app
+    volumes:
+      - ./backend/whisper:/app
+      # Caché de modelos ya descargada: no se vuelve a descargar al reiniciar.
+      - ${HF_CACHE:-C:/Users/a/.cache/huggingface}:/root/.cache/huggingface
+    ports:
+      - "${WHISPER_PORT:-8001}:8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3).status==200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      # Compose gana a dotenv (dotenv no sobreescribe variables ya definidas).
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voxready_db}?schema=public
+      WHISPER_URL: http://whisper:8001
+      CHOKIDAR_USEPOLLING: "true"
+    # Regenera el cliente Prisma (por si cambió el schema montado) y arranca nodemon.
+    command: sh -c "npx prisma generate && npm run dev"
+    volumes:
+      # Código del host: incluye uploads/ (los videos existentes se conservan).
+      - ./backend:/app
+      # node_modules de Linux dentro del contenedor (no el de Windows).
+      - /app/node_modules
+    ports:
+      - "${BACKEND_PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      whisper:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      # Lo usa el NAVEGADOR, por eso apunta al puerto publicado del backend.
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+volumes:
+  # Volumen EXISTENTE con los datos actuales. No se crea ni se borra desde aquí.
+  pgdata:
+    external: true
+    name: ${PGDATA_VOLUME:-f79952eb178cad11cfcb7a48e122c1b00c21eb96e46fdef5bb9b8839dca7f389}

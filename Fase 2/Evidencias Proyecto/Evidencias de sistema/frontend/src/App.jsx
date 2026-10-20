@@ -20,6 +20,7 @@ import ColaEtiquetado from './pages/ColaEtiquetado';
 import Microleccion from './pages/Microleccion';
 import NotFound from './pages/NotFound';
 import Laboratorio from './pages/Laboratorio';
+import TranscriptionLab from './components/TranscriptionLab';
 import Voceros from './pages/Voceros';
 import Practicas from './pages/Practicas';
 import Temas from './pages/Temas';
@@ -58,6 +59,7 @@ function App() {
 
           {/* Laboratorio: pruebas técnicas (backend + MediaPipe) */}
           <Route path="laboratorio" element={<Laboratorio />} />
+          <Route path="laboratorio/transcripcion" element={<TranscriptionLab />} />
           <Route
             path="mediapipe-test"
             element={

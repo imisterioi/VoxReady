@@ -1,0 +1,8 @@
+# Contexto de la imagen de Whisper: solo código; los modelos NO van en la imagen.
+__pycache__/
+*.pyc
+.env
+.git
+.gitignore
+muestras/
+modelos/

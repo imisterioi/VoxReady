@@ -2,7 +2,10 @@
 const fs = require('fs');
 const path = require('path');
 const { requireAuth } = require('../auth');
-const { evaluateSession } = require('../ai/evaluator');
+const { EvaluationResponseError, evaluateSession } = require('../ai/evaluator');
+const { EvaluationInputError, applySpeechEvidence, normalizeEvaluateInput } = require('../lib/evaluationInput');
+const { computeSpeechEvidence } = require('../lib/speechEvidence');
+const { transcribeFile } = require('../lib/whisperClient');
 const { removeVideoFiles } = require('../lib/anonymize');
 const { effectiveElapsedMs, reconcilePauses } = require('../lib/retentionPause');
 const { registerJob, runJob } = require('../lib/runtimeStatus');
@@ -10,9 +13,10 @@ const { registerJob, runJob } = require('../lib/runtimeStatus');
 const RETENTION_JOB = 'retention';
 const RETENTION_EVERY_MS = 6 * 60 * 60 * 1000;
 
-// Mismo directorio donde el endpoint de tu compañero guarda las grabaciones
+// Mismo directorio donde se guardan las grabaciones: video (<id>.webm) y audio (<id>.audio.webm)
 const SESSIONS_DIR = path.join(__dirname, '..', 'uploads', 'sessions');
 const videoPath = (id) => path.join(SESSIONS_DIR, `${id}.webm`);
+const audioPath = (id) => path.join(SESSIONS_DIR, `${id}.audio.webm`);
 
 // Limpieza del reporte para retención (independiente de la anonimización):
 // elimina el texto derivado de la respuesta del vocero y conserva la parte numérica/técnica.
@@ -89,22 +93,30 @@ async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) 
     }),
   ]);
   const byTenant = {};
-  const tally = (id) => (byTenant[id] ||= { sessions: 0, expired: 0, videos: 0, videosRemoved: 0 });
+  const tally = (id) => (byTenant[id] ||= { sessions: 0, expired: 0, videos: 0, videosRemoved: 0, audios: 0, audiosRemoved: 0 });
   const pausesByUser = new Map(users.map((u) => [u.id, u.retentionPauses]));
 
   const now = Date.now();
+  const isVideoFile = (f) => f.endsWith('.webm') && !f.endsWith('.audio.webm');
+  const isAudioFile = (f) => f.endsWith('.audio.webm');
   const videoFiles = new Set(
-    fs.existsSync(SESSIONS_DIR) ? fs.readdirSync(SESSIONS_DIR).filter((f) => f.endsWith('.webm')) : [],
+    fs.existsSync(SESSIONS_DIR) ? fs.readdirSync(SESSIONS_DIR).filter(isVideoFile) : [],
+  );
+  const audioFiles = new Set(
+    fs.existsSync(SESSIONS_DIR) ? fs.readdirSync(SESSIONS_DIR).filter(isAudioFile) : [],
   );
 
   let videosRemoved = 0;
+  let audiosRemoved = 0;
   const eligibleIds = [];
 
   for (const s of sessions) {
     const stats = tally(s.tenantId);
     const fileName = `${s.id}.webm`;
+    const audioName = `${s.id}.audio.webm`;
     stats.sessions += 1;
     if (videoFiles.has(fileName)) stats.videos += 1;
+    if (audioFiles.has(audioName)) stats.audios += 1;
     if (s.tenant?.status === 'DELETING') continue; // el tenant se está eliminando: lo maneja el job de eliminación
     // Retención pausada (suspendido ahora): su reloj está detenido → NO se purga.
     const intervals = pausesByUser.get(s.userId) || [];
@@ -119,13 +131,21 @@ async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) 
     stats.expired += 1;
     if (dryRun) continue;
 
-    // Video: eliminación física del .webm (solo si existe; puede no haber grabación)
+    // Video y audio: eliminación física solo si existen (puede no haber grabación)
     if (videoFiles.has(fileName)) {
       fs.rmSync(videoPath(s.id), { force: true });
       videoFiles.delete(fileName);
       videosRemoved += 1;
       stats.videos -= 1;
       stats.videosRemoved += 1;
+    }
+    // La pista de audio se borra con la misma política: no sobrevive a la grabación.
+    if (audioFiles.has(audioName)) {
+      fs.rmSync(audioPath(s.id), { force: true });
+      audioFiles.delete(audioName);
+      audiosRemoved += 1;
+      stats.audios -= 1;
+      stats.audiosRemoved += 1;
     }
     eligibleIds.push(s.id);
   }
@@ -156,9 +176,10 @@ async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) 
   }
 
   if (videosRemoved) console.log(`[Retención] ${videosRemoved} grabación(es) eliminada(s) según la política de retención`);
+  if (audiosRemoved) console.log(`[Retención] ${audiosRemoved} pista(s) de audio eliminada(s) según la política de retención`);
   if (transcriptsCleared) console.log(`[Retención] ${transcriptsCleared} transcripción(es) eliminada(s) según la política de retención`);
   if (reportsCleaned) console.log(`[Retención] ${reportsCleaned} reporte(s) limpiado(s) según la política de retención`);
-  return { videosRemoved, transcriptsCleared, reportsCleaned, byTenant };
+  return { videosRemoved, audiosRemoved, transcriptsCleared, reportsCleaned, byTenant };
 }
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
@@ -193,9 +214,69 @@ module.exports = function registerSessionRoutes(app, prisma) {
   }, 5000);
   setInterval(runPurge, RETENTION_EVERY_MS).unref();
 
-  // Evaluaciones en curso: si llegan dos solicitudes para la misma sesión,
-  // la segunda espera el resultado de la primera (no se evalúa dos veces)
-  const inProgress = new Map();
+  // ------------------------------------------------ Evaluación en segundo plano
+  //
+  // Estados persistentes en `Session.status` (columna String, sin migración):
+  //   CREATED    -> todavía no se evaluó (o se subió el video/audio)
+  //   EVALUATING -> hay un trabajo en curso (el estado fino vive en metrics.evaluation)
+  //   FAILED     -> el trabajo terminó mal; se puede reintentar
+  //   COMPLETED  -> existe informe guardado (nunca se escribe antes de tenerlo)
+  //
+  // `jobs` evita lanzar dos trabajos en el MISMO proceso; el CAS sobre `status` evita que
+  // dos peticiones simultáneas reclamen la sesión.
+  const jobs = new Map();
+  const STALE_MS = Number(process.env.EVAL_STALE_MS) || 15 * 60 * 1000;
+  const WHISPER_ON = process.env.EVAL_WHISPER_ENABLED !== 'false';
+
+  // Estado que se devuelve al cliente (GET /api/sessions/:id y POST /evaluate).
+  function evaluationState(session) {
+    const meta = session?.metrics?.evaluation || null;
+    if (session?.report) {
+      return { state: 'done', finishedAt: meta?.finishedAt ?? session.completedAt ?? null };
+    }
+    if (session?.status === 'EVALUATING') {
+      const age = Number.isFinite(meta?.startedAt) ? Date.now() - meta.startedAt : null;
+      // Si no hay trabajo vivo y el registro es viejo, quedó interrumpido (reinicio, caída).
+      if (!jobs.has(session.id) && (age == null || age > STALE_MS)) {
+        return { state: 'stalled', reason: 'INTERRUPTED', stage: meta?.stage ?? null, startedAt: meta?.startedAt ?? null };
+      }
+      return { state: 'processing', stage: meta?.stage ?? null, startedAt: meta?.startedAt ?? null };
+    }
+    if (session?.status === 'FAILED') {
+      return { state: 'failed', reason: meta?.error || 'ERROR', stage: meta?.stage ?? null, finishedAt: meta?.finishedAt ?? null };
+    }
+    return { state: 'idle' };
+  }
+
+  // Transcripción del audio de la sesión + cálculo de la evidencia. NUNCA lanza: cualquier
+  // problema se traduce en `unverified` con motivo, y la evaluación sigue sin el criterio.
+  async function verifySpeech(sessionId, input) {
+    const disabled = {
+      status: 'unverified',
+      reason: 'DISABLED',
+      wpm: null,
+      speechMs: 0,
+      words: 0,
+      turns: [],
+      coverage: { answeredTurns: 0, verifiedTurns: 0, fraction: 0, wordCoverage: 0, audioDurationSeconds: null },
+      droppedSegments: 0,
+      model: null,
+    };
+    if (!WHISPER_ON) return disabled;
+
+    const result = await transcribeFile(audioPath(sessionId));
+    if (!result.ok) {
+      return { ...disabled, reason: result.code, model: process.env.EVAL_WHISPER_MODEL || 'small' };
+    }
+    const evidence = computeSpeechEvidence({
+      turns: input.transcript,
+      segments: result.segments,
+      durationSeconds: result.durationSeconds,
+      model: result.modelKey,
+    });
+    // Solo números: el texto transcrito no se persiste ni se audita.
+    return { ...evidence, processingMs: result.processingMs ?? null };
+  }
 
   // Patrón aplicable, por prioridad: el excepcional del vocero, el del escenario o el activo
   async function patternFor(themeId, userId) {
@@ -207,53 +288,178 @@ module.exports = function registerSessionRoutes(app, prisma) {
     return { pattern: active, source: 'active' };
   }
 
-  async function runEvaluation(session, transcript, metrics) {
+  // Evalúa y guarda. `input` viene YA normalizado y validado por normalizeEvaluateInput:
+  // el cliente no puede definir los números que puntúan.
+  async function runEvaluation(session, input) {
     const { pattern, source } = await patternFor(session.themeId, session.userId);
-    const report = await evaluateSession({ theme: session.theme, transcript, metrics, pattern, patternSource: source });
+    const report = await evaluateSession({
+      theme: session.theme,
+      transcript: input.transcript,
+      metrics: input.metrics,
+      pattern,
+      patternSource: source,
+      // Procedencia, advertencias y evidencia del audio: quedan en report.audit.
+      inputAudit: {
+        sources: input.sources,
+        sourceNotes: input.sourceNotes,
+        warnings: input.warnings,
+        coverage: input.coverage,
+        speech: input.speech ?? null,
+      },
+    });
+    // El estado de la evaluación se cierra AQUÍ, en la misma escritura que el informe:
+    // nunca se marca COMPLETED sin report.
+    const evaluation = {
+      ...(input.metrics.evaluation || {}),
+      state: 'done',
+      stage: 'done',
+      finishedAt: Date.now(),
+    };
     return prisma.session.update({
       where: { id: session.id },
       data: {
         status: 'COMPLETED',
         completedAt: new Date(),
-        transcript,
-        metrics,
+        transcript: input.transcript, // normalizado: palabras/muletillas recalculadas
+        metrics: { ...input.metrics, evaluation },
         report,
-        score: report.global,
+        score: report.global, // el global del informe ya validado
       },
       include: { theme: true, user: true },
     });
   }
 
-  // Analiza la entrevista (transcripción + métricas) y guarda el informe
+  // Registra el fallo sin tocar un informe válido ni volver a evaluar nada.
+  async function failEvaluation(sessionId, metrics, error) {
+    try {
+      const current = await prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { report: true, metrics: true },
+      });
+      if (!current || current.report) return; // jamás se pisa un informe válido
+      const previous = current.metrics?.evaluation || {};
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: {
+          status: 'FAILED',
+          metrics: {
+            ...metrics,
+            evaluation: {
+              ...previous,
+              state: 'failed',
+              stage: previous.stage || 'ai',
+              error: error?.code || 'ERROR',
+              finishedAt: Date.now(),
+            },
+          },
+        },
+      });
+    } catch (failure) {
+      console.error('Error registrando el fallo de la evaluación:', failure.message);
+    }
+  }
+
+  // Lanza el trabajo en segundo plano. Devuelve enseguida: el cliente consulta el estado.
+  function startJob(session, input) {
+    const promise = (async () => {
+      try {
+        const evidence = await verifySpeech(session.id, input);
+        applySpeechEvidence(input, evidence);
+
+        // Se persiste la evidencia ANTES de llamar a la IA: si la IA falla y el usuario
+        // reintenta, no se vuelve a transcribir (ni se gasta otra vez el servicio).
+        input.metrics.evaluation = { ...(input.metrics.evaluation || {}), stage: 'ai' };
+        await prisma.session.update({
+          where: { id: session.id },
+          data: { metrics: input.metrics, transcript: input.transcript },
+        });
+
+        await runEvaluation(session, input);
+        try {
+          runPurge();
+        } catch {
+          /* la retención no debe afectar al resultado */
+        }
+      } catch (error) {
+        console.error('Error evaluando sesión:', error.message);
+        await failEvaluation(session.id, input.metrics, error);
+      }
+    })();
+    jobs.set(session.id, promise);
+    promise.finally(() => jobs.delete(session.id));
+    return promise;
+  }
+
+  // Analiza la entrevista (transcripción + métricas) EN SEGUNDO PLANO y guarda el informe.
+  // Responde 202 con el estado; el cliente consulta GET /api/sessions/:id hasta 'done'.
   app.post('/api/sessions/:id/evaluate', auth('user'), async (req, res) => {
     try {
-      const session = await prisma.session.findUnique({ where: { id: req.params.id }, include: { theme: true, user: true } });
+      const session = await prisma.session.findUnique({
+        where: { id: req.params.id },
+        include: { theme: true, user: true, tenant: { select: { status: true } } },
+      });
       if (!session) return fail(res, 404, 'Sesión no encontrada.');
       if (session.userId !== req.user.id) return fail(res, 403, 'Esta sesión no te pertenece.');
 
-      // Ya evaluada: se devuelve el informe guardado
+      // Ya evaluada: se devuelve el informe guardado (histórico intacto, sin re-evaluar).
       if (session.report) {
-        return res.json({ status: 'ok', session: { ...summary(session), report: session.report, transcript: session.transcript } });
+        return res.json({
+          status: 'ok',
+          evaluation: evaluationState(session),
+          session: { ...summary(session), report: session.report, transcript: session.transcript },
+        });
       }
 
-      const { transcript = [], metrics = {} } = req.body || {};
-      if (!Array.isArray(transcript) || transcript.length === 0) {
-        return fail(res, 400, 'La entrevista no tiene preguntas registradas.');
+      // No se evalúa una sesión de una organización que se está borrando.
+      if (session.tenant?.status === 'DELETING') {
+        return fail(res, 409, 'La organización de esta sesión está en proceso de eliminación.');
       }
 
-      if (!inProgress.has(session.id)) {
-        inProgress.set(
-          session.id,
-          runEvaluation(session, transcript, metrics).finally(() => inProgress.delete(session.id)),
-        );
-      }
-      const updated = await inProgress.get(session.id);
-      runPurge();
+      // Validación + normalización: lanza INVALID_INPUT (400) si no hay nada evaluable.
+      // Recalcula palabras y muletillas en el servidor y deja constancia de la procedencia.
+      const input = normalizeEvaluateInput({ transcript: req.body?.transcript, metrics: req.body?.metrics });
 
-      res.json({ status: 'ok', session: { ...summary(updated), report: updated.report, transcript: updated.transcript } });
+      // Trabajo ya en curso: se responde 202 sin duplicar la evaluación.
+      const state = evaluationState(session);
+      if (state.state === 'processing') {
+        return res.status(202).json({ status: 'processing', evaluation: state });
+      }
+
+      const claimable =
+        ['CREATED', 'COMPLETED', 'FAILED'].includes(session.status) || state.state === 'stalled';
+      if (!claimable) {
+        return fail(res, 409, 'La sesión no se puede evaluar en su estado actual.');
+      }
+
+      // Reclamo con CAS sobre el estado leído: solo una petición pasa a EVALUATING.
+      const startedAt = Date.now();
+      const meta = {
+        state: 'processing',
+        stage: 'audio',
+        startedAt,
+        attempt: (session.metrics?.evaluation?.attempt || 0) + 1,
+      };
+      const claimed = await prisma.session.updateMany({
+        where: { id: session.id, status: session.status },
+        data: { status: 'EVALUATING', metrics: { ...input.metrics, evaluation: meta } },
+      });
+      if (claimed.count !== 1) {
+        // Otra petición ganó la carrera: se informa, no se evalúa dos veces.
+        return res.status(202).json({ status: 'processing', evaluation: { ...meta, startedAt } });
+      }
+
+      input.metrics.evaluation = meta;
+      startJob(session, input);
+      return res.status(202).json({ status: 'processing', evaluation: meta });
     } catch (error) {
-      console.error('Error evaluando sesión:', error.message);
-      fail(res, error.code === 'NO_API_KEY' ? 503 : 502, error.message || 'No se pudo evaluar la sesión.');
+      // Solo se registra el mensaje: nunca datos del vocero, transcripciones ni claves.
+      console.error('Error iniciando la evaluación:', error.message);
+      // 400 entrada no evaluable · 502 respuesta de IA inválida o fallo · 503 sin clave.
+      // En los tres casos NO se guarda ningún informe.
+      const isInputError = error instanceof EvaluationInputError || error.code === 'INVALID_INPUT';
+      const isResponseError = error instanceof EvaluationResponseError || error.code === 'INVALID_AI_RESPONSE';
+      const status = isInputError ? 400 : error.code === 'NO_API_KEY' ? 503 : isResponseError ? 502 : 502;
+      fail(res, status, error.message || 'No se pudo evaluar la sesión.');
     }
   });
 
@@ -264,7 +470,11 @@ module.exports = function registerSessionRoutes(app, prisma) {
       if (!session) return fail(res, 404, 'Sesión no encontrada.');
       if (!canView(req.user, req.apiRole, session)) return fail(res, 403, 'No puedes ver esta sesión.');
 
-      res.json({ status: 'ok', session: { ...summary(session), report: session.report, transcript: session.transcript } });
+      res.json({
+        status: 'ok',
+        evaluation: evaluationState(session),
+        session: { ...summary(session), report: session.report, transcript: session.transcript },
+      });
     } catch (error) {
       console.error('Error obteniendo sesión:', error);
       fail(res, 500, 'No se pudo obtener la sesión.');

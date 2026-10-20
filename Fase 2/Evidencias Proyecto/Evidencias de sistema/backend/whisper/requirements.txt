@@ -2,3 +2,17 @@ faster-whisper
 fastapi
 uvicorn
 python-multipart
+# --- Pin obligatorio del Laboratorio de transcripción -----------------------
+# PyAV 19 eliminó los argumentos `metadata_encoding` y `metadata_errors` de
+# av.open(). faster-whisper 1.2.1 todavía los usa, así que TODA transcripción
+# falla al decodificar con:
+#     TypeError: open() got an unexpected keyword argument 'metadata_errors'
+# Referencias: changelog de PyAV 19.0.0 (cambio incompatible) y
+#              SYSTRAN/faster-whisper#1589 (workaround: av < 19).
+# No subir este pin hasta que faster-whisper publique una versión compatible.
+# av 18.1.0 trae wheel cp311-abi3, válido para Python 3.13 en Windows.
+av>=11,<19
+# --- Soporte de configuración opcional --------------------------------------
+# Permite leer un archivo .env junto a server.py (ver whisper/.env.example).
+# Si no está instalado, el servicio funciona igual con las variables de entorno.
+python-dotenv

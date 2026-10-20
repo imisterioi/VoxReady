@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
-const { pipeline } = require('stream/promises');
+const { createMediaUploadHandler } = require('./lib/mediaUpload');
 
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
@@ -21,6 +21,7 @@ const registerDeletionRoutes = require('./routes/deletionRequests');
 const registerLibraryRoutes = require('./routes/library');
 const registerMetricsRoutes = require('./routes/metrics');
 const registerSystemRoutes = require('./routes/system');
+const registerLabRoutes = require('./routes/lab');
 const { processPendingTenantDeletions } = require('./lib/tenantDeletion');
 const { registerJob, runJob } = require('./lib/runtimeStatus');
 
@@ -47,6 +48,7 @@ registerDeletionRoutes(app, prisma);
 registerLibraryRoutes(app, prisma);
 registerMetricsRoutes(app, prisma);
 registerSystemRoutes(app, prisma);
+registerLabRoutes(app, prisma); // Laboratorio de transcripción (experimental)
 
 // Endpoint de prueba
 app.get('/api/health', (req, res) => {
@@ -252,73 +254,20 @@ app.post('/api/sessions', requireAuth(prisma), async (req, res) => {
   }
 });
 
-// Subida de la grabación de una sesión (un único endpoint, autenticado).
-// Solo el vocero dueño de la sesión puede subir su propio .webm.
-app.post('/api/sessions/:id/video', requireAuth(prisma), async (req, res) => {
-  const sessionId = req.params.id;
-
-  const filePath = path.join(
-    sessionsDir,
-    `${sessionId}.webm`
-  );
-
-  try {
-    const session = await prisma.session.findUnique({
-      where: {
-        id: sessionId
-      }
-    });
-
-    if (!session) {
-      return res.status(404).json({
-        status: 'error',
-        mensaje: 'Sesión no encontrada'
-      });
-    }
-
-    if (session.userId !== req.user.id) {
-      return res.status(403).json({
-        status: 'error',
-        mensaje: 'No puedes subir la grabación de otra sesión'
-      });
-    }
-
-    const writeStream = fs.createWriteStream(filePath);
-
-    await pipeline(req, writeStream);
-
-    await prisma.session.update({
-      where: {
-        id: sessionId
-      },
-      data: {
-        status: 'COMPLETED'
-      }
-    });
-
-    res.json({
-      status: 'ok',
-      mensaje: 'Video guardado correctamente',
-      file: `${sessionId}.webm`
-    });
-
-  } catch (error) {
-    console.error('Error guardando video:', error);
-
-    try {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
-      }
-    } catch (deleteError) {
-      console.error('Error eliminando archivo incompleto:', deleteError);
-    }
-
-    res.status(500).json({
-      status: 'error',
-      mensaje: 'No se pudo guardar el video'
-    });
-  }
+// ------------------------------------------- Grabaciones de una sesión (video y audio)
+// El manejador vive en lib/mediaUpload.js (autorización, estado, tamaño, tipo y limpieza).
+const MAX_VIDEO_BYTES = (Number(process.env.EVAL_MAX_VIDEO_MB) || 200) * 1024 * 1024;
+// 10 MB de Opus (~32 kbps) son más de 40 minutos: sobra para una entrevista.
+const MAX_AUDIO_BYTES = (Number(process.env.EVAL_MAX_AUDIO_MB) || 10) * 1024 * 1024;
+const mediaUpload = createMediaUploadHandler({
+  prisma,
+  sessionsDir,
+  maxVideoBytes: MAX_VIDEO_BYTES,
+  maxAudioBytes: MAX_AUDIO_BYTES,
 });
+
+app.post('/api/sessions/:id/video', requireAuth(prisma), (req, res) => mediaUpload(req, res, { kind: 'video' }));
+app.post('/api/sessions/:id/audio', requireAuth(prisma), (req, res) => mediaUpload(req, res, { kind: 'audio' }));
 
 // Crear y publicar un nuevo patrón maestro (solo MASTER y SYSTEM)
 app.post('/api/master-pattern', requireAuth(prisma, ['master', 'system']), async (req, res) => {

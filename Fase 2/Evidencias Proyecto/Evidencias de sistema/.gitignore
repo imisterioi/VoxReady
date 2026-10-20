@@ -1,0 +1,6 @@
+# Secretos locales del entorno Docker de desarrollo
+.env
+.env.local
+
+# Registros y temporales
+*.log

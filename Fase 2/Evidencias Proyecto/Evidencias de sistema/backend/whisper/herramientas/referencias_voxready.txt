@@ -1,0 +1,4 @@
+crisis-01.wav|Buenos días. Quiero lamentar profundamente lo ocurrido y expresar nuestra solidaridad con la familia afectada.
+crisis-02.wav|Estamos colaborando con la autoridad desde el primer minuto y hemos abierto una investigación interna.
+crisis-03.wav|Como organización asumimos la responsabilidad que nos corresponde y entregaremos toda la información disponible.
+entrevista-01.wav|No vamos a especular sobre las causas mientras la investigación esté en curso.
