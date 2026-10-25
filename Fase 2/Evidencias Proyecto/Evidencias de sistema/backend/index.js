@@ -1,4 +1,4 @@
-// Importar las librerías necesarias
+﻿// Importar las librerías necesarias
 const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
@@ -10,8 +10,10 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 require('dotenv').config();
 // Claves privadas (API de IA) en un archivo que git ignora
 require('dotenv').config({ path: path.join(__dirname, '.env.local') });
-const { generateQuestion, warmUp } = require('./ai/interviewer');
-const { LIMITS: INTERVIEW_LIMITS, normalizeInterviewConfig, resolveInterviewConfig, turnPlan } = require('./ai/interviewConfig');
+const { generateQuestion, warmUp, askModelFromContext, interviewModels, interviewTimeoutMs } = require('./ai/interviewer');
+const { createInterviewSession } = require('./lib/interviewSession');
+const interviewRegistry = require('./lib/interviewRegistry');
+const { LIMITS: INTERVIEW_LIMITS, normalizeInterviewConfig, resolveInterviewConfig, turnPlan, invalidInterviewConfigPayload } = require('./ai/interviewConfig');
 const { requireAuth } = require('./auth');
 const registerAccountRoutes = require('./routes/accounts');
 const registerSessionRoutes = require('./routes/sessions');
@@ -22,6 +24,8 @@ const registerLibraryRoutes = require('./routes/library');
 const registerMetricsRoutes = require('./routes/metrics');
 const registerSystemRoutes = require('./routes/system');
 const registerLabRoutes = require('./routes/lab');
+const registerInterviewerRoutes = require('./routes/interviewer');
+const registerNvidiaLabRoutes = require('./routes/nvidiaLab');
 const { processPendingTenantDeletions } = require('./lib/tenantDeletion');
 const { registerJob, runJob } = require('./lib/runtimeStatus');
 
@@ -41,7 +45,11 @@ app.use(express.json({ limit: '2mb' }));
 
 // Cuentas (login, organizaciones, usuarios) y resultados de sesiones
 registerAccountRoutes(app, prisma);
-registerSessionRoutes(app, prisma);
+registerSessionRoutes(app, prisma, {
+  // Recuperación automática: al arrancar reanuda evaluaciones interrumpidas y ejecuta los
+  // reintentos programados (3 min, o 15 min cada 5 intentos, hasta 50 por sesión).
+  evaluationQueue: { enabled: true },
+});
 registerPatternRoutes(app, prisma);
 registerThemeRoutes(app, prisma);
 registerDeletionRoutes(app, prisma);
@@ -49,6 +57,7 @@ registerLibraryRoutes(app, prisma);
 registerMetricsRoutes(app, prisma);
 registerSystemRoutes(app, prisma);
 registerLabRoutes(app, prisma); // Laboratorio de transcripción (experimental)
+registerNvidiaLabRoutes(app, prisma); // Laboratorio NVIDIA Build (experimental)
 
 // Endpoint de prueba
 app.get('/api/health', (req, res) => {
@@ -422,67 +431,9 @@ function cleanHistory(history) {
     }));
 }
 
-// Entrevistador IA: devuelve la siguiente pregunta según el escenario y la conversación.
-// Body: { sessionId?: string, history?: [{ role: 'interviewer' | 'vocero', text: string }] }
-//  - Con sessionId: la sesión debe ser del usuario autenticado y estar en curso; el
-//    escenario (y su configuración de entrevista) se toma de la sesión, no del cliente.
-//  - Sin sessionId: entrevista genérica de prueba (Laboratorio).
-app.post('/api/interviewer/next-question', requireAuth(prisma), async (req, res) => {
-  try {
-    const { sessionId } = req.body || {};
-    const history = cleanHistory(req.body?.history);
+// Entrevistador IA: la ruta vive en routes/interviewer.js (orquestación centralizada).
+registerInterviewerRoutes(app, prisma, { questionAllowed });
 
-    let theme = null;
-    if (sessionId) {
-      const session = await prisma.session.findUnique({
-        where: { id: String(sessionId) },
-        include: { theme: true }
-      });
-      if (!session || session.userId !== req.user.id) {
-        return res.status(404).json({ status: 'error', mensaje: 'Sesión no encontrada.' });
-      }
-      if (session.score != null) {
-        return res.status(409).json({ status: 'error', mensaje: 'Esta entrevista ya fue evaluada.' });
-      }
-      theme = session.theme;
-
-      const plan = turnPlan(
-        normalizeInterviewConfig(theme.interviewConfig),
-        history.filter((turn) => turn.role === 'interviewer').length
-      );
-      if (plan.done) {
-        return res.status(409).json({ status: 'error', mensaje: 'La entrevista ya completó todas sus preguntas.' });
-      }
-    }
-
-    if (!questionAllowed(req.user.id)) {
-      return res.status(429).json({ status: 'error', mensaje: 'Demasiadas preguntas en poco tiempo. Espera unos minutos.' });
-    }
-
-    const result = await generateQuestion({ theme, history });
-
-    res.json({
-      status: 'ok',
-      question: result.question,
-      // Posición dentro de la entrevista: número de turno, total y si es repregunta
-      kind: result.plan.kind,
-      number: result.plan.number,
-      total: result.plan.total,
-      interview: theme ? resolveInterviewConfig(theme) : null,
-      model: result.model,
-      ms: result.ms
-    });
-  } catch (error) {
-    console.error('Error generando pregunta:', error.message);
-
-    res.status(error.code === 'NO_API_KEY' ? 503 : 502).json({
-      status: 'error',
-      mensaje: error.code === 'NO_API_KEY'
-        ? 'La IA no está configurada: falta NVIDIA_API_KEY en backend/.env.local'
-        : 'El entrevistador IA no respondió. Intenta de nuevo.'
-    });
-  }
-});
 
 // Express 5 entrega los errores de arranque (por ejemplo, puerto ocupado) al callback:
 // sin este manejo el proceso se cerraba en silencio a los pocos segundos
@@ -534,6 +485,12 @@ app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {
         error: 'Faltan datos obligatorios.',
       });
     }
+
+    // Configuracion de la entrevista: se valida ANTES de normalizar. Una configuracion que supera
+    // el limite tecnico se rechaza con 422 (no se guarda recortada en silencio) y la duracion
+    // maxima es obligatoria; mismo cuerpo que PUT /api/themes y la biblioteca de escenarios.
+    const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: req.body.interview !== undefined });
+    if (configError) return res.status(422).json(configError);
 
     const theme = await prisma.theme.create({
       data: {

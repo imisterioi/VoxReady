@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon --legacy-watch index.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test --test-concurrency=1 tests/*.test.js lib/*.test.js routes/*.test.js ai/*.test.js",
     "seed": "node prisma/seed.js",
     "postinstall": "prisma skills sync || exit 0"
   },

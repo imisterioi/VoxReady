@@ -303,6 +303,80 @@ export default function Laboratorio() {
             </div>
           </Card>
         </Link>
+
+        <Link to="/laboratorio/nvidia" className="group block mt-3">
+          <Card className="p-0 overflow-hidden hover:shadow-lift hover:border-line-strong transition-all">
+            <div className="p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-ink">NVIDIA Build</h3>
+                <Icon
+                  name="arrowRight"
+                  size={16}
+                  className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all"
+                />
+              </div>
+              <p className="text-[13px] text-muted mt-1.5 leading-relaxed">
+                Modelos alojados: entrevistadores de voz (estado real de acceso) y comparación de ASR con la misma
+                grabación. No se ejecuta nada localmente ni se expone la API key en el navegador.
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Badge tone="neutral">Nemotron VoiceChat</Badge>
+                <Badge tone="neutral">Riva gRPC</Badge>
+                <Badge tone="neutral">WER / CER</Badge>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link to="/laboratorio/grabacion" className="group block mt-3">
+          <Card className="p-0 overflow-hidden hover:shadow-lift hover:border-line-strong transition-all">
+            <div className="p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-ink">Grabación y comparación</h3>
+                <Icon
+                  name="arrowRight"
+                  size={16}
+                  className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all"
+                />
+              </div>
+              <p className="text-[13px] text-muted mt-1.5 leading-relaxed">
+                Graba tu voz una sola vez, escúchala y envíala tal cual a Whisper Base, Small y Medium en serie. Sin
+                volver a hablar y sin recodificar el audio entre motores.
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Badge tone="neutral">Una grabación</Badge>
+                <Badge tone="neutral">3 motores</Badge>
+                <Badge tone="neutral">RTF por motor</Badge>
+                <Badge tone="neutral">JSON / CSV</Badge>
+              </div>
+            </div>
+          </Card>
+        </Link>
+
+        <Link to="/laboratorio/tiempo-real" className="group block mt-3">
+          <Card className="p-0 overflow-hidden hover:shadow-lift hover:border-line-strong transition-all">
+            <div className="p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-ink">En tiempo real</h3>
+                <Icon
+                  name="arrowRight"
+                  size={16}
+                  className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all"
+                />
+              </div>
+              <p className="text-[13px] text-muted mt-1.5 leading-relaxed">
+                Graba una sesión y observa la transcripción progresiva de Whisper Base, Small o Medium por fragmentos,
+                con cola, latencia, retraso acumulado y consolidación final. Un solo modelo a la vez.
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Badge tone="neutral">Whisper Base</Badge>
+                <Badge tone="neutral">Whisper Small</Badge>
+                <Badge tone="neutral">Whisper Medium</Badge>
+                <Badge tone="neutral">Latencia por fragmento</Badge>
+              </div>
+            </div>
+          </Card>
+        </Link>
       </section>
 
 

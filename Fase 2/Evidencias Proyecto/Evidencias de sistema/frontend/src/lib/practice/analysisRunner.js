@@ -19,7 +19,8 @@ export async function runAnalysis({
   fetchSession,
   signal,
   intervalMs = 2000,
-  timeoutMs = 8 * 60 * 1000,
+  retryIntervalMs = 15000,
+  timeoutMs = 30 * 60 * 1000,
   sleep = defaultSleep,
   onStage = () => {},
   now = () => Date.now(),
@@ -39,11 +40,12 @@ export async function runAnalysis({
     }
 
     const deadline = now() + timeoutMs;
-    let lastStage;
+    let lastStage = null;
+    let waitMs = intervalMs;
 
     while (now() < deadline) {
       ensureActive();
-      await sleep(intervalMs);
+      await sleep(waitMs);
       ensureActive();
 
       const poll = await fetchSession(sessionId);
@@ -53,18 +55,45 @@ export async function runAnalysis({
       if (poll?.session?.report) return { status: 'done', sessionId };
 
       const evaluation = poll?.evaluation || {};
-      if (evaluation.state === 'failed' || evaluation.state === 'stalled') {
-        return { status: 'failed', reason: evaluation.reason || 'ERROR' };
+      // Reintentos automáticos del backend: la sesión sigue en cola (3 min, o pausas de 15 min).
+      // El cliente NO lo trata como fallo: espacia el sondeo y sigue esperando sin mostrar errores
+      // técnicos. `exhausted` tampoco es un error visible: el informe puede llegar más adelante.
+      if (evaluation.state === 'retrying' || evaluation.state === 'exhausted') {
+        waitMs = retryIntervalMs;
+        const stage = evaluation.state === 'exhausted' ? 'exhausted' : 'pending';
+        if (stage !== lastStage) {
+          lastStage = stage;
+          onStage(stage);
+        }
+        continue;
       }
+      if (evaluation.state === 'failed' || evaluation.state === 'stalled') {
+        // `errorKind` (clasificación del backend) decide el mensaje; nunca se muestran códigos.
+        return {
+          status: 'failed',
+          reason: evaluation.reason || 'ERROR',
+          errorKind: evaluation.errorKind ?? null,
+        };
+      }
+      waitMs = intervalMs;
       if (evaluation.stage !== lastStage) {
         lastStage = evaluation.stage;
         onStage(evaluation.stage);
       }
     }
 
-    return { status: 'failed', reason: 'TIMEOUT' };
+    // El sondeo del cliente se agota, pero la generación NO se cancela: sigue en el backend y el
+    // informe aparecerá en «Mi progreso». Por eso NO es un fallo: se informa de que sigue en curso.
+    return { status: 'pending', reason: 'STILL_RUNNING' };
   } catch (error) {
     if (error?.code === 'CANCELLED' || signal?.aborted) return { status: 'cancelled' };
-    return { status: 'failed', reason: 'NETWORK' };
+    // Se conserva el motivo REAL (código de la API y estado HTTP) para poder registrar y elegir
+    // el mensaje adecuado. La interfaz NO muestra detalles técnicos: `Analizando` los traduce a
+    // textos genéricos (nunca nombres de modelos, proveedores, códigos HTTP ni mensajes de API).
+    return {
+      status: 'failed',
+      reason: error?.code || 'NETWORK',
+      httpStatus: Number.isFinite(error?.status) ? error.status : null,
+    };
   }
 }

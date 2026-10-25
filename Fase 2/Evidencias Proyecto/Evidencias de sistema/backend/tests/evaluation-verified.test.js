@@ -157,7 +157,7 @@ test('con audio que sostiene el texto, el WPM se verifica y puntúa', async () =
 
   const app = express();
   app.use(express.json());
-  registerSessionRoutes(app, store);
+  registerSessionRoutes(app, store, { transcribe: async ({ turns = [] } = {}) => ({ ok: true, answers: turns.map((turn) => turn.answer || turn.text || 'res'), enginesUsed: turns.map(() => 'nvidia-whisper-large-v3'), diagnostics: [], model: 'whisper-large-v3' }) });
   const server = await new Promise((resolve) => {
     const s = app.listen(0, '127.0.0.1', () => resolve(s));
   });

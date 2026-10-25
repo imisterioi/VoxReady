@@ -133,18 +133,29 @@ export function stopAll(recorders = []) {
 }
 
 // Sube un Blob y devuelve un resultado explícito. NUNCA lanza y nunca registra el token.
-export async function uploadBlob({ url, blob, type, fetchImpl = globalThis.fetch } = {}) {
+// `parseJson`: lee el cuerpo de la respuesta (la transcripción por respuesta devuelve el texto).
+// `signal`: permite acotar la espera desde el llamador (nunca se registra).
+export async function uploadBlob({ url, blob, type, fetchImpl = globalThis.fetch, parseJson = false, signal } = {}) {
   if (!blob || !blob.size) return { ok: false, reason: 'EMPTY', bytes: 0 };
   try {
     const response = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': type },
       body: blob,
+      ...(signal ? { signal } : {}),
     });
     if (!response?.ok) {
       return { ok: false, reason: 'HTTP', status: response?.status ?? null, bytes: blob.size };
     }
-    return { ok: true, status: response.status, bytes: blob.size };
+    const result = { ok: true, status: response.status, bytes: blob.size };
+    if (parseJson) {
+      try {
+        result.body = await response.json();
+      } catch {
+        result.body = null;
+      }
+    }
+    return result;
   } catch (error) {
     return { ok: false, reason: 'NETWORK', error: error?.name || 'Error', bytes: blob.size };
   }

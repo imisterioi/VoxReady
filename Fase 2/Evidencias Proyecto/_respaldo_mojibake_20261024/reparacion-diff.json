@@ -1,0 +1,74 @@
+[
+  {
+    "ruta": "frontend/src/pages/InformeCoach.jsx",
+    "resultado": "DETENIDO: la línea 15 cambia sin tener mojibake"
+  },
+  {
+    "ruta": "backend/tests/evaluation-async.test.js",
+    "resultado": "DETENIDO: la línea 986 cambia sin tener mojibake"
+  },
+  {
+    "ruta": "backend/ai/interviewer.test.js",
+    "resultado": "DETENIDO: la línea 215 cambia sin tener mojibake"
+  },
+  {
+    "ruta": "backend/tests/evaluation-verified.test.js",
+    "resultado": "REPARADO",
+    "bom_quitado": true,
+    "crlf_normalizado": true,
+    "lineas_cambiadas": 10,
+    "secuencias_antes": 16,
+    "secuencias_despues": 0,
+    "bytes_antes": 7798,
+    "bytes_despues": 7558,
+    "muestra_cambios": [
+      {
+        "linea": 1,
+        "antes": "// Camino VERIFICADO: el audio (Whisper simulado) sostiene el WPM y el criterio puntÃºa.",
+        "despues": "// Camino VERIFICADO: el audio (Whisper simulado) sostiene el WPM y el criterio puntúa."
+      },
+      {
+        "linea": 29,
+        "antes": "// Lo que devolverÃ­a el servicio: pregunta del entrevistador + dos respuestas.",
+        "despues": "// Lo que devolvería el servicio: pregunta del entrevistador + dos respuestas."
+      },
+      {
+        "linea": 31,
+        "antes": "segment(1, 'CuÃ©nteme quÃ© ocurriÃ³ exactamente'),",
+        "despues": "segment(1, 'Cuénteme qué ocurrió exactamente'),"
+      }
+    ]
+  },
+  {
+    "ruta": "backend/lib/asrChain.test.js",
+    "resultado": "REPARADO",
+    "bom_quitado": true,
+    "crlf_normalizado": true,
+    "lineas_cambiadas": 9,
+    "secuencias_antes": 13,
+    "secuencias_despues": 0,
+    "bytes_antes": 15629,
+    "bytes_despues": 15261,
+    "muestra_cambios": [
+      {
+        "linea": 1,
+        "antes": "// Cadena de respaldo: orden, cortes por fallo, proveedor caÃ­do y mismo fragmento.",
+        "despues": "// Cadena de respaldo: orden, cortes por fallo, proveedor caído y mismo fragmento."
+      },
+      {
+        "linea": 46,
+        "antes": "test('texto vacÃ­o del principal cuenta como fallo y pasa al respaldo', async () => {",
+        "despues": "test('texto vacío del principal cuenta como fallo y pasa al respaldo', async () => {"
+      },
+      {
+        "linea": 64,
+        "antes": "test('un fallo sistÃ©mico marca el proveedor como caÃ­do para el resto de la sesiÃ³n', async () => {",
+        "despues": "test('un fallo sistémico marca el proveedor como caído para el resto de la sesión', async () => {"
+      }
+    ]
+  },
+  {
+    "ruta": "backend/lib/interviewSession.test.js",
+    "resultado": "DETENIDO: la línea 202 cambia sin tener mojibake"
+  }
+]

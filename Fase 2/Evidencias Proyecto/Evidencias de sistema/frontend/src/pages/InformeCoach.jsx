@@ -8,7 +8,18 @@ import { apiFetch } from '../lib/api';
 import { formatDate } from '../data/directory';
 import { lessonsForArea } from '../data/lessons';
 import SessionVideo from '../components/SessionVideo';
-import { reportAccess } from '../lib/practice/reportAccess';
+import { reportAccess, resolveReportSessionId } from '../lib/practice/reportAccess';
+import { RESULT_KEY } from './SesionPractica';
+
+// Práctica recién terminada por el vocero (SesionPractica guarda ahí su sesión). Permite abrir
+// el informe de ESA sesión sin ?sesion=; si su informe no está listo, se muestra el estado.
+function recentSessionId() {
+  try {
+    return JSON.parse(sessionStorage.getItem(RESULT_KEY))?.sessionId || null;
+  } catch {
+    return null;
+  }
+}
 
 const AREA_ICONS = { expression: 'person', voice: 'mic', coherence: 'message', empathy: 'users' };
 
@@ -39,11 +50,12 @@ export default function InformeCoach({ audience = 'user' }) {
     setState({ loading: true, error: '', session: null, evaluation: null });
     (async () => {
       try {
-        let id = sessionId;
+        const target = resolveReportSessionId({ paramId: sessionId, recentId: recentSessionId() });
+        let id = target.id;
         if (!id && !isVocero) return !cancelled && setState({ loading: false, error: 'No se indicó la práctica.', session: null, evaluation: null });
         if (!id) {
-          const { sessions } = await apiFetch('/api/sessions');
-          id = sessions[0]?.id;
+          // Sin sesion concreta no se consulta el historial: no se muestra ningun informe.
+          id = null; // nunca se sustituye por el informe de otra practica
           if (!id) return !cancelled && setState({ loading: false, error: '', session: null, evaluation: null });
         }
         const { session, evaluation } = await apiFetch(`/api/sessions/${id}`);
@@ -62,7 +74,7 @@ export default function InformeCoach({ audience = 'user' }) {
   const access = reportAccess({ session, evaluation, error });
 
   // Sin prácticas todavía (el vocero no tiene ninguna sesión): mensaje de bienvenida.
-  const noSessions = !loading && !error && !session && !sessionId;
+  const noSessions = !loading && !error && !session;
 
   if (loading) {
     return (
@@ -76,6 +88,30 @@ export default function InformeCoach({ audience = 'user' }) {
   }
 
   // El informe solo se muestra cuando el backend confirma que ESA sesión está completa.
+  // No se indico ninguna sesion concreta: no se muestra ningun informe (nunca el de otra
+  // practica). Mensaje explicito en vez de reutilizar un resultado anterior.
+  if (noSessions) {
+    return (
+      <>
+        {isVocero && <PracticeSteps />}
+        <Card className="max-w-xl mx-auto">
+          <EmptyState
+            icon="file"
+            title="No hay un informe para mostrar"
+            description="Abre el informe de una practica desde tu historial o realiza una nueva practica."
+            action={
+              isVocero ? (
+                <Button to="/vocero/progreso" iconRight="arrowRight">Ver mi historial</Button>
+              ) : (
+                <Button to="/vocero/escenarios" iconRight="arrowRight">Practicar ahora</Button>
+              )
+            }
+          />
+        </Card>
+      </>
+    );
+  }
+
   if (!access.canOpen) {
     const retryable = access.state === 'processing' || access.state === 'pending';
     return (

@@ -7,18 +7,18 @@
 //  - Coherencia   → IA evaluadora, criterio por criterio, guiada por los descriptores del patrón.
 //  - Empatía      → IA evaluadora + conexión visual con la cámara (% configurable).
 //
-// Configuración en backend/.env.local:
-//   AI_EVAL_MODEL=moonshotai/kimi-k3
-//   AI_EVAL_FALLBACK_MODEL=nvidia/nemotron-3-super-120b-a12b
+// Configuración del evaluador: se lee de `backend/.env` y `backend/.env.local` (ver `index.js`),
+// con los valores por defecto VALIDADOS de `lib/evaluatorModels.js`. Antes había aquí tres
+// identificadores fijos y dos de ellos ya no existen en el proveedor: se eliminaron para que no
+// reaparezcan por olvido (el archivo de entorno, además, tiene prioridad sobre estos valores).
 const { parseList } = require('./interviewer');
 const { resolveConfig } = require('./patternConfig');
 const { AGGRESSIVENESS, normalizeInterviewConfig } = require('./interviewConfig');
 const { recordAi } = require('../lib/runtimeStatus');
+const { evaluatorModels } = require('../lib/evaluatorModels');
+const { orderByHealth, healthSnapshot } = require('../lib/evaluatorHealth');
 
 const BASE_URL = 'https://integrate.api.nvidia.com/v1';
-const DEFAULT_EVAL_MODEL = 'moonshotai/kimi-k3';
-const DEFAULT_EVAL_FALLBACK = 'nvidia/nemotron-3-super-120b-a12b';
-const DEFAULT_EVAL_BACKUP = 'google/gemma-4-31b-it'; // tercer respaldo
 
 // Versión del evaluador y del prompt: se guardan en el informe para rastrear cómo se produjo
 // cada puntaje. NO implican reproducibilidad exacta (el proveedor no es determinista).
@@ -455,19 +455,47 @@ function extractJson(text) {
   }
 }
 
-async function callEvaluator(model, messages, timeoutMs, raceSignal) {
+// Cortes que impone el TRANSPORTE (el `fetch` interno de Node), no nosotros: sin el paquete
+// `undici` instalado no se pueden reconfigurar. Se traducen a un motivo legible para el registro y
+// se clasifican como fallo temporal (el intento se reintenta).
+const TRANSPORT_CODES = {
+  UND_ERR_HEADERS_TIMEOUT: 'tiempo agotado en el transporte (sin cabeceras)',
+  UND_ERR_BODY_TIMEOUT: 'tiempo agotado en el transporte (sin cuerpo)',
+  UND_ERR_CONNECT_TIMEOUT: 'sin conexión con el proveedor',
+  UND_ERR_SOCKET: 'conexión interrumpida con el proveedor',
+};
+
+// Tope de tokens de la RESPUESTA (no del prompt ni del tiempo): si es pequeño, el informe se corta a
+// medias y la validación lo rechaza (`finish_reason: length`). Medido con la sonda real: los informes
+// válidos completos consumieron 919-1865 tokens, y los modelos con razonamiento agotaron 4000 sin
+// terminar. Configurable con `AI_EVAL_MAX_TOKENS`.
+const DEFAULT_MAX_TOKENS = 6000;
+
+function maxTokens() {
+  const configured = Number(process.env.AI_EVAL_MAX_TOKENS);
+  return Number.isFinite(configured) && configured >= 1000 ? Math.floor(configured) : DEFAULT_MAX_TOKENS;
+}
+
+// Una llamada a UN modelo.
+//
+// LÍMITES DE TIEMPO: por defecto NO hay ninguno (`timeoutMs` 0 o vacío). La generación del informe
+// no se aborta por superar una cantidad fija de segundos: eso era el defecto que dejaba sesiones sin
+// informe. Un valor > 0 es una decisión EXPLÍCITA del operador (`AI_EVAL_TIMEOUT_MS`), no un
+// presupuesto de producto. `signal` cancela la llamada cuando OTRO modelo ya entregó un informe
+// válido (los perdedores no se quedan trabajando).
+async function callEvaluator(model, messages, { timeoutMs = 0, signal = null } = {}) {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     const response = await fetch(`${BASE_URL}/chat/completions`, {
       method: 'POST',
-      signal: AbortSignal.any([controller.signal, raceSignal]),
+      signal: signal ? AbortSignal.any([controller.signal, signal]) : controller.signal,
       headers: { Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         model,
         messages,
         temperature: 0.3,
-        max_tokens: 4000,
+        max_tokens: maxTokens(),
         response_format: { type: 'json_object' }, // obliga a responder JSON válido
       }),
     });
@@ -478,36 +506,79 @@ async function callEvaluator(model, messages, timeoutMs, raceSignal) {
     const judgement = extractJson(choice?.message?.content || '');
     if (judgement.coherencia == null || judgement.empatia == null) throw new Error('JSON sin puntajes');
     return judgement;
+  } catch (error) {
+    // Un corte del transporte se traduce a un motivo legible (nunca se disfraza de límite nuestro).
+    const transport = TRANSPORT_CODES[error?.cause?.code] || TRANSPORT_CODES[error?.code];
+    if (transport && error?.name !== 'AbortError') throw new Error(transport);
+    throw error;
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 
-// Consulta varios modelos en paralelo y usa el primero que entregue un JSON válido.
-// `call` se inyecta en las pruebas (sin red). Devuelve el ganador y el estado de los demás.
-async function judgeContent(input, { call = callEvaluator } = {}) {
+// Consulta TODOS los modelos habilitados EN PARALELO y publica el PRIMER informe que supere la
+// validación COMPLETA (estructura, criterios y puntajes del patrón). La primera respuesta recibida
+// NO basta: si llega antes pero es incompleta o inválida, se descarta y los demás siguen.
+// `call` se inyecta en las pruebas (sin red); `models` y `validate` permiten fijarlos (pruebas y
+// sonda real de modelos). Devuelve el ganador YA VALIDADO y el estado de los demás.
+//
+// Orden: lo decide la comprobación anticipada de disponibilidad (`lib/evaluatorHealth.js`), que solo
+// ORDENA (disponibles primero). Ningún modelo se excluye y ninguno recibe un límite distinto: el
+// recorte a 20 s para modelos caídos se eliminó (abortaba generaciones válidas).
+async function judgeContent(input, { call = callEvaluator, models: modelsOption = null, validate = null } = {}) {
   const messages = buildPrompt(input);
-  const timeoutMs = Number(process.env.AI_EVAL_TIMEOUT_MS) || 90000;
-  const models = [
-    ...new Set([
-      process.env.AI_EVAL_MODEL || DEFAULT_EVAL_MODEL,
-      process.env.AI_EVAL_FALLBACK_MODEL || DEFAULT_EVAL_FALLBACK,
-      DEFAULT_EVAL_BACKUP,
-    ]),
-  ];
+  // ÚNICO límite de tiempo de la llamada al proveedor: el timeout técnico configurable.
+  // Los 60 s de la pantalla «Analizando» son un AVISO de interfaz: no recortan la evaluación, así
+  // que un intento que siga trabajando puede superar ese plazo y publicar su informe completo.
+  // Por defecto NO hay límite: `AI_EVAL_TIMEOUT_MS` sin valor (o 0) significa «sin corte local».
+  // Un valor > 0 es una decisión EXPLÍCITA del operador, nunca un presupuesto de producto.
+  const configuredTimeoutMs = Number(process.env.AI_EVAL_TIMEOUT_MS);
+  const limitMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 0;
+  const limitText = limitMs > 0 ? `${limitMs}ms` : 'sin-limite';
+  // Validación COMPLETA de cada candidato ANTES de dejarle ganar: la primera respuesta no gana si
+  // su contenido es incompleto o inválido. Con un `judge` inyectado sin `cfg` (pruebas) se mantiene
+  // la validación superficial y `evaluateSession` valida después, como antes.
+  const validator =
+    validate ||
+    (input.cfg ? (judgement) => validateJudgement(judgement, input.cfg) : (judgement) => ({ judgement, warnings: [] }));
+  const models = orderByHealth(modelsOption || evaluatorModels());
+  const health = healthSnapshot();
   const start = Date.now();
   const race = new AbortController();
   const failures = [];
 
+  // Registro técnico (solo backend): orden efectivo, salud conocida y límites por modelo.
+  console.log(
+    '[IA evaluadora] modelos',
+    JSON.stringify({
+      orden: models.map((model) => `${model}:${health[model]?.reason || 'sin-dato'}/${limitText}`),
+      baseTimeoutMs: limitMs || null,
+    }),
+  );
+
   try {
     const winner = await Promise.any(
       models.map((model) =>
-        call(model, messages, timeoutMs, race.signal)
-          .then((judgement) => ({ judgement, model, ms: Date.now() - start }))
+        call(model, messages, { timeoutMs: limitMs, signal: race.signal })
+          .then((judgement) => {
+            // Un modelo solo gana si su respuesta supera la validación completa del informe.
+            const checked = validator(judgement) || {};
+            const finalJudgement = checked.judgement ?? checked;
+            return { judgement: finalJudgement, warnings: checked.warnings || [], model, ms: Date.now() - start };
+          })
           .catch((error) => {
-            const reason = error?.name === 'AbortError' ? 'tiempo agotado' : error?.message || 'error desconocido';
-            failures.push({ model, reason });
-            if (!race.signal.aborted) console.warn(`[IA evaluadora] ${model} falló: ${reason}`);
+            const reason =
+              error?.name === 'AbortError'
+                ? `cancelado (${limitMs > 0 ? `${limitMs} ms` : 'al ganar otro modelo'})`
+                : error?.message || 'error desconocido';
+            failures.push({
+              model,
+              reason,
+              invalid: error?.name === 'EvaluationResponseError',
+              issues: Array.isArray(error?.issues) ? error.issues.slice(0, 4) : undefined,
+              ms: Date.now() - start,
+            });
+            if (!race.signal.aborted) console.warn(`[IA evaluadora] ${model} falló: ${reason} (${Date.now() - start} ms)`);
             throw error;
           }),
       ),
@@ -519,12 +590,20 @@ async function judgeContent(input, { call = callEvaluator } = {}) {
     const failed = models
       .filter((model) => model !== winner.model)
       .map((model) => failures.find((item) => item.model === model) || { model, reason: 'cancelado al ganar otro modelo' });
-    return { ...winner, failed };
+    return { ...winner, failed, validated: true };
   } catch {
     recordAi('evaluator', false, { error: 'Ningún modelo entregó una evaluación válida' });
+    // Registro técnico completo (solo backend): modelo, motivo y duración de cada intento.
+    // Nunca se registra contenido, transcripción ni claves.
+    console.error('[IA evaluadora] ningún modelo respondió', JSON.stringify({ intentos: failures, totalMs: Date.now() - start }));
     const error = new Error('La IA evaluadora no respondió. Intenta nuevamente.');
-    error.code = 'AI_UNAVAILABLE';
+    // Si TODOS los modelos respondieron algo que no sirve como informe, el código lo dice: así el
+    // diagnóstico distingue «nadie respondió» de «todos respondieron mal».
+    const allInvalid = failures.length > 0 && failures.every((item) => item.invalid);
+    error.code = allInvalid ? 'INVALID_AI_RESPONSE' : 'AI_UNAVAILABLE';
+    // Motivos por modelo: permiten clasificar el fallo (temporal vs permanente) sin exponer nada.
     error.failed = failures;
+    error.reasons = failures.map((item) => item.reason);
     throw error;
   }
 }
@@ -553,9 +632,11 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
   });
   const { model, ms, failed } = winner;
 
-  // La respuesta del modelo se valida ANTES de puntuar: si un puntaje obligatorio falta o
+  // La respuesta se valida ANTES de puntuar (ya dentro de la carrera si viene de judgeContent): si
   // está fuera de 0-100 se lanza INVALID_AI_RESPONSE y no se guarda ningún informe.
-  const validated = validateJudgement(winner.judgement, cfg);
+  const validated = winner.validated
+    ? { judgement: winner.judgement, warnings: winner.warnings || [] }
+    : validateJudgement(winner.judgement, cfg);
   const judgement = validated.judgement;
 
   const coherence = scoreFromCriteria(cfg.coherence, judgement.coherencia);
@@ -648,6 +729,9 @@ module.exports = {
   EVALUATOR_VERSION,
   PROMPT_VERSION,
   EvaluationResponseError,
+  // `buildPrompt` se exporta para la sonda REAL de modelos (`scripts/probe-evaluator-models.js`):
+  // así la validación de un candidato usa exactamente el mismo prompt que la evaluación real.
+  buildPrompt,
   buildSensitivity,
   coverageOf,
   evaluateSession,

@@ -152,6 +152,44 @@ model Session {
   report      Json? // Informe generado por la IA evaluadora
   score       Int? // Puntaje global 0-100
   review      Json? // Segunda opinión del experto (cola de etiquetado)
+
+  // Auditoría técnica de la transcripción por respuesta (una fila por turno).
+  transcriptionAudits TranscriptionAudit[]
+
+  // Reintentos automáticos de evaluación (aditivo: 0/null/false en sesiones históricas).
+  // Permiten recuperar el trabajo tras un reinicio y evitar que el vocero tenga que actuar.
+  evalAttempts    Int       @default(0) // ejecuciones de evaluación consumidas (persistente)
+  evalNextAt      DateTime? // próximo intento programado (null = ninguno)
+  evalLeaseUntil  DateTime? // exclusión entre procesos/instancias mientras hay un intento vivo
+  evalLastError   String? // código interno del último fallo (nunca contenido del vocero)
+  evalFinishedAt  DateTime? // fin del último intento
+  evalExhausted   Boolean   @default(false) // 50 intentos agotados: requiere intervención técnica
+
+  @@index([evalNextAt])
+}
+
+// Auditoría de transcripción ASR por respuesta. No sustituye al transcript: guarda qué
+// motor produjo el texto, qué intentos hubo y por qué se eligió (o por qué falló todo).
+model TranscriptionAudit {
+  id        String   @id @default(uuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  // Índice del turno dentro de Session.transcript (los identificadores reales de la sesión).
+  turnIndex Int
+
+  status     String // ok | failed
+  engine     String? // motor seleccionado (nvidia-whisper-large-v3 | nvidia-canary-1b | local-whisper-small)
+  transcript String? // texto del motor elegido (se borra con la retención)
+  totalMs    Int?
+  reason     String? // motivo de la selección o del fallo (código, no texto libre del proveedor)
+  attempts   Json? // [{ engine, status, ms, code, chars }] — sin duplicar transcripciones
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sessionId, turnIndex]) // idempotencia: una auditoría final por sesión y turno
+  @@index([sessionId])
 }
 
 // 6. Patrón maestro de evaluación

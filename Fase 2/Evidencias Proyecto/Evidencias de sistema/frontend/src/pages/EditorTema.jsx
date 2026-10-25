@@ -6,7 +6,8 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import { Avatar, Badge, Button, Card, ChoiceChips, EmptyState, Field, PageHeader, Segmented, cx } from '../components/ui';
 import { ScenarioBriefModal } from '../components/ScenarioBrief';
-import { DEFAULT_INTERVIEW, InterviewConfigFields, toInterviewForm, toInterviewPayload, totalTurns, autoMinutes } from '../components/InterviewConfig';
+import { DEFAULT_INTERVIEW, InterviewConfigFields, toInterviewForm, toInterviewPayload, totalTurns } from '../components/InterviewConfig';
+import { DEFAULT_MINUTES, interviewConfigIssues } from '../lib/practice/interviewLimits';
 import useApiData from '../hooks/useApiData';
 import { initialsOf } from '../data/directory';
 
@@ -138,6 +139,10 @@ export default function EditorTema() {
       }
       if (!(Number(interview.questionCount) >= 1)) return toast.error('La entrevista debe tener al menos una pregunta.');
       if (totalTurns(interview) > 30) return toast.error('La entrevista no puede superar los 30 turnos entre preguntas y repreguntas.');
+      // La duración máxima es obligatoria: un campo vacío, nulo o fuera de rango no puede
+      // desactivar el límite de tiempo. Se avisa con el motivo exacto y no se guarda nada.
+      const configIssues = interviewConfigIssues(interview);
+      if (configIssues.length) return toast.error(configIssues[0].mensaje);
 
       setSaving(true);
       const payload = {
@@ -189,7 +194,7 @@ export default function EditorTema() {
             <Button variant="secondary" icon="eye" onClick={() => setPreviewOpen(true)}>
               Vista previa
             </Button>
-            <Button onClick={handleSave} icon="check" disabled={saving}>
+            <Button onClick={handleSave} icon="check" disabled={saving || interviewConfigIssues(interview).length > 0}>
               {saving ? 'Guardando…' : editingId ? 'Guardar cambios' : t.save}
             </Button>
           </>
@@ -313,7 +318,7 @@ export default function EditorTema() {
           optic,
           keyMessages: messages,
           redLines,
-          interview: { ...toInterviewPayload(interview), totalTurns: totalTurns(interview), estimatedMinutes: Number(interview.estimatedMinutes) || autoMinutes(interview) },
+          interview: { ...toInterviewPayload(interview), totalTurns: totalTurns(interview), estimatedMinutes: Number(interview.estimatedMinutes) || DEFAULT_MINUTES },
         }}
       />
     </>

@@ -272,6 +272,64 @@ test('uploadBlob devuelve éxito con bytes y estado', async () => {
   assert.equal(seen.options.headers['Content-Type'], 'audio/webm');
 });
 
+test('uploadBlob con parseJson devuelve el cuerpo de la transcripción', async () => {
+  const result = await uploadBlob({
+    url: '/answer-transcript',
+    blob: new FakeBlob([{ size: 128 }], { type: 'audio/webm' }),
+    type: 'audio/webm',
+    parseJson: true,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'ok', text: 'avisamos a la autoridad', engine: 'nvidia-whisper-large-v3', code: null }),
+    }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.body.text, 'avisamos a la autoridad');
+  assert.equal(result.bytes, 128);
+});
+
+test('uploadBlob con parseJson y cuerpo ilegible no rompe la subida', async () => {
+  const result = await uploadBlob({
+    url: '/answer-transcript',
+    blob: new FakeBlob([{ size: 64 }], { type: 'audio/webm' }),
+    type: 'audio/webm',
+    parseJson: true,
+    fetchImpl: async () => ({ ok: true, status: 200, json: async () => { throw new Error('sin cuerpo'); } }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.body, null);
+});
+
+test('uploadBlob propaga el signal cuando se acota la espera', async () => {
+  let seen = null;
+  const controller = new AbortController();
+  await uploadBlob({
+    url: '/answer-transcript',
+    blob: new FakeBlob([{ size: 64 }], { type: 'audio/webm' }),
+    type: 'audio/webm',
+    signal: controller.signal,
+    fetchImpl: async (url, options) => {
+      seen = options;
+      return { ok: true, status: 200 };
+    },
+  });
+  assert.equal(seen.signal, controller.signal);
+  // Sin signal no se añade la clave (comportamiento anterior intacto).
+  let sinSignal = null;
+  await uploadBlob({
+    url: '/audio',
+    blob: new FakeBlob([{ size: 64 }], { type: 'audio/webm' }),
+    type: 'audio/webm',
+    fetchImpl: async (url, options) => {
+      sinSignal = options;
+      return { ok: true, status: 200 };
+    },
+  });
+  assert.equal('signal' in sinSignal, false);
+});
+
+
 // ------------------------------------------------------------ orden completo
 
 test('el flujo termina el grabador, construye el Blob y sube ANTES de evaluar', async () => {

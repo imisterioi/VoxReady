@@ -194,6 +194,14 @@ module.exports = function registerLabRoutes(app, prisma) {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    // Si el navegador corta la petición (cancelar sesión), se aborta también el trabajo
+    // upstream: así el fragmento no sigue ocupando el único slot del servicio y no se
+    // acumulan peticiones fantasma en la cola. Al responder normalmente, `res` ya está
+    // cerrado y el aborto es inofensivo.
+    const onClientClose = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.on('close', onClientClose);
     const started = Date.now();
     try {
       // Nombre fijo y seguro: no se usa el nombre que envíe el cliente
@@ -279,6 +287,7 @@ module.exports = function registerLabRoutes(app, prisma) {
         proxyMs: Date.now() - started,
       });
     } finally {
+      res.off('close', onClientClose);
       clearTimeout(timer);
     }
   });

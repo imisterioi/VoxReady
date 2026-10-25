@@ -12,6 +12,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { EvaluationInputError, normalizeEvaluateInput } = require('../lib/evaluationInput');
+const { evaluatorModels } = require('../lib/evaluatorModels');
 const { FILLER_PATTERN } = require('../lib/textMetrics');
 const { DEFAULT_CONFIG } = require('../ai/patternConfig');
 const {
@@ -274,8 +275,13 @@ test('se registra el modelo que produjo la evaluación y no los errores de los d
       },
     });
     assert.equal(result.model, 'modelo-ganador');
-    assert.equal(result.judgement, judgement);
-    assert.equal(result.failed.length, 2);
+    // El ganador se devuelve YA VALIDADO: copia normalizada con los criterios del patrón activo.
+    assert.equal(result.validated, true);
+    assert.deepEqual(Object.keys(result.judgement.coherencia), Object.keys(DEFAULT_CONFIG.coherence.criteria));
+    assert.deepEqual(Object.keys(result.judgement.empatia), Object.keys(DEFAULT_CONFIG.empathy.criteria));
+    assert.equal(result.judgement.resumen, judgement.resumen);
+    // La lista efectiva de modelos ya no incluye respaldos fijos: se compara contra ella misma.
+    assert.equal(result.failed.length, evaluatorModels().length - 1);
     assert.ok(result.failed.every((item) => item.model !== 'modelo-ganador'));
     assert.ok(result.failed.every((item) => item.reason === 'HTTP 503'));
   } finally {
@@ -294,7 +300,7 @@ test('si todos los modelos fallan no hay resultado ni modelo ganador', async () 
       }),
     (error) => {
       assert.equal(error.code, 'AI_UNAVAILABLE');
-      assert.equal(error.failed.length, 3);
+      assert.equal(error.failed.length, evaluatorModels().length, 'se registran todos los intentos');
       assert.equal(error.model, undefined);
       return true;
     },

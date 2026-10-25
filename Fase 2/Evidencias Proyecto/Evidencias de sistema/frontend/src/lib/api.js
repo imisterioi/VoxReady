@@ -63,6 +63,7 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
   if (!response.ok) {
     const error = new Error(data?.mensaje || data?.error || `Error ${response.status}`);
     error.status = response.status;
+    error.code = data?.code || null;
     error.data = data;
     throw error;
   }

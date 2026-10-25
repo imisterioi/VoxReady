@@ -6,14 +6,18 @@ import PracticeSteps from '../components/PracticeSteps';
 import { Button, Card, EmptyState, cx } from '../components/ui';
 import { apiFetch } from '../lib/api';
 import { runAnalysis } from '../lib/practice/analysisRunner';
-import { describeStage } from '../lib/practice/reportAccess';
+import { describeEvaluationError } from '../lib/practice/evaluationErrors';
+import { PENDING_MESSAGE, PENDING_TITLE, describeStage, failureMessage } from '../lib/practice/reportAccess';
 import { RESULT_KEY } from './SesionPractica';
 
 // Motivos que el backend puede devolver en `evaluation.reason`.
+// Mensajes SIEMPRE genéricos: nunca se muestran modelos, proveedores, códigos HTTP ni detalles
+// internos (el detalle técnico queda en la consola del backend).
 const FAIL_REASONS = {
   NO_API_KEY: 'Falta la clave de la IA en el servidor.',
   INVALID_AI_RESPONSE: 'La IA devolvió una respuesta no válida. Puedes reintentar.',
   INTERRUPTED: 'La evaluación se interrumpió. Puedes reintentarla.',
+  AI_UNAVAILABLE: 'No se pudo completar el análisis. Tu grabación se conserva: inténtalo de nuevo en unos minutos.',
   ERROR: 'Ocurrió un error al evaluar la sesión.',
 };
 
@@ -44,6 +48,9 @@ export default function Analizando() {
   const [error, setError] = useState('');
   const [progress, setProgress] = useState('');
   const [attempt, setAttempt] = useState(0);
+  // El informe tardó más de lo esperado (reintentos automáticos en curso): se muestra un mensaje
+  // informativo, sin errores técnicos, y el sondeo continúa en segundo plano.
+  const [slow, setSlow] = useState(false);
   // Cada ejecución del análisis tiene su propio AbortController: el cleanup de
   // StrictMode cancela ESA ejecución y no bloquea la siguiente.
   const runRef = useRef(null);
@@ -78,20 +85,28 @@ export default function Analizando() {
       Boolean(payload?.sessionId) && (posted.sessionId !== payload.sessionId || posted.attempt !== attempt);
     if (shouldPost) postedRef.current = { sessionId: payload.sessionId, attempt };
 
-    const result = await runAnalysis({
-      sessionId,
-      payload: shouldPost ? payload : null,
-      signal: controller.signal,
-      postEvaluate: (id, body) =>
-        apiFetch(`/api/sessions/${id}/evaluate`, {
-          method: 'POST',
-          body: { transcript: body.transcript, metrics: body.metrics },
-        }),
-      fetchSession: (id) => apiFetch(`/api/sessions/${id}`),
-      onStage: (stage) => {
-        if (isCurrent()) setProgress(describeStage({ stage }));
-      },
-    });
+    let result;
+    try {
+      result = await runAnalysis({
+        sessionId,
+        payload: shouldPost ? payload : null,
+        signal: controller.signal,
+        postEvaluate: (id, body) =>
+          apiFetch(`/api/sessions/${id}/evaluate`, {
+            method: 'POST',
+            body: { transcript: body.transcript, metrics: body.metrics },
+          }),
+        fetchSession: (id) => apiFetch(`/api/sessions/${id}`),
+        onStage: (stage) => {
+          if (isCurrent()) setProgress(describeStage({ stage }));
+        },
+      });
+    } catch (error) {
+      // 503 (integración desactivada), 422 (sin ventanas válidas) y 502 (fallo de
+      // transcripción) se muestran como mensaje claro; nunca se abre el informe.
+      if (isCurrent()) setError(describeEvaluationError(error) || '');
+      return;
+    }
 
     // Una ejecución cancelada no modifica estado ni navega.
     if (!isCurrent()) return;
@@ -100,12 +115,20 @@ export default function Analizando() {
       return;
     }
     if (result.status === 'failed') {
+      // Un fallo de evaluación se explica con la clasificación del backend (`errorKind`): temporal
+      // (se reintentará solo) o pendiente de revisión técnica. Nunca se muestran códigos internos.
+      const fromEvaluation = result.errorKind ? failureMessage({ errorKind: result.errorKind }) : '';
       setError(
-        result.reason === 'TIMEOUT'
-          ? 'La evaluación está tardando más de lo previsto. Puedes reintentarla.'
-          : FAIL_REASONS[result.reason] || 'No se pudo completar la evaluación.',
+        fromEvaluation ||
+          FAIL_REASONS[result.reason] ||
+          (result.httpStatus ? describeEvaluationError({ status: result.httpStatus }) : '') ||
+          'No se pudo completar la evaluación.',
       );
+      return;
     }
+    // El sondeo se agotó pero la generación continúa en el backend: se muestra el aviso de «sigue en
+    // segundo plano» (no es un error) y NO se cancela nada. El informe llegará a «Mi progreso».
+    if (result.status === 'pending') setSlow(true);
   }, [sessionId, payload, attempt, finish]);
 
   // Arranca al entrar (con payload recién guardado o con ?sesion=) y cancela al salir.
@@ -124,6 +147,14 @@ export default function Analizando() {
     return () => clearTimeout(id);
   }, [current, error, steps.length]);
 
+  // Objetivo de experiencia: informe en ~60 s. Si sigue pendiente, se avisa sin pedir nada al
+  // vocero (la evaluación continúa sola, con reintentos automáticos en el backend).
+  useEffect(() => {
+    if (error) return undefined;
+    const id = setTimeout(() => setSlow(true), 60000);
+    return () => clearTimeout(id);
+  }, [error]);
+
   if (!sessionId) {
     return (
       <>
@@ -141,6 +172,7 @@ export default function Analizando() {
   }
 
   const done = current >= steps.length;
+  const pending = slow && !done && !error;
   const answered = payload?.transcript?.length || 0;
 
   return (
@@ -149,6 +181,22 @@ export default function Analizando() {
 
       <div className="flex justify-center">
         <Card className="w-full max-w-xl p-8 md:p-12 text-center">
+          {pending ? (
+            <div>
+              <div className="h-20 w-20 mx-auto mb-8 rounded-full bg-accent-soft text-accent-fg flex items-center justify-center">
+                <Icon name="sparkles" size={28} strokeWidth={1.75} />
+              </div>
+              <h1 className="font-display font-semibold text-[28px] leading-tight tracking-[-0.025em] text-ink">{PENDING_TITLE}</h1>
+              <p className="text-sm text-muted mt-2">{PENDING_MESSAGE}</p>
+              {/* El vocero puede salir: el proceso ya reclamado continúa en el backend. */}
+              <div className="mt-8 flex justify-center">
+                <Button variant="secondary" to="/vocero/progreso">
+                  Ir a Mi progreso
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
           <div className="relative h-20 w-20 mx-auto mb-8">
             {!done && !error && <span className="absolute inset-0 rounded-full border-2 border-subtle border-t-accent animate-spin" />}
             <span
@@ -194,6 +242,8 @@ export default function Analizando() {
               );
             })}
           </ul>
+            </>
+          )}
 
           {error && (
             <div className="mt-8 flex justify-center gap-2">

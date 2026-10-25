@@ -12,6 +12,21 @@ RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl \
   && rm -rf /var/lib/apt/lists/*
 
+# El laboratorio NVIDIA ejecuta su cliente oficial de Riva como proceso hijo. Sin Python
+# dentro del contenedor, `spawn` falla con ENOENT (PYTHON_MISSING) y toda llamada acaba en
+# error. Se instala aquí, en la imagen, para que el entorno sea reproducible.
+# Versiones fijadas: las mismas verificadas en el anfitrión (Debian 12 trae Python 3.11).
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 python3-pip \
+  && rm -rf /var/lib/apt/lists/* \
+  && pip3 install --no-cache-dir --break-system-packages \
+    "nvidia-riva-client==2.27.0" \
+    "av==18.1.0" \
+    "numpy>=1.26,<3"
+
+# Ruta absoluta del intérprete dentro del contenedor (sobreescribible sin tocar código).
+ENV PYTHON_EXECUTABLE=/usr/bin/python3
+
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 

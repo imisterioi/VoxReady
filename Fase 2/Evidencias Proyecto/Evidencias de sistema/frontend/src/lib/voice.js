@@ -86,9 +86,14 @@ export function useInterviewerVoice() {
 }
 
 // Lee un texto con la voz indicada. Devuelve la utterance para escuchar eventos.
-export function speak(text, voice, { onStart, onEnd } = {}) {
-  if (!window.speechSynthesis) return null;
-  window.speechSynthesis.cancel();
+// `onEnd` sólo se llama si la reproducción TERMINA normalmente; `onError` recibe el motivo
+// técnico ('not-allowed', 'interrupted', 'synthesis-failed'…). Sin `onError`, se mantiene
+// el comportamiento anterior (onEnd también en error) para no romper otros llamadores.
+export function speak(text, voice, { onStart, onEnd, onError } = {}) {
+  if (!window.speechSynthesis) {
+    (onError || onEnd)?.('unavailable'); // no se finge que se reprodujo
+    return null;
+  }
 
   const utterance = new SpeechSynthesisUtterance(text);
   if (voice) {
@@ -103,8 +108,21 @@ export function speak(text, voice, { onStart, onEnd } = {}) {
 
   utterance.onstart = () => onStart?.();
   utterance.onend = () => onEnd?.();
-  utterance.onerror = () => onEnd?.();
+  utterance.onerror = (event) => {
+    const reason = event?.error || 'synthesis-failed';
+    if (onError) onError(reason);
+    else onEnd?.();
+  };
 
-  window.speechSynthesis.speak(utterance);
+  // Sólo se cancela si hay algo en curso. Cancelar siempre (aunque no hubiera nada) es lo
+  // que hacía que Chromium descartara la utterance recién creada. Tras cancelar se deja
+  // pasar un tick para que el navegador procese la cancelación antes de hablar.
+  const busy = window.speechSynthesis.speaking || window.speechSynthesis.pending;
+  if (busy) {
+    window.speechSynthesis.cancel();
+    setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+  } else {
+    window.speechSynthesis.speak(utterance);
+  }
   return utterance;
 }

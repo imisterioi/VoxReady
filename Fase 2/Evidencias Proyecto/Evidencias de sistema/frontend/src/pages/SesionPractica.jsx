@@ -7,11 +7,16 @@ import PracticeSteps from '../components/PracticeSteps';
 import { Button, cx } from '../components/ui';
 import { API_URL, apiFetch, getToken } from '../lib/api';
 import { speak, useInterviewerVoice } from '../lib/voice';
+import { createSpeechController, fallbackDelayFor } from '../lib/practice/speechController';
+import { createPrewarmTrigger } from '../lib/practice/prewarm';
+import { emptyProgress, applyServerProgress, isInterviewDone, progressLabel, progressPercent } from '../lib/practice/interviewProgress';
+import { silenceRemainingMs } from '../lib/practice/sessionTiming';
 import AudioMeter from '../lib/practice/audioMeter';
 import PoseTracker from '../lib/practice/poseTracker';
 import { buildBlob, startAudioRecorder, stopAll, stopAndWait, uploadBlob } from '../lib/practice/mediaCapture';
+import { TRANSCRIPT_SOURCE, TRANSCRIPT_TIMEOUT_MS, normalizeTranscription, transcriptionRequest } from '../lib/practice/answerTranscription';
 import { recordingReadiness } from '../lib/practice/sessionStart';
-import { analyzeText, createRecognizer, speechRecognitionSupported } from '../lib/practice/speech';
+import { analyzeText } from '../lib/practice/speech';
 
 // Entrevista simulada completa:
 //  1. El entrevistador IA (API de NVIDIA) formula la pregunta y la lee en voz alta.
@@ -20,9 +25,7 @@ import { analyzeText, createRecognizer, speechRecognitionSupported } from '../li
 //  3. Tras cada respuesta la IA repregunta según lo que dijiste.
 //  4. Al terminar se sube la grabación y se pasa al análisis con la IA evaluadora.
 
-const DEFAULT_QUESTIONS = 5; // hasta que el backend informe el total configurado en el escenario
-const NO_ANSWER_MS = 12000; // sin hablar tras la pregunta → el entrevistador interviene
-const END_SILENCE_MS = 6000; // silencio después de hablar → se da por terminada la respuesta
+// El progreso lo informa el backend (mainsAsked/mainsTotal/done); no hay total por defecto.
 export const RESULT_KEY = 'voxready_practice_result';
 
 function getSelectedScenario() {
@@ -59,7 +62,9 @@ export default function SesionPractica() {
   const loggedRef = useRef(new Set());
   const audioRef = useRef(null);
   const poseRef = useRef(null);
-  const recognizerRef = useRef(null);
+  // Origen temporal común: instante en que arranca el grabador que produce <id>.audio.webm.
+  const audioOriginRef = useRef(0);
+  const answerStartRef = useRef(null);
   const sessionIdRef = useRef(null);
   const timerRef = useRef(null);
   const watchdogRef = useRef(null);
@@ -76,6 +81,18 @@ export default function SesionPractica() {
   const poseFailedRef = useRef(false);
   const recordingStartedRef = useRef(false);
   const voiceRef = useRef(voice);
+  // Controlador de lectura: un único resultado por intento y temporizador gestionado.
+  const speechRef = useRef(null);
+  if (!speechRef.current) speechRef.current = createSpeechController({ speak });
+  // Precalentamiento del entrevistador: una sola solicitud por sesión, sin bloquear la
+  // preparación y sin afectar al estado si la sesión cambia o el componente se desmonta.
+  const prewarmRef = useRef(null);
+  if (!prewarmRef.current) {
+    prewarmRef.current = createPrewarmTrigger({
+      post: (sessionId) => apiFetch('/api/interviewer/prewarm', { method: 'POST', body: { sessionId } }),
+      isCurrentSession: (sessionId) => sessionIdRef.current === sessionId,
+    });
+  }
 
   useEffect(() => {
     voiceRef.current = voice;
@@ -84,7 +101,6 @@ export default function SesionPractica() {
   // Estado visible
   const [phase, setPhaseState] = useState('loading'); // loading | speaking | listening | thinking | finishing
   const [question, setQuestion] = useState('');
-  const [answerLive, setAnswerLive] = useState({ finalText: '', interim: '' });
   const [typed, setTypedState] = useState('');
   const [turnCount, setTurnCount] = useState(0);
   const [seconds, setSeconds] = useState(0);
@@ -93,16 +109,17 @@ export default function SesionPractica() {
   const [silenceIn, setSilenceIn] = useState(null);
   const [error, setError] = useState('');
   const [mediaWarning, setMediaWarning] = useState('');
-  const [textMode, setTextModeState] = useState(!speechRecognitionSupported);
-  const textModeRef = useRef(!speechRecognitionSupported);
+  const [textMode, setTextModeState] = useState(false);
+  const textModeRef = useRef(false);
 
   // Configuración de la entrevista del escenario (preguntas, repreguntas, tiempo por respuesta).
   // La confirma el backend con cada pregunta; lo guardado en el navegador es solo el valor inicial.
   const interviewRef = useRef(scenario?.interview || null);
-  const totalRef = useRef(scenario?.interview?.totalTurns || DEFAULT_QUESTIONS);
-  const [total, setTotal] = useState(totalRef.current);
+  const progressRef = useRef(emptyProgress(scenario?.interview || null));
+  const [progress, setProgress] = useState(progressRef.current);
   const [isFollowUp, setIsFollowUp] = useState(false);
   const [answerLeft, setAnswerLeft] = useState(null); // segundos que quedan para responder (si hay límite)
+  const [transcribing, setTranscribing] = useState(false); // true mientras se transcribe la respuesta
 
   const setPhase = (p) => {
     phaseRef.current = p;
@@ -143,7 +160,7 @@ export default function SesionPractica() {
     clearInterval(timerRef.current);
     clearInterval(watchdogRef.current);
     window.speechSynthesis?.cancel();
-    recognizerRef.current?.stop();
+    speechRef.current?.cancel(); // invalida callbacks y temporizador pendientes
     // Se detienen los grabadores ANTES de soltar las pistas: así no queda ningún
     // MediaRecorder activo al descartar o salir de la práctica.
     stopAll([recorderRef.current, audioRecorderRef.current]);
@@ -249,8 +266,11 @@ export default function SesionPractica() {
           },
         });
         audioRecorderRef.current = audioRecorder;
+        // Origen temporal: se toma justo después de arrancar el grabador de audio.
+        audioOriginRef.current = performance.now();
         logMedia('AUDIO_RECORDING_STARTED', mime);
       } catch (error) {
+        audioOriginRef.current = 0; // sin grabador no hay ventanas fiables
         audioErrorRef.current = error.code || 'AUDIO_RECORDER_ERROR';
         logMedia(error.code || 'AUDIO_RECORDER_ERROR', error.cause?.name || '');
       }
@@ -271,16 +291,36 @@ export default function SesionPractica() {
   async function fetchQuestion() {
     const history = turnsRef.current.flatMap((turn) => [
       { role: 'interviewer', text: turn.question },
-      { role: 'vocero', text: turn.answer },
+      {
+        role: 'vocero',
+        text: turn.answer,
+        // Marca de voz y procedencia de la transcripción: distinguen un silencio real de una
+        // respuesta hablada que no se pudo transcribir.
+        ...(turn.spoke === true ? { spoke: true } : {}),
+        ...(turn.transcriptSource ? { transcriptSource: turn.transcriptSource } : {}),
+      },
     ]);
     // El escenario lo determina el backend a partir de la sesión (no se envía el tema)
-    const data = await apiFetch('/api/interviewer/next-question', {
-      method: 'POST',
-      body: { sessionId: sessionIdRef.current, history },
-    });
-    if (data.total) {
-      totalRef.current = data.total;
-      setTotal(data.total);
+    let data;
+    try {
+      data = await apiFetch('/api/interviewer/next-question', {
+        method: 'POST',
+        body: { sessionId: sessionIdRef.current, history },
+      });
+    } catch (error) {
+      // El backend avisa que la entrevista termino: se cierra de forma controlada, sin reintentar.
+      if (isInterviewDone(error)) {
+        progressRef.current = { ...progressRef.current, done: true };
+        setProgress(progressRef.current);
+        return null;
+      }
+      throw error;
+    }
+    // Progreso autoritativo del backend (idempotente: reintentos no duplican nada).
+    const applied = applyServerProgress(progressRef.current, data);
+    if (applied.changed) {
+      progressRef.current = applied.progress;
+      setProgress(applied.progress);
     }
     if (data.interview) interviewRef.current = data.interview;
     setIsFollowUp(data.kind === 'followup');
@@ -291,15 +331,21 @@ export default function SesionPractica() {
     questionRef.current = text;
     poseRef.current?.beginSegment(); // el tramo incluye la pregunta: también importa cómo la escucha
     setQuestion(text);
-    setAnswerLive({ finalText: '', interim: '' });
     setTyped('');
     setPhase('speaking');
-    // Respaldo: algunos navegadores no avisan cuando termina la voz
-    const fallback = setTimeout(() => startListening(), text.split(/\s+/).length * 450 + 3000);
-    speak(text, voiceRef.current, {
+    setError('');
+    // Un solo controlador por turno: cancela el temporizador y los callbacks del anterior.
+    speechRef.current?.play(text, voiceRef.current, {
+      fallbackMs: fallbackDelayFor(text),
       onEnd: () => {
-        clearTimeout(fallback);
-        startListening();
+        if (phaseRef.current === 'speaking') startListening();
+      },
+      onError: (reason) => {
+        // Se informa y se permite continuar; no se finge que el vocero escuchó la pregunta.
+        setError(
+          `No se pudo reproducir la pregunta en voz alta (${reason}). Está escrita en pantalla: pulsa «Repetir pregunta» o continúa respondiendo.`,
+        );
+        if (phaseRef.current === 'speaking') startListening();
       },
     });
   }
@@ -310,17 +356,11 @@ export default function SesionPractica() {
     if (finishingRef.current || phaseRef.current !== 'speaking') return;
     setPhase('listening');
     listenStartRef.current = performance.now();
+    // Inicio de la respuesta relativo al audio que se enviará a NVIDIA.
+    answerStartRef.current = audioOriginRef.current
+      ? Math.round(performance.now() - audioOriginRef.current)
+      : null;
     audioRef.current?.startAnswer();
-
-    if (!textModeRef.current) {
-      recognizerRef.current = createRecognizer({
-        onUpdate: (live) => setAnswerLive(live),
-        onError: (e) => {
-          if (e === 'not-allowed') setError('El navegador bloqueó el reconocimiento de voz.');
-        },
-      });
-      recognizerRef.current?.start();
-    }
 
     // Control de silencios: intervención de rescate y fin de respuesta
     clearInterval(watchdogRef.current);
@@ -342,10 +382,48 @@ export default function SesionPractica() {
       const lastVoice = audioRef.current.lastVoiceAt;
       const spoke = lastVoice > listenStartRef.current;
       const quietFor = now - (spoke ? lastVoice : listenStartRef.current);
-      const remaining = (spoke ? END_SILENCE_MS : NO_ANSWER_MS) - quietFor;
+      const remaining = silenceRemainingMs({ spoke, quietForMs: quietFor });
       setSilenceIn(quietFor > 2500 && remaining > 0 ? Math.ceil(remaining / 1000) : null);
       if (remaining <= 0) finishAnswer();
     }, 250);
+  }
+
+  // Pide al backend la transcripción de la respuesta recién terminada. Nunca lanza: si falla, el
+  // turno queda como "habló sin transcripción" (no como silencio) y la evaluación final volverá a
+  // transcribir el audio completo. El texto NUNCA se registra en el log técnico.
+  async function transcribeAnswer({ startMs, endMs, turnIndex }) {
+    if (!sessionIdRef.current) return normalizeTranscription({ ok: false });
+    // Volcado del audio pendiente: `requestData()` fuerza un `dataavailable` con lo grabado desde
+    // el último trozo (la cola de la respuesta aún no estaba en `audioChunksRef`).
+    try {
+      audioRecorderRef.current?.requestData?.();
+    } catch {
+      /* el navegador no lo admite: se envía lo que ya está disponible */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    const query = `startMs=${Math.round(startMs)}&endMs=${Math.round(endMs)}&turnIndex=${turnIndex}`;
+    const url = `${API_URL}/api/sessions/${sessionIdRef.current}/answer-transcript?${query}&token=${encodeURIComponent(getToken() || '')}`;
+    const result = await uploadBlob({
+      url,
+      blob: buildBlob(audioChunksRef.current, 'audio/webm'),
+      type: 'audio/webm',
+      parseJson: true,
+      signal:
+        typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+          ? AbortSignal.timeout(TRANSCRIPT_TIMEOUT_MS)
+          : undefined,
+    });
+    const transcribed = normalizeTranscription(result);
+    if (transcribed.source === TRANSCRIPT_SOURCE.live) {
+      logMedia('ANSWER_TRANSCRIPT_OK', `${transcribed.text.length} caracteres`);
+    } else {
+      logMedia(
+        'ANSWER_TRANSCRIPT_UNAVAILABLE',
+        result.reason === 'HTTP' ? `HTTP ${result.status}` : transcribed.code || result.reason || 'red',
+      );
+    }
+    return transcribed;
   }
 
   async function finishAnswer({ endInterview = false } = {}) {
@@ -355,38 +433,84 @@ export default function SesionPractica() {
     setAnswerLeft(null);
     setPhase('thinking');
 
-    const spoken = recognizerRef.current?.stop() || '';
-    const answer = (spoken || typedRef.current).trim();
+    const typedAnswer = (typedRef.current || '').trim();
     const audio = audioRef.current?.endAnswer();
-    const text = analyzeText(answer);
-    const minutes = (audio?.speakingMs || 0) / 60000;
-
-    turnsRef.current.push({
-      question: questionRef.current,
-      answer,
-      metrics: {
-        words: text.words,
-        fillers: text.fillers,
-        fillerWords: text.fillerWords,
-        wpm: minutes > 0.05 && text.words ? text.words / minutes : null,
+    // Fin de la respuesta relativo al MISMO origen que el audio enviado a NVIDIA.
+    const endMs = audioOriginRef.current
+      ? Math.round(performance.now() - audioOriginRef.current)
+      : null;
+    const startMs = answerStartRef.current;
+    // ¿Se detectó voz? (VAD del medidor de audio). Es lo que distingue un silencio real de una
+    // respuesta hablada que no se pudo transcribir.
+    const spoke = Number(audio?.speakingMs ?? 0) > 0;
+    // Transcripción por respuesta: el entrevistador necesita el TEXTO real antes de decidir la
+    // siguiente intervención. Sin ventana utilizable o sin voz detectada no se pide nada.
+    const request = transcriptionRequest({ textMode: textModeRef.current, spoke, startMs, endMs });
+    let transcriptSource = textModeRef.current ? TRANSCRIPT_SOURCE.typed : null;
+    if (!textModeRef.current && spoke && !request.needed) {
+      // Habló pero no hay ventana de audio utilizable: no hay texto, y NO es silencio.
+      transcriptSource = TRANSCRIPT_SOURCE.unavailable;
+    }
+    // El video del tramo se consume UNA sola vez (endSegment cierra el segmento actual).
+    const video = poseRef.current?.endSegment() ?? null;
+    const turnMetrics = (answerText) => {
+      const analyzed = analyzeText(answerText);
+      const minutes = (audio?.speakingMs || 0) / 60000;
+      return {
+        words: analyzed.words,
+        fillers: analyzed.fillers,
+        fillerWords: analyzed.fillerWords,
+        wpm: minutes > 0.05 && analyzed.words ? analyzed.words / minutes : null,
         latencyMs: audio?.latencyMs ?? null,
         durationMs: audio?.durationMs ?? null,
         speakingMs: audio?.speakingMs ?? null,
         longPauses: audio?.longPauses ?? 0,
         volumeVariation: audio?.volumeVariation ?? null,
         // Mirada y risa durante esta pregunta y su respuesta (análisis de sensibilidad)
-        video: poseRef.current?.endSegment() ?? null,
-      },
-    });
+        video,
+      };
+    };
+
+    const turnIndex = turnsRef.current.length;
+    const turn = {
+      question: questionRef.current,
+      answer: typedAnswer,
+      spoke,
+      ...(transcriptSource ? { transcriptSource } : {}),
+      startMs,
+      endMs,
+      metrics: turnMetrics(typedAnswer),
+    };
+    // El turno se registra ANTES de esperar la transcripción: así, si el vocero finaliza la
+    // entrevista durante esa espera, la respuesta no se pierde (mismo comportamiento que antes).
+    turnsRef.current.push(turn);
     setTurnCount(turnsRef.current.length);
 
-    if (endInterview || turnsRef.current.length >= totalRef.current) {
+    if (request.needed) {
+      setTranscribing(true);
+      try {
+        const transcribed = await transcribeAnswer({ startMs, endMs, turnIndex });
+        turn.answer = transcribed.text;
+        turn.transcriptSource = transcribed.source;
+        turn.metrics = turnMetrics(transcribed.text);
+      } finally {
+        setTranscribing(false);
+      }
+    }
+
+    if (endInterview || progressRef.current.done) {
       finishInterview();
       return;
     }
 
     try {
-      askQuestion(await fetchQuestion());
+      const nextQuestion = await fetchQuestion();
+      if (!nextQuestion) {
+        // El backend cerro la entrevista: se guarda y se navega al analisis como siempre.
+        finishInterview();
+        return;
+      }
+      askQuestion(nextQuestion);
     } catch (err) {
       setError(`${err.message} Puedes finalizar la entrevista y analizar lo respondido.`);
     }
@@ -394,11 +518,13 @@ export default function SesionPractica() {
 
   function repeatQuestion() {
     if (phaseRef.current !== 'listening') return;
-    recognizerRef.current?.pause();
     audioRef.current?.pause();
-    speak(questionRef.current, voiceRef.current, {
-      onEnd: () => {
-        recognizerRef.current?.resume();
+    // El controlador invalida el intento anterior y su temporizador antes de volver a hablar.
+    speechRef.current?.play(questionRef.current, voiceRef.current, {
+      fallbackMs: fallbackDelayFor(questionRef.current),
+      onEnd: () => audioRef.current?.resume(),
+      onError: (reason) => {
+        setError(`No se pudo repetir la pregunta en voz alta (${reason}).`);
         audioRef.current?.resume();
       },
     });
@@ -521,6 +647,9 @@ export default function SesionPractica() {
     const startTimer = setTimeout(async () => {
       try {
         await createSession();
+        // Preparación anticipada: se lanza SIN await (no bloquea cámara, micrófono ni el
+        // arranque). Si falla, el flujo continúa igual.
+        prewarmRef.current?.start(sessionIdRef.current);
         if (cancelled) return;
         // 1) Cámara, micrófono y modelo de cuerpo (sin grabar todavía).
         await prepareMedia();
@@ -564,16 +693,18 @@ export default function SesionPractica() {
 
   // ------------------------------------------------------ Vista
 
-  const status = {
-    loading: 'Preparando la entrevista…',
-    speaking: 'El entrevistador está hablando',
-    listening: textMode ? 'Escribe tu respuesta y presiona “Terminé de responder”' : 'Te escucho… responde con naturalidad',
-    thinking: 'El entrevistador está pensando la siguiente pregunta…',
-    finishing: 'Guardando tu entrevista…',
-  }[phase];
+  const status = transcribing
+    ? 'Transcribiendo tu respuesta…'
+    : {
+        loading: 'Preparando la entrevista…',
+        speaking: 'El entrevistador está hablando',
+        listening: textMode ? 'Escribe tu respuesta y presiona “Terminé de responder”' : 'Te escucho… responde con naturalidad',
+        thinking: 'El entrevistador está pensando la siguiente pregunta…',
+        finishing: 'Guardando tu entrevista…',
+      }[phase];
 
-  const liveText = [answerLive.finalText, answerLive.interim].filter(Boolean).join(' ');
-  const currentNumber = Math.min(turnCount + (phase === 'thinking' || phase === 'finishing' ? 0 : 1), total);
+  // El numero de pregunta principal lo informa el backend (`progress.mainsAsked`); no se recalcula.
+  const mainLabel = progressLabel({ isFollowUp, mainsAsked: progress.mainsAsked, mainsTotal: progress.mainsTotal, fallback: t.qL });
 
   return (
     <>
@@ -659,15 +790,15 @@ export default function SesionPractica() {
         {/* Pregunta y respuesta en vivo */}
         <div className="px-4 md:px-8 pt-8 pb-6 text-center min-h-[180px]">
           <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-4">
-            {phase === 'loading' ? 'Preparando' : `${isFollowUp ? 'Repregunta' : t.qL} · ${currentNumber} de ${total}`}
+            {phase === 'loading' ? 'Preparando' : mainLabel}
           </div>
           <p className="font-display font-medium text-[22px] md:text-[28px] leading-[1.35] tracking-[-0.015em] text-white max-w-3xl mx-auto">
             {question ? `“${question}”` : '…'}
           </p>
 
           {phase === 'listening' && !textMode && (
-            <p className="mt-5 text-sm text-white/60 max-w-2xl mx-auto leading-relaxed min-h-[1.5rem]">
-              {liveText || <span className="text-white/30">Tu respuesta aparecerá aquí mientras hablas…</span>}
+            <p className="mt-5 text-sm text-white/60 max-w-2xl mx-auto leading-relaxed">
+              Habla con naturalidad: tu respuesta se transcribirá al finalizar la sesión.
             </p>
           )}
 
@@ -676,11 +807,7 @@ export default function SesionPractica() {
               <textarea
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
-                placeholder={
-                  speechRecognitionSupported
-                    ? 'Escribe aquí tu respuesta.'
-                    : 'Tu navegador no permite transcribir la voz. Escribe aquí tu respuesta (Chrome o Edge sí lo permiten).'
-                }
+                placeholder="Escribe aquí tu respuesta."
                 className="w-full min-h-[90px] rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 p-3 text-sm focus:outline-none focus:border-white/30"
               />
             </div>
@@ -743,10 +870,10 @@ export default function SesionPractica() {
 
           <div className="flex items-center gap-3 md:flex-1 md:max-w-xs md:mx-auto">
             <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-              <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${(turnCount / total) * 100}%` }} />
+              <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${progressPercent(progress)}%` }} />
             </div>
             <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
-              {turnCount} de {total} respondidas
+              {progress.mainsAsked} de {progress.mainsTotal ?? '—'} principales
             </span>
           </div>
 

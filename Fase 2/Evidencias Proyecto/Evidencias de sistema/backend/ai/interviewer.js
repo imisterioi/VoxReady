@@ -16,7 +16,8 @@ const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
 const DEFAULT_MODEL = 'deepseek-ai/deepseek-v4.1-flash';
 const DEFAULT_FALLBACK = 'google/gemma-4-31b-it';
-const DEFAULT_EXTRA = 'moonshotai/kimi-k3,nvidia/nemotron-3-super-120b-a12b';
+const DEFAULT_EXTRA = 'z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b';
+
 
 // Los temas guardan listas como texto JSON (editor de temas) o como texto plano (seed antiguo)
 function parseList(value) {
@@ -32,10 +33,14 @@ function parseList(value) {
 
 // Instrucciones del entrevistador. El escenario se completa con datos de la tabla Theme;
 // el tono y la estructura (preguntas y repreguntas) vienen de su configuración de entrevista.
-function buildSystemPrompt(theme, cfg, plan) {
+// `turn` describe el turno REAL que se está pidiendo: { kind, mainQuestion, focus, hasTranscript }.
+function buildSystemPrompt(theme, cfg, plan, turn = {}) {
   const level = AGGRESSIVENESS[cfg.aggressiveness];
   const who = cfg.interviewerRole || 'un periodista chileno';
   const lines = [`Eres ${who} y entrevistas en vivo al vocero de una organización.`, level.persona];
+  // Tipo REAL del turno. `plan.kind` es la estructura nominal y puede contradecir la intervención
+  // que de verdad se envía (una repregunta adaptativa decidida por la evaluación, por ejemplo).
+  const isFollowUp = (turn.kind || plan.kind) === 'followup';
 
   if (theme) {
     lines.push(`Escenario: ${theme.title}.`, `Contexto: ${theme.context}`);
@@ -55,19 +60,34 @@ function buildSystemPrompt(theme, cfg, plan) {
   }
 
   lines.push('Reglas:', '- Haz UNA sola pregunta, en español, de máximo 35 palabras.');
-  if (cfg.followUps > 0) {
+  // Una repregunta decidida por la evaluación puede ocurrir aunque la configuración no tenga
+  // repreguntas fijas: en ese caso la instrucción debe describir el turno REAL, no el plan.
+  if (cfg.followUps > 0 || isFollowUp) {
     // Estructura fija: cada pregunta principal va seguida de sus repreguntas
     lines.push(
-      plan.kind === 'followup'
+      isFollowUp
         ? `- Este turno es una REPREGUNTA sobre la última respuesta del vocero. ${level.followUp}`
         : '- Este turno es una pregunta NUEVA: aborda un aspecto de la situación que todavía no se haya tratado.',
-      '- Si el vocero no dijo nada, insiste en la pregunta anterior de forma más directa.',
     );
+    // La instrucción de silencio solo vale cuando de verdad no hay respuesta: si se detectó voz y
+    // falló la transcripción, la intervención es neutral y no afirma lo que el vocero dijo.
+    if (turn.hasTranscript !== false) {
+      lines.push('- Si el vocero no dijo nada, insiste en la pregunta anterior de forma más directa.');
+    }
   } else {
     lines.push(
       `- Si el vocero evade o responde de forma genérica, repregunta. ${level.followUp}`,
       '- Si el vocero no dijo nada, reformula la pregunta anterior de forma más directa.',
     );
+  }
+  // Contexto de la repregunta: la pregunta principal en curso, el aspecto pendiente y el estado
+  // real de la respuesta. La repregunta se apoya en lo que el vocero dijo, no en el plan interno.
+  if (isFollowUp) {
+    if (turn.mainQuestion) lines.push(`- Pregunta principal en curso: "${String(turn.mainQuestion).slice(0, 300)}"`);
+    if (turn.focus) lines.push(`- Aspecto pendiente que debe aclarar: ${String(turn.focus).slice(0, 300)}`);
+    if (turn.hasTranscript === false) {
+      lines.push('- No hay transcripción utilizable de su última respuesta: pide una aclaración concreta sobre el punto central, sin afirmar lo que dijo.');
+    }
   }
   lines.push(
     '- No repitas preguntas que ya hiciste.',
@@ -76,15 +96,21 @@ function buildSystemPrompt(theme, cfg, plan) {
   return lines.join('\n');
 }
 
-// history: [{ role: 'interviewer' | 'vocero', text: string }]
-function buildMessages(theme, history = [], cfg, plan) {
-  const messages = [{ role: 'system', content: buildSystemPrompt(theme, cfg, plan) }];
+// Etiqueta del turno del vocero sin texto: distingue el SILENCIO real de una respuesta hablada que
+// no se pudo transcribir. Nunca se inventa su contenido.
+const noAnswerLabel = (turn) => (turn?.spoke === true ? '(habló, pero no se pudo transcribir su respuesta)' : '(silencio, no respondió)');
 
-  for (const turn of history.slice(-10)) {
-    const text = (turn.text || '').trim();
+// history: [{ role: 'interviewer' | 'vocero', text: string, spoke?: boolean }]
+// `turn` es el turno REAL que se pide (kind/mainQuestion/focus/hasTranscript) y se usa para que el
+// prompt describa la intervención que de verdad se envía.
+function buildMessages(theme, history = [], cfg, plan, turn = {}) {
+  const messages = [{ role: 'system', content: buildSystemPrompt(theme, cfg, plan, turn) }];
+
+  for (const item of history.slice(-10)) {
+    const text = (item.text || '').trim();
     messages.push({
-      role: turn.role === 'interviewer' ? 'assistant' : 'user',
-      content: turn.role === 'interviewer' ? text : `Respuesta del vocero: ${text || '(silencio, no respondió)'}`,
+      role: item.role === 'interviewer' ? 'assistant' : 'user',
+      content: item.role === 'interviewer' ? text : `Respuesta del vocero: ${text || noAnswerLabel(item)}`,
     });
   }
 
@@ -121,16 +147,19 @@ function cleanQuestion(text) {
   return candidate;
 }
 
-async function callModel(model, messages, timeoutMs, raceSignal) {
+// Consulta UN modelo. Cada llamada tiene su PROPIO temporizador y, opcionalmente, una señal
+// externa (cierre real de sesión). No comparte `AbortController` con otros modelos: una
+// respuesta válida de otro modelo no cancela esta solicitud.
+async function askModel(model, messages, { timeoutMs = 20000, signal = null, fetchImpl = fetch, raw = false, now = () => Date.now() } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  // Se cancela por tiempo o cuando otro modelo ya respondió
-  const signal = raceSignal ? AbortSignal.any([controller.signal, raceSignal]) : controller.signal;
+  const combined = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
+  const started = now();
 
   try {
-    const response = await fetch(`${BASE_URL}/chat/completions`, {
+    const response = await fetchImpl(`${BASE_URL}/chat/completions`, {
       method: 'POST',
-      signal,
+      signal: combined,
       headers: {
         Authorization: `Bearer ${process.env.NVIDIA_API_KEY}`,
         'Content-Type': 'application/json',
@@ -138,8 +167,9 @@ async function callModel(model, messages, timeoutMs, raceSignal) {
       body: JSON.stringify({
         model,
         messages,
-        temperature: 0.7,
-        max_tokens: 200,
+        // `raw: true` (evaluación de respuestas) pide JSON: temperatura baja y más tokens.
+        temperature: raw ? 0.2 : 0.7,
+        max_tokens: raw ? 500 : 200,
         // Desactiva el modo "razonamiento" de DeepSeek: es mucho más lento
         ...(model.startsWith('deepseek') ? { chat_template_kwargs: { thinking: false } } : {}),
         // Nemotron razona por defecto y gasta ahí los 200 tokens sin llegar a escribir la pregunta
@@ -152,12 +182,61 @@ async function callModel(model, messages, timeoutMs, raceSignal) {
     }
 
     const data = await response.json();
-    const question = cleanQuestion(data.choices?.[0]?.message?.content || '');
+    const content = String(data.choices?.[0]?.message?.content || '');
+    // Modo `raw`: devuelve el texto tal cual (evaluación de suficiencia, JSON). NO valida que sea
+    // una pregunta y no altera el comportamiento por defecto del entrevistador.
+    if (raw) {
+      if (!content.trim()) throw new Error('respuesta vacia del modelo');
+      return { text: content, model, ms: now() - started };
+    }
+    const question = cleanQuestion(content);
     if (!question) throw new Error('respuesta descartada: no era una pregunta en español');
-    return question;
+    return { question, model, ms: now() - started };
   } finally {
     clearTimeout(timer);
   }
+}
+
+// Compatibilidad con el código anterior (sin señal compartida entre modelos).
+const callModel = (model, messages, timeoutMs) => askModel(model, messages, { timeoutMs });
+
+// Modelos habilitados y timeout efectivos (misma fórmula que usaba generateQuestion).
+function interviewModels() {
+  const extra = (process.env.AI_EXTRA_MODELS ?? DEFAULT_EXTRA).split(',').map((m) => m.trim()).filter(Boolean);
+  return [...new Set([process.env.AI_MODEL || DEFAULT_MODEL, process.env.AI_FALLBACK_MODEL || DEFAULT_FALLBACK, ...extra])];
+}
+
+function interviewTimeoutMs() {
+  return Number(process.env.AI_TIMEOUT_MS) || 20000;
+}
+
+// Adaptador para `interviewSession.js`: recibe el contexto central y devuelve { question }.
+// El contexto debe traer `messages` ya construidos, o bien `theme/history/cfg/plan` para
+// construirlos con la MISMA función que usa producción (`buildMessages`).
+function askModelFromContext(model, context = {}, options = {}) {
+  let messages;
+  try {
+    // `cfg`/`plan` pueden faltar si el llamador no los adjuntó: se derivan con las funciones
+    // REALES del proyecto (mismo diseño: un tema sin configuración usa los valores por defecto).
+    const cfg = context.cfg || normalizeInterviewConfig(context.theme?.interviewConfig);
+    const plan =
+      context.plan || turnPlan(cfg, (context.history || []).filter((turn) => turn.role === 'interviewer').length);
+    // Turno REAL que se está pidiendo: el `kind` del contexto manda sobre el plan nominal, y el
+    // foco/estado de la respuesta viajan al prompt para que la repregunta se apoye en lo dicho.
+    const turn = {
+      kind: context.kind || null,
+      mainQuestion: context.mainQuestion || null,
+      focus: context.focus || null,
+      hasTranscript: typeof context.hasTranscript === 'boolean' ? context.hasTranscript : null,
+    };
+    messages = context.messages || buildMessages(context.theme, context.history || [], cfg, plan, turn);
+  } catch (error) {
+    // Fallo al preparar la solicitud: NO es un error del proveedor. Se etiqueta para que el
+    // orquestador lo registre como tal en vez de como 4 fallos de modelos distintos.
+    error.code = 'CONTEXT_BUILD_FAILED';
+    throw error;
+  }
+  return askModel(model, messages, options);
 }
 
 // Consulta el modelo principal y el de respaldo EN PARALELO y usa la primera
@@ -178,22 +257,23 @@ async function generateQuestion({ theme, history }) {
   const extra = (process.env.AI_EXTRA_MODELS ?? DEFAULT_EXTRA).split(',').map((m) => m.trim()).filter(Boolean);
   const models = [...new Set([process.env.AI_MODEL || DEFAULT_MODEL, process.env.AI_FALLBACK_MODEL || DEFAULT_FALLBACK, ...extra])];
   const start = Date.now();
-  const race = new AbortController();
 
   const attempts = models.map((model) =>
-    callModel(model, messages, timeoutMs, race.signal)
-      .then((question) => ({ question, model, ms: Date.now() - start, plan }))
+    askModel(model, messages, { timeoutMs })
+      .then((result) => ({ ...result, ms: Date.now() - start, plan }))
       .catch((error) => {
-        if (race.signal.aborted) throw new Error(`${model}: cancelado`); // otro modelo ganó
-        const reason = error.name === 'AbortError' ? `sin respuesta en ${timeoutMs} ms` : error.message;
+        const reason = error?.name === 'AbortError' ? `sin respuesta en ${timeoutMs} ms` : error.message;
         console.warn(`[IA] ${model} falló: ${reason}`);
         throw new Error(`${model}: ${reason}`);
       }),
   );
 
+  // Las solicitudes perdedoras NO se cancelan: siguen vivas y sus errores quedan gestionados
+  // (sin `unhandledRejection`). Sus respuestas tardías las aprovechará la orquestación.
+  attempts.forEach((attempt) => attempt.catch(() => {}));
+
   try {
     const winner = await Promise.any(attempts);
-    race.abort(); // cancela las consultas que siguen pendientes
     recordAi('interviewer', true, winner);
     return winner;
   } catch (aggregate) {
@@ -211,4 +291,4 @@ function warmUp() {
     .catch(() => console.warn('[IA] No se pudo precalentar el modelo; se reintentará en la primera pregunta'));
 }
 
-module.exports = { generateQuestion, warmUp, parseList, buildSystemPrompt };
+module.exports = { generateQuestion, warmUp, parseList, buildSystemPrompt, askModel, askModelFromContext, cleanQuestion, interviewModels, interviewTimeoutMs };

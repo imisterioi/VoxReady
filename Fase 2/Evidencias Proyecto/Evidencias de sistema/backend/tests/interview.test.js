@@ -48,7 +48,17 @@ function configTests() {
 
   const custom = resolveInterviewConfig({ interviewConfig: { questionCount: 4, followUps: 1, estimatedMinutes: 20 } });
   const auto = resolveInterviewConfig({ interviewConfig: { questionCount: 4, followUps: 1 } });
-  ok(custom.estimatedMinutes === 20 && !custom.estimatedMinutesAuto && auto.estimatedMinutesAuto && auto.estimatedMinutes === 10, '6. El tiempo estimado se respeta si se define y se calcula si no');
+  const legacy = resolveInterviewConfig({ interviewConfig: null });
+  // Decision funcional vigente: la duracion MAXIMA la define el usuario (`estimatedMinutes`) y es
+  // OBLIGATORIA. Si el escenario no la trae (configuracion antigua o campo vacio) se aplican 5
+  // minutos por defecto: la entrevista nunca queda sin limite. La estimacion de referencia
+  // (`estimatedMinutesReference`) es informativa y NO limita nada.
+  ok(
+    custom.estimatedMinutes === 20 && custom.estimatedMinutesAuto === false && custom.maxDurationMs === 1200000 && custom.estimatedMinutesReference === 10 &&
+      auto.estimatedMinutes === 5 && auto.estimatedMinutesAuto === true && auto.maxDurationMs === 300000 && auto.estimatedMinutesReference === 10 &&
+      legacy.estimatedMinutes === 5 && legacy.maxDurationMs === 300000 && legacy.estimatedMinutesAuto === true,
+    '6. La duracion configurada se respeta (20 min -> 1200000 ms); sin valor se aplican 5 min (nunca sin limite) y la referencia es informativa',
+  );
 
   console.log('\nEntrevistador (instrucciones según la agresividad)');
   const theme = { title: 'Accidente', context: 'Murió un trabajador', keyMessages: '["Lamentamos"]', redLines: '["Culpar al trabajador"]' };

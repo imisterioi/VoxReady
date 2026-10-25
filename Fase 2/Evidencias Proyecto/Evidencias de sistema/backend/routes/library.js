@@ -5,7 +5,7 @@
 // - El administrador del cliente puede copiar uno a su organización para adaptarlo.
 const { requireAuth } = require('../auth');
 const { parseList } = require('../ai/interviewer');
-const { normalizeInterviewConfig, resolveInterviewConfig } = require('../ai/interviewConfig');
+const { normalizeInterviewConfig, resolveInterviewConfig, invalidInterviewConfigPayload } = require('../ai/interviewConfig');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
 const CATEGORIES = ['CRISIS', 'MEDIOS', 'INSTITUCIONAL', 'GENERAL'];
@@ -24,12 +24,19 @@ const toApiLibraryTheme = (t) => ({
   createdAt: t.createdAt,
 });
 
-// Valida y normaliza los datos de un escenario. Devuelve { error } o { data }.
+// Valida y normaliza los datos de un escenario. Devuelve { error }, { configError } o { data }.
 function readTheme(body = {}) {
   const { title, context, category, optic, keyMessages = [], redLines = [], publics = [] } = body;
   if (!title?.trim() || !context?.trim()) return { error: 'El nombre y el contexto son obligatorios.' };
   const clean = (list) => (Array.isArray(list) ? list.map((x) => String(x).trim()).filter(Boolean) : []);
   if (!clean(keyMessages).length) return { error: 'Agrega al menos un mensaje clave.' };
+  // Validacion de la configuracion ANTES de normalizar/guardar (misma regla y mismo cuerpo que
+  // POST/PUT /api/themes): una configuracion que supera el limite tecnico se rechaza con 422 en
+  // lugar de guardarse recortada en silencio. `requireDuration` exige la duracion maxima: al
+  // guardar no se admite una entrevista sin limite de tiempo. Si el cliente no envia configuracion,
+  // se usan los valores por defecto (validos, con 5 minutos de duracion).
+  const configError = invalidInterviewConfigPayload(body.interview, { requireDuration: body.interview !== undefined });
+  if (configError) return { configError };
   return {
     data: {
       title: title.trim(),
@@ -68,8 +75,9 @@ module.exports = function registerLibraryRoutes(app, prisma) {
 
   app.post('/api/library/themes', auth('system'), async (req, res) => {
     try {
-      const { error, data } = readTheme(req.body);
+      const { error, configError, data } = readTheme(req.body);
       if (error) return fail(res, 400, error);
+      if (configError) return res.status(422).json(configError);
       if (await titleTaken(data.title)) return fail(res, 409, 'Ya existe un escenario general con ese nombre.');
       const theme = await prisma.theme.create({ data: { ...data, isGlobal: true, tenantId: null } });
       res.status(201).json({ status: 'ok', theme: toApiLibraryTheme(theme) });
@@ -83,8 +91,9 @@ module.exports = function registerLibraryRoutes(app, prisma) {
     try {
       const theme = await prisma.theme.findUnique({ where: { id: req.params.id } });
       if (!theme?.isGlobal || theme.deletedAt) return fail(res, 404, 'Escenario general no encontrado.');
-      const { error, data } = readTheme(req.body);
+      const { error, configError, data } = readTheme(req.body);
       if (error) return fail(res, 400, error);
+      if (configError) return res.status(422).json(configError);
       if (await titleTaken(data.title, theme.id)) return fail(res, 409, 'Ya existe un escenario general con ese nombre.');
       const updated = await prisma.theme.update({ where: { id: theme.id }, data });
       res.json({ status: 'ok', theme: toApiLibraryTheme(updated) });

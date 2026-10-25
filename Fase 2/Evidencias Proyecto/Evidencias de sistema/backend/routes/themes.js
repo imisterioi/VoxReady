@@ -3,7 +3,7 @@
 // (La creación de temas es POST /api/themes, en index.js.)
 const { requireAuth } = require('../auth');
 const { parseList } = require('../ai/interviewer');
-const { normalizeInterviewConfig, resolveInterviewConfig } = require('../ai/interviewConfig');
+const { normalizeInterviewConfig, resolveInterviewConfig, invalidInterviewConfigPayload } = require('../ai/interviewConfig');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
 
@@ -88,6 +88,14 @@ module.exports = function registerThemeRoutes(app, prisma) {
         where: { tenantId: theme.tenantId, title: title.trim(), NOT: { id: theme.id } },
       });
       if (duplicated) return fail(res, 409, 'Ya existe otro tema con ese nombre.');
+
+      // Validacion ANTES de normalizar: si la configuracion solicitada supera el limite tecnico
+      // se rechaza con 422 en lugar de guardarla recortada en silencio. La duracion maxima es
+      // obligatoria al guardar (no se admite un escenario sin limite de tiempo).
+      if (req.body.interview !== undefined) {
+        const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: true });
+        if (configError) return res.status(422).json(configError);
+      }
 
       const updated = await prisma.theme.update({
         where: { id: theme.id },
