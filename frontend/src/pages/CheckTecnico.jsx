@@ -448,17 +448,7 @@ export default function CheckTecnico() {
               </>
             )}
 
-            {calibrating && (
-              <div className="absolute bottom-0 inset-x-0 p-4 bg-gradient-to-t from-black/70 to-transparent">
-                <div className="flex justify-between text-xs text-white/80 mb-2">
-                  <span>Calibrando… permanece quieto</span>
-                  <span className="tabular-nums">{Math.round(calibrationProgress * 100)}%</span>
-                </div>
-                <div className="h-1 rounded-full bg-white/15 overflow-hidden">
-                  <div className="h-full bg-white rounded-full" style={{ width: `${calibrationProgress * 100}%` }} />
-                </div>
-              </div>
-            )}
+
           </div>
 
           <Card>

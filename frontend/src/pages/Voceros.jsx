@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { STATUS_META, initialsOf, timeAgo } from '../data/directory';
 import { apiFetch, getCurrentUser } from '../lib/api';
+import { displayEmail } from '../lib/displayEmail';
 import useApiData from '../hooks/useApiData';
 import UserFormModal from '../components/UserFormModal';
 import { Avatar, Badge, Button, Card, EmptyState, Modal, PageHeader, Stat, Table } from '../components/ui';
@@ -17,6 +19,14 @@ export default function Voceros() {
   const voceros = data?.users || [];
   const me = getCurrentUser() || {};
   const tenant = me.tenantId ? { id: me.tenantId, name: me.tenantName } : null;
+  const navigate = useNavigate();
+
+  // Toda la fila abre el progreso del vocero (misma ruta y misma autorización que antes).
+  // Los botones internos (Suspender/Eliminar) conservan su acción.
+  const openProgress = (event, user) => {
+    if (event.target.closest('a, button')) return;
+    navigate(`/admin/vocero/${user.id}`);
+  };
 
   const active = voceros.filter((u) => u.status === 'ACTIVE').length;
   const suspended = voceros.filter((u) => u.status === 'SUSPENDED').length;
@@ -109,13 +119,26 @@ export default function Voceros() {
             ]}
           >
             {voceros.map((u) => (
-              <tr key={u.id} className="hover:bg-subtle/50 transition-colors">
+              <tr
+                key={u.id}
+                onClick={(event) => openProgress(event, u)}
+                // Fila interactiva: solo cambia el fondo (sin iluminar el borde), con transición suave.
+                // `focus-within` mantiene el mismo indicador cuando el foco llega por teclado.
+                className="cursor-pointer transition-colors duration-200 hover:bg-subtle/60 focus-within:bg-subtle/60"
+              >
                 <td className="py-3.5 px-6">
                   <div className="flex items-center gap-3 min-w-[220px]">
                     <Avatar initials={initialsOf(u.name)} size="sm" />
                     <div className="min-w-0">
-                      <div className="font-medium text-ink truncate">{u.name}</div>
-                      <div className="text-xs text-muted truncate">{u.email}</div>
+                      {/* Enlace real: teclado y lector de pantalla navegan de forma nativa */}
+                      <Link
+                        to={`/admin/vocero/${u.id}`}
+                        title={`Ver el progreso de ${u.name}`}
+                        className="block font-medium text-ink truncate rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-1 focus-visible:ring-offset-surface"
+                      >
+                        {u.name}
+                      </Link>
+                      <div className="text-xs text-muted truncate">{displayEmail(u)}</div>
                     </div>
                   </div>
                 </td>

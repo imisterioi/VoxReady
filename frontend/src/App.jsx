@@ -29,6 +29,7 @@ import Voceros from './pages/Voceros';
 import Practicas from './pages/Practicas';
 import SistemaHome from './pages/sistema/SistemaHome';
 import Organizaciones from './pages/sistema/Organizaciones';
+import DetalleOrganizacion from './pages/sistema/DetalleOrganizacion';
 import Usuarios from './pages/sistema/Usuarios';
 import Biblioteca from './pages/sistema/Biblioteca';
 import DemoEntry from './pages/DemoEntry';
@@ -100,6 +101,8 @@ function App() {
           {/* Admin del cliente */}
           <Route path="admin" element={<AdminHome />} />
           <Route path="admin/voceros" element={<Voceros />} />
+          {/* Progreso de un vocero de la organización (mismo componente que ve el vocero) */}
+          <Route path="admin/vocero/:userId" element={<MiProgreso audience="admin" />} />
           <Route path="admin/practicas" element={<Practicas />} />
           <Route path="admin/temas" element={<Temas />} />
           <Route path="admin/informe" element={<InformeCoach audience="admin" />} />
@@ -116,6 +119,8 @@ function App() {
           {/* Administrador del sistema */}
           <Route path="sistema" element={<SistemaHome />} />
           <Route path="sistema/organizaciones" element={<Organizaciones />} />
+          {/* Detalle de una organización: voceros, solicitudes de privacidad y estadísticas */}
+          <Route path="sistema/organizaciones/:id" element={<DetalleOrganizacion />} />
           <Route path="sistema/usuarios" element={<Usuarios />} />
           <Route path="sistema/biblioteca" element={<Biblioteca />} />
 

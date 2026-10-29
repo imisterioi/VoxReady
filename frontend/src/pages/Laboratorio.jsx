@@ -279,7 +279,7 @@ export default function Laboratorio() {
           <h2 className="text-[15px] font-semibold text-ink">Transcripción</h2>
           <p className="text-[13px] text-muted mt-0.5">
             {DEMO_MODE
-              ? 'Comparación de motores de reconocimiento de voz (experimental). Necesita el backend real: en la versión de demostración no está disponible.'
+              ? 'Comparación de motores de reconocimiento de voz (experimental). En la demostración se recorren las pantallas y funciona el reconocimiento del navegador; Whisper y NVIDIA necesitan el backend real.'
               : 'Comparación de motores de reconocimiento de voz (experimental)'}
           </p>
         </div>

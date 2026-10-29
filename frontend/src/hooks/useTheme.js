@@ -10,7 +10,7 @@ const readTheme = () => {
   }
 };
 
-// Tema claro/oscuro persistido en localStorage (misma clave que la versión anterior).
+// Tema claro/oscuro persistido en localStorage.
 export default function useTheme() {
   const [isDark, setIsDark] = useState(readTheme);
 

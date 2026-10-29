@@ -6,7 +6,7 @@ import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button, cx } from '../components/ui';
 import { API_URL, DEMO_MODE, apiFetch, getToken } from '../lib/api';
-import { speak, useInterviewerVoice } from '../lib/voice';
+import { speak, stopSpeaking, useInterviewerVoice } from '../lib/voice';
 import { createSpeechController, fallbackDelayFor } from '../lib/practice/speechController';
 import { createPrewarmTrigger } from '../lib/practice/prewarm';
 import { emptyProgress, applyServerProgress, isInterviewDone, progressLabel, progressPercent } from '../lib/practice/interviewProgress';
@@ -16,6 +16,7 @@ import PoseTracker from '../lib/practice/poseTracker';
 import { buildBlob, startAudioRecorder, stopAll, stopAndWait, uploadBlob } from '../lib/practice/mediaCapture';
 import { TRANSCRIPT_SOURCE, TRANSCRIPT_TIMEOUT_MS, normalizeTranscription, transcriptionRequest } from '../lib/practice/answerTranscription';
 import { recordingReadiness } from '../lib/practice/sessionStart';
+import { discardUnusedSession } from '../lib/practice/sessionGuard';
 import { analyzeText, createRecognizer, speechRecognitionSupported } from '../lib/practice/speech';
 
 // Entrevista simulada completa:
@@ -162,7 +163,9 @@ export default function SesionPractica() {
   const cleanup = useCallback(() => {
     clearInterval(timerRef.current);
     clearInterval(watchdogRef.current);
-    window.speechSynthesis?.cancel();
+    // Silencia al entrevistador por completo (incluida una lectura aplazada): al salir de la
+    // práctica o al terminar, ninguna pregunta debe seguir sonando.
+    stopSpeaking();
     speechRef.current?.cancel(); // invalida callbacks y temporizador pendientes
     // Se detienen los grabadores ANTES de soltar las pistas: así no queda ningún
     // MediaRecorder activo al descartar o salir de la práctica.
@@ -175,6 +178,20 @@ export default function SesionPractica() {
     poseRef.current?.destroy();
     stopMediaTracks();
   }, [stopMediaTracks]);
+
+  // Descarta la sesión creada cuando la práctica NO llegó a empezar (el vocero salió, recargó
+  // la página o falló la preparación). Evita registros CREATED vacíos en la base; nunca toca
+  // una sesión con datos ni una entrevista que se está cerrando.
+  const discardUnused = useCallback(async () => {
+    const discarded = await discardUnusedSession({
+      sessionId: sessionIdRef.current,
+      interviewStarted: recordingStartedRef.current,
+      finishing: finishingRef.current,
+      del: (sessionId) => apiFetch(`/api/sessions/${sessionId}`, { method: 'DELETE' }),
+    });
+    if (discarded) sessionIdRef.current = null;
+    return discarded;
+  }, []);
 
   // Crear sesión en PostgreSQL (endpoint de tu compañero)
   async function createSession() {
@@ -333,6 +350,9 @@ export default function SesionPractica() {
   }
 
   function askQuestion(text) {
+    // Cerrando la entrevista no se inicia ninguna pregunta nueva: el vocero ya está pasando
+    // al análisis y el entrevistador debe quedarse en silencio.
+    if (finishingRef.current) return;
     questionRef.current = text;
     poseRef.current?.beginSegment(); // el tramo incluye la pregunta: también importa cómo la escucha
     setQuestion(text);
@@ -619,7 +639,10 @@ export default function SesionPractica() {
     if (finishingRef.current) return;
     finishingRef.current = true;
     setPhase('finishing');
-    window.speechSynthesis?.cancel();
+    // La voz se corta AQUÍ, antes de los `await` (detener grabadores y subir las pistas):
+    // así ninguna lectura pendiente ni aplazada arranca durante la transición al análisis.
+    stopSpeaking();
+    speechRef.current?.cancel();
 
     sessionStorage.setItem(
       RESULT_KEY,
@@ -674,10 +697,15 @@ export default function SesionPractica() {
     const startTimer = setTimeout(async () => {
       try {
         await createSession();
+        // La pantalla pudo desmontarse mientras se creaba la sesión (salida, recarga o
+        // remontaje): esa sesión ya no se usará, así que se descarta en lugar de dejarla vacía.
+        if (cancelled) {
+          await discardUnused();
+          return;
+        }
         // Preparación anticipada: se lanza SIN await (no bloquea cámara, micrófono ni el
         // arranque). Si falla, el flujo continúa igual.
         prewarmRef.current?.start(sessionIdRef.current);
-        if (cancelled) return;
         // 1) Cámara, micrófono y modelo de cuerpo (sin grabar todavía).
         await prepareMedia();
         if (cancelled) return;
@@ -712,6 +740,10 @@ export default function SesionPractica() {
         recorderRef.current = null;
         audioRecorderRef.current = null;
         if (!cancelled) setError(err.message || 'No se pudo iniciar la sesión.');
+        // Si la preparación falló antes de empezar, la sesión creada no tiene datos: se
+        // descarta para no dejar un registro CREATED vacío. Si ya se estaba grabando, se
+        // conserva (puede tener respuesta del vocero).
+        await discardUnused();
       }
     }, 50);
 
@@ -719,6 +751,8 @@ export default function SesionPractica() {
       cancelled = true;
       clearTimeout(startTimer);
       cleanup();
+      // Salir de la pantalla sin haber empezado deja una sesión vacía: se descarta.
+      discardUnused();
     };
     // Se ejecuta una sola vez al entrar a la sesión
   }, []);

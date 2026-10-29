@@ -120,8 +120,8 @@ test('7b) presupuestos y estimacion coherentes con el backend', () => {
 });
 
 test('13) la etiqueta de pregunta del componente usa el progreso del backend', () => {
-  // Regresion: el contador local (`currentNumber` / `total`) se elimino cuando el progreso paso a
-  // ser autoritativo del backend. Volver a referenciarlo rompe el render con ReferenceError.
+  // El progreso es autoritativo del backend: el componente no debe referenciar el contador local
+  // (`currentNumber` / `total`), que rompería el render con ReferenceError.
   // Se comprueba sobre el fuente porque el repositorio no tiene entorno de DOM para renderizar.
   const source = readFileSync(new URL('../../pages/SesionPractica.jsx', import.meta.url), 'utf8');
   assert.equal(source.includes('currentNumber'), false, 'no debe quedar ninguna referencia al contador local eliminado');

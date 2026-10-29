@@ -6,7 +6,7 @@ import { evaluateSession } from './evaluator';
 import { nextQuestion } from './interviewer';
 import { LIBRARY_SCENARIOS } from './library';
 
-const STORAGE_KEY = 'voxready_demo_db_v3';
+const STORAGE_KEY = 'voxready_demo_db_v4'; // v4: solicitudes de privacidad y retención
 export const DEMO_PASSWORD = 'demo1234';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -382,6 +382,16 @@ function buildSeed() {
   practice('u-tomas', th(t2, 'integral'), 'high', 4, { comment: 'Muy buen manejo de la presión.', delta: { coherence: -3 } });
   practice('u-camila', th(t2, 'integral'), 'low', 3);
   practice('u-ignacio', th(t3, 'seguridad'), 'mid', 1);
+
+  // Solicitudes de ejemplo: el administrador del cliente las crea y el equipo VoxReady las resuelve
+  const request = (fields) => ({ resolvedAt: null, resolutionNote: null, resolvedById: null, ...fields });
+  db.deletionRequests = [
+    request({ id: 'dr-1', scope: 'RECORDINGS', reason: 'El vocero pidió eliminar sus grabaciones.', status: 'PENDING', createdAt: daysAgo(2, 10), tenantId: t1.id, requestedById: 'u-carlos', targetUserId: 'u-diego' }),
+    request({ id: 'dr-2', scope: 'RECORDINGS', reason: 'Fin del período de prueba del vocero.', status: 'COMPLETED', createdAt: daysAgo(12, 9), resolvedAt: daysAgo(11, 15), tenantId: t2.id, requestedById: 'u-lucia', targetUserId: 'u-camila', resolvedById: 'u-sofia' }),
+  ];
+  db.retentionRequests = [
+    request({ id: 'rr-1', status: 'PENDING', reason: 'Necesitamos conservar las grabaciones para la auditoría anual.', currentDays: 30, requestedDays: 90, appliedDays: null, createdAt: daysAgo(1, 16), tenantId: t2.id, requestedById: 'u-lucia' }),
+  ];
 
   return db;
 }

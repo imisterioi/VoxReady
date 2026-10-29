@@ -7,7 +7,8 @@ import { DEMO_PASSWORD, getDb, patternFor, saveDb, uid } from './db';
 import { DEFAULT_CONFIG, deepMerge, parseList, resolveConfig } from './patternConfig';
 import { evaluateSession } from './evaluator';
 import { nextQuestion } from './interviewer';
-import { normalizeInterviewConfig, resolveInterviewConfig, turnPlan } from './interviewConfig';
+import { normalizeInterviewConfig, resolveInterviewConfig } from './interviewConfig';
+import { NVIDIA_CATALOG } from './nvidiaCatalog';
 
 const ROLE_TO_API = { VOCERO: 'user', ADMIN: 'admin', MASTER: 'master', SYSTEM: 'system' };
 const ROLE_FROM_API = { user: 'VOCERO', admin: 'ADMIN', master: 'MASTER', system: 'SYSTEM' };
@@ -267,8 +268,15 @@ route('PATCH', '/api/tenants/:id', ['system'], ({ db, params, body }) => {
   return { status: 'ok', tenant };
 });
 
-route('GET', '/api/users', ['system', 'admin'], ({ db, user, apiRole }) => {
-  const list = apiRole === 'admin' ? db.users.filter((u) => u.tenantId === user.tenantId && u.role === 'VOCERO') : db.users;
+route('GET', '/api/users', ['system', 'admin'], ({ db, user, apiRole, query }) => {
+  // ?tenantId= (solo sistema) limita la lista a una organización: la usa el detalle de organización
+  const requested = query.get('tenantId');
+  const list =
+    apiRole === 'admin'
+      ? db.users.filter((u) => u.tenantId === user.tenantId && u.role === 'VOCERO')
+      : requested
+        ? db.users.filter((u) => u.tenantId === requested)
+        : db.users;
   return {
     status: 'ok',
     users: [...list]
@@ -379,6 +387,7 @@ route('DELETE', '/api/tenants/:id', ['system', 'master'], ({ db, params }) => {
   db.themes = db.themes.filter((t) => t.tenantId !== tenant.id);
   db.users = db.users.filter((u) => u.tenantId !== tenant.id);
   db.deletionRequests = (db.deletionRequests || []).filter((r) => r.tenantId !== tenant.id);
+  db.retentionRequests = (db.retentionRequests || []).filter((r) => r.tenantId !== tenant.id);
   db.tenants = db.tenants.filter((t) => t.id !== tenant.id);
   userIds.forEach((id) => lastSeen.delete(id));
   // Historial para las métricas de clientes perdidos
@@ -409,10 +418,10 @@ function toApiRequest(db, r) {
   };
 }
 
-route('GET', '/api/deletion-requests', ['admin', 'system'], ({ db, user, apiRole }) => ({
+route('GET', '/api/deletion-requests', ['admin', 'system'], ({ db, user, apiRole, query }) => ({
   status: 'ok',
   requests: (db.deletionRequests || [])
-    .filter((r) => apiRole !== 'admin' || r.tenantId === user.tenantId)
+    .filter((r) => (apiRole === 'admin' ? r.tenantId === user.tenantId : !query.get('tenantId') || r.tenantId === query.get('tenantId')))
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .map((r) => toApiRequest(db, r)),
 }));
@@ -429,15 +438,13 @@ route('POST', '/api/deletion-requests', ['admin'], ({ db, user, body }) => {
   return { status: 'ok', request: toApiRequest(db, request) };
 });
 
-route('PATCH', '/api/deletion-requests/:id', ['admin', 'system'], ({ db, user, apiRole, params, body }) => {
+// Solo el administrador del sistema resuelve: el admin del cliente crea y consulta
+route('PATCH', '/api/deletion-requests/:id', ['system'], ({ db, user, params, body }) => {
   const { status, resolutionNote = '' } = body || {};
   if (!(status in DELETION_TRANSITIONS)) fail(400, 'Estado no válido.');
   const request = (db.deletionRequests || []).find((r) => r.id === params.id);
   if (!request) fail(404, 'Solicitud no encontrada.');
-  if (apiRole === 'admin' && request.tenantId !== user.tenantId) fail(403, 'Solo puedes gestionar solicitudes de tu organización.');
   if (!DELETION_TRANSITIONS[request.status].includes(status)) fail(400, `No es posible pasar de ${request.status} a ${status}.`);
-  // Separación de funciones: un administrador no resuelve su propia solicitud
-  if (apiRole === 'admin' && request.requestedById === user.id) fail(403, 'No puedes resolver tu propia solicitud; la revisa el equipo VoxReady.');
 
   let effect = null;
   if (status === 'COMPLETED') {
@@ -935,9 +942,45 @@ route('POST', '/api/library/themes/:id/copy', ['admin'], ({ db, user, params }) 
   return { status: 'ok', theme: { id: theme.id, title: theme.title } };
 });
 
+// Plan de retención (igual que el backend, sin las pausas por suspensión):
+// cada sesión vence a los `days` días; un cambio de plan se programa para cuando venzan
+// las sesiones que ya existen, así nunca se acorta el plazo de datos ya guardados.
+function syncDuePlan(tenant) {
+  if (tenant.retentionEffectiveAt && new Date(tenant.retentionEffectiveAt).getTime() <= Date.now()) {
+    tenant.retentionMode = tenant.retentionModePending || tenant.retentionMode;
+    tenant.retentionDays = tenant.retentionDaysPending || tenant.retentionDays;
+    Object.assign(tenant, { retentionModePending: null, retentionDaysPending: null, retentionEffectiveAt: null });
+    return true;
+  }
+  return false;
+}
+
+function retentionPlan(db, tenant) {
+  const days = Number(tenant.retentionDays) || 90;
+  const nowMs = Date.now();
+  const expiries = db.sessions.filter((s) => s.tenantId === tenant.id).map((s) => new Date(s.createdAt).getTime() + days * DAY_MS);
+  const upcoming = expiries.filter((t) => t > nowMs);
+  const hasPending = tenant.retentionModePending != null || tenant.retentionDaysPending != null;
+  return {
+    mode: tenant.retentionMode || 'FULL',
+    days,
+    pending: hasPending ? { mode: tenant.retentionModePending, days: tenant.retentionDaysPending, effectiveAt: tenant.retentionEffectiveAt } : null,
+    due: false,
+    sessions: expiries.length,
+    expiredSessions: expiries.filter((t) => t <= nowMs).length,
+    nextPurgeAt: upcoming.length ? new Date(Math.min(...upcoming)).toISOString() : null,
+    periodEndsAt: expiries.length ? new Date(Math.max(...expiries)).toISOString() : null,
+    tenantId: tenant.id,
+    tenantName: tenant.name,
+  };
+}
+
+const retentionSettings = (tenant) => ({ retentionMode: tenant.retentionMode, retentionDays: tenant.retentionDays, name: tenant.name });
+
 route('GET', '/api/tenant/settings', ['admin'], ({ db, user }) => {
   const tenant = db.tenants.find((t) => t.id === user.tenantId);
-  return { status: 'ok', settings: { retentionMode: tenant.retentionMode, retentionDays: tenant.retentionDays, name: tenant.name } };
+  if (syncDuePlan(tenant)) saveDb();
+  return { status: 'ok', settings: retentionSettings(tenant), plan: retentionPlan(db, tenant) };
 });
 
 route('PUT', '/api/tenant/settings', ['admin'], ({ db, user, body }) => {
@@ -946,10 +989,106 @@ route('PUT', '/api/tenant/settings', ['admin'], ({ db, user, body }) => {
   const days = Math.round(Number(retentionDays));
   if (!Number.isFinite(days) || days < 1 || days > 3650) fail(400, 'El plazo debe estar entre 1 y 3650 días.');
   const tenant = db.tenants.find((t) => t.id === user.tenantId);
-  tenant.retentionMode = retentionMode;
-  tenant.retentionDays = days;
+  syncDuePlan(tenant);
+  const clearPending = () => Object.assign(tenant, { retentionModePending: null, retentionDaysPending: null, retentionEffectiveAt: null });
+
+  // Mismo plan vigente: se cancela cualquier cambio programado
+  if (tenant.retentionMode === retentionMode && tenant.retentionDays === days) {
+    clearPending();
+    saveDb();
+    return { status: 'ok', applied: 'none', settings: retentionSettings(tenant), plan: retentionPlan(db, tenant) };
+  }
+
+  const endsAt = retentionPlan(db, tenant).periodEndsAt;
+  const effectiveAt = endsAt && new Date(endsAt).getTime() > Date.now() ? endsAt : now();
+  const applied = effectiveAt === endsAt ? 'scheduled' : 'now';
+  if (applied === 'now') {
+    clearPending();
+    Object.assign(tenant, { retentionMode, retentionDays: days });
+  } else {
+    Object.assign(tenant, { retentionModePending: retentionMode, retentionDaysPending: days, retentionEffectiveAt: effectiveAt });
+  }
   saveDb();
-  return { status: 'ok', settings: { retentionMode, retentionDays: days } };
+  return { status: 'ok', applied, effectiveAt, settings: retentionSettings(tenant), plan: retentionPlan(db, tenant) };
+});
+
+// Solicitudes de extensión del plazo de conservación (las resuelve el administrador del sistema)
+function toApiExtension(db, r) {
+  const person = (id) => {
+    const u = id && userById(db, id);
+    return u ? { id: u.id, name: u.name } : null;
+  };
+  const tenant = db.tenants.find((t) => t.id === r.tenantId);
+  return {
+    id: r.id,
+    status: r.status,
+    reason: r.reason,
+    currentDays: r.currentDays,
+    requestedDays: r.requestedDays,
+    appliedDays: r.appliedDays ?? null,
+    createdAt: r.createdAt,
+    resolvedAt: r.resolvedAt,
+    resolutionNote: r.resolutionNote,
+    tenant: tenant ? { id: tenant.id, name: tenant.name } : null,
+    requestedBy: person(r.requestedById),
+    resolvedBy: person(r.resolvedById),
+  };
+}
+
+route('GET', '/api/retention-requests', ['admin', 'system'], ({ db, user, apiRole, query }) => ({
+  status: 'ok',
+  requests: (db.retentionRequests || [])
+    .filter((r) => (apiRole === 'admin' ? r.tenantId === user.tenantId : !query.get('tenantId') || r.tenantId === query.get('tenantId')))
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map((r) => toApiExtension(db, r)),
+}));
+
+route('POST', '/api/retention-requests', ['admin'], ({ db, user, body }) => {
+  const { requestedDays, reason = '' } = body || {};
+  const days = Math.round(Number(requestedDays));
+  if (!Number.isFinite(days) || days < 1 || days > 3650) fail(400, 'El plazo debe estar entre 1 y 3650 días.');
+  const tenant = db.tenants.find((t) => t.id === user.tenantId);
+  if (!tenant) fail(404, 'Organización no encontrada.');
+  if (days <= tenant.retentionDays) fail(400, 'La extensión debe ser mayor que el plazo vigente. Para cambiarlo, usa la configuración de retención.');
+  if ((db.retentionRequests || []).some((r) => r.tenantId === tenant.id && r.status === 'PENDING')) fail(409, 'Ya tienes una solicitud de extensión pendiente.');
+  const request = {
+    id: uid(),
+    status: 'PENDING',
+    reason: reason?.trim() || null,
+    currentDays: tenant.retentionDays,
+    requestedDays: days,
+    appliedDays: null,
+    createdAt: now(),
+    resolvedAt: null,
+    resolutionNote: null,
+    tenantId: tenant.id,
+    requestedById: user.id,
+    resolvedById: null,
+  };
+  (db.retentionRequests ||= []).push(request);
+  saveDb();
+  return { status: 'ok', request: toApiExtension(db, request) };
+});
+
+route('PATCH', '/api/retention-requests/:id', ['system'], ({ db, user, params, body }) => {
+  const { status, resolutionNote = '' } = body || {};
+  if (!['APPROVED', 'REJECTED'].includes(status)) fail(400, 'Estado no válido.');
+  const request = (db.retentionRequests || []).find((r) => r.id === params.id);
+  if (!request) fail(404, 'Solicitud no encontrada.');
+  if (request.status !== 'PENDING') fail(409, 'La solicitud ya fue resuelta.');
+  let effect = null;
+  if (status === 'APPROVED') {
+    const tenant = db.tenants.find((t) => t.id === request.tenantId);
+    if (!tenant) fail(409, 'La organización ya no existe.');
+    tenant.retentionDays = request.requestedDays;
+    // Un cambio programado más corto no puede deshacer la extensión aprobada
+    if (tenant.retentionDaysPending != null && tenant.retentionDaysPending < request.requestedDays) tenant.retentionDaysPending = request.requestedDays;
+    request.appliedDays = tenant.retentionDays;
+    effect = { retentionDays: tenant.retentionDays, retentionMode: tenant.retentionMode };
+  }
+  Object.assign(request, { status, resolutionNote: resolutionNote?.trim() || null, resolvedAt: now(), resolvedById: user.id });
+  saveDb();
+  return { status: 'ok', request: toApiExtension(db, request), effect };
 });
 
 // Estilo de la organización: colores con los que sus voceros ven la plataforma
@@ -1024,40 +1163,91 @@ route('POST', '/api/sessions/:id/answer-transcript', null, () => ({ status: 'ok'
 // Precalentamiento del entrevistador: en la demo no hay modelos que despertar
 route('POST', '/api/interviewer/prewarm', [], () => ({ status: 'ok' }));
 
+// Evaluación simple de la última respuesta (en el backend la hace la IA):
+// sufficient | insufficient | evasive | silence | no_transcript
+const EVASIVE = /\b(no (puedo|podemos) (comentar|referirme|responder)|sin comentarios|no tengo (esa )?informaci[oó]n|no es el momento)\b/i;
+function assessDemoAnswer(turn) {
+  const text = String(turn?.text || '').trim();
+  if (!text) return turn?.spoke === true ? 'no_transcript' : 'silence';
+  if (EVASIVE.test(text)) return 'evasive';
+  return text.split(/\s+/).filter(Boolean).length < 15 ? 'insufficient' : 'sufficient';
+}
+
 // Igual que el backend: exige sesión iniciada y toma el escenario de la práctica en curso
-// (sin sessionId usa un escenario genérico, para el Laboratorio)
+// (sin sessionId usa un escenario genérico, para el Laboratorio). Antes de cada pregunta se
+// evalúa la respuesta anterior: si no basta, se repregunta (según el presupuesto del escenario);
+// si basta, se avanza a la siguiente pregunta principal. La entrevista se cierra al completar
+// las preguntas principales o al agotarse la duración máxima.
 route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) => {
   const start = performance.now();
   const history = Array.isArray(body?.history) ? body.history : [];
   let theme = null;
+  let session = null;
   if (body?.sessionId) {
-    const session = db.sessions.find((s) => s.id === body.sessionId);
+    session = db.sessions.find((s) => s.id === body.sessionId);
     if (!session || session.userId !== user.id) fail(404, 'Sesión no encontrada.');
     if (session.score != null) fail(409, 'Esta entrevista ya fue evaluada.');
     theme = themeById(db, session.themeId);
   }
   const cfg = normalizeInterviewConfig(theme?.interviewConfig);
-  const plan = turnPlan(cfg, history.filter((h) => h.role === 'interviewer').length);
-  // Progreso que informa el backend: cuenta solo las preguntas principales
-  const progress = { mainsAsked: plan.done ? cfg.questionCount : plan.mainNumber, mainsTotal: cfg.questionCount };
-  if (theme && plan.done) {
-    return { status: 'ok', question: null, kind: null, number: plan.total, total: plan.total, done: true, closeReason: 'completed', ...progress };
-  }
-  await wait(700 + Math.random() * 700);
-  const question = nextQuestion({ theme, history, plan });
-  recordAi('interviewer', Math.round(performance.now() - start));
-  return {
-    status: 'ok',
-    question,
-    kind: plan.kind,
-    number: plan.number,
-    total: plan.total,
-    done: false,
-    ...progress,
-    interview: theme ? resolveInterviewConfig(theme) : null,
-    model: 'Entrevistador de demostración',
-    ms: Math.round(performance.now() - start),
+  const resolved = resolveInterviewConfig(theme || {});
+  const mainsTotal = cfg.questionCount;
+  const asked = history.filter((h) => h.role === 'interviewer').length;
+
+  // Estado de la entrevista (en el Laboratorio, sin sesión, vive solo en esta petición)
+  const state = session ? (session.interview ||= { startedAt: now(), turn: 0, mainsAsked: 0, habitual: 0, clarity: 0, closeReason: null, last: null }) : { startedAt: now(), turn: asked, mainsAsked: asked ? 1 : 0, habitual: 0, clarity: 0, closeReason: null, last: null };
+  const progress = () => ({ mainsAsked: state.mainsAsked, mainsTotal });
+  const reply = (extra) => ({ status: 'ok', ...progress(), interview: theme ? resolved : null, model: 'Entrevistador de demostración', ms: Math.round(performance.now() - start), ...extra });
+  const close = (reason) => {
+    state.closeReason = reason;
+    if (session) saveDb();
+    return reply({ question: null, kind: null, number: state.turn, total: state.turn, done: true, closeReason: reason, pendingMains: Math.max(0, mainsTotal - state.mainsAsked) });
   };
+
+  if (state.closeReason) return close(state.closeReason);
+  // Reintento de una pregunta ya entregada (p. ej. se repitió la petición): misma respuesta
+  if (state.last && asked < state.turn) return reply({ ...state.last, done: false });
+
+  await wait(700 + Math.random() * 700);
+
+  let kind = 'main';
+  let budget = null;
+  if (state.turn > 0) {
+    const last = [...history].reverse().find((h) => h.role !== 'interviewer');
+    const status = assessDemoAnswer(last);
+    const elapsed = Date.now() - new Date(state.startedAt).getTime();
+    const habitualMax = cfg.followUps;
+    const clarityMax = cfg.followUps === 0 ? 1 : 0;
+    if (status !== 'sufficient' && elapsed >= resolved.estimatedMinutes * 60000) return close('TIME_LIMIT');
+    if (status !== 'sufficient') {
+      if (status !== 'no_transcript' && state.habitual < habitualMax) budget = 'habitual';
+      else if (state.clarity < clarityMax) budget = 'clarity';
+    }
+    if (budget) kind = 'followup';
+    else if (state.mainsAsked >= mainsTotal) return close('COMPLETED');
+    else if (elapsed >= resolved.estimatedMinutes * 60000) return close('TIME_LIMIT');
+  }
+
+  if (kind === 'main') {
+    state.mainsAsked += 1;
+    state.habitual = 0;
+    state.clarity = 0;
+  } else {
+    state[budget] += 1;
+  }
+
+  const lastTurn = [...history].reverse().find((h) => h.role !== 'interviewer');
+  const plan = { kind, number: state.turn + 1, total: Math.max(state.turn + 1, resolved.totalTurns), mainNumber: state.mainsAsked, done: false };
+  const question =
+    kind === 'followup' && lastTurn?.spoke === true && !String(lastTurn.text || '').trim()
+      ? 'No alcancé a captar bien su respuesta. ¿Puede resumir en una frase cuál es su punto principal?'
+      : nextQuestion({ theme, history, plan });
+
+  state.turn += 1;
+  state.last = { question, kind, number: plan.number, total: plan.total };
+  if (session) saveDb();
+  recordAi('interviewer', Math.round(performance.now() - start));
+  return reply({ question, kind, number: plan.number, total: plan.total, done: false });
 });
 
 route('POST', '/api/sessions/:id/evaluate', ['user'], async ({ db, user, params, body }) => {
@@ -1097,14 +1287,36 @@ route('DELETE', '/api/sessions/:id', ['user'], ({ db, user, params }) => {
   return { status: 'ok' };
 });
 
-route('GET', '/api/sessions', ['user'], ({ db, user }) => ({
-  status: 'ok',
-  sessions: db.sessions
-    .filter((s) => s.userId === user.id && s.score != null)
-    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
-    .slice(0, 20)
-    .map((s) => summary(db, s)),
-}));
+// Igual que el backend: el vocero ve su propio historial; el administrador (de su organización),
+// el maestro y el sistema ven el de un vocero indicado con ?userId=. Paginado (máximo 50).
+route('GET', '/api/sessions', ['user', 'admin', 'master', 'system'], ({ db, user, apiRole, query }) => {
+  const requested = query.get('userId');
+  let owner = user;
+  if (apiRole === 'user') {
+    if (requested && requested !== user.id) fail(403, 'Solo puedes consultar tus propias prácticas.');
+  } else {
+    if (!requested) fail(400, 'Indica el vocero cuya práctica quieres consultar.');
+    owner = userById(db, requested);
+    if (!owner || owner.role !== 'VOCERO') fail(404, 'Vocero no encontrado.');
+    if (apiRole === 'admin' && owner.tenantId !== user.tenantId) fail(403, 'Solo puedes consultar a los voceros de tu organización.');
+  }
+  const page = Math.max(1, Math.floor(Number(query.get('page'))) || 1);
+  const limit = Math.min(50, Math.max(1, Math.floor(Number(query.get('limit'))) || 50));
+  const own = db.sessions
+    .filter((s) => s.userId === owner.id)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const pages = Math.max(1, Math.ceil(own.length / limit));
+  const current = Math.min(page, pages);
+  return {
+    status: 'ok',
+    user: { id: owner.id, name: owner.name || null },
+    sessions: own.slice((current - 1) * limit, current * limit).map((s) => summary(db, s)),
+    total: own.length,
+    page: current,
+    limit,
+    pages,
+  };
+});
 
 route('GET', '/api/practices', ['admin', 'master', 'system'], ({ db, user, apiRole, query }) => ({
   status: 'ok',
@@ -1302,6 +1514,26 @@ route('GET', '/api/master/overview', ['master', 'system'], ({ db }) => {
     activePattern: active ? toApiPattern(db, active) : null,
   };
 });
+
+// ----------------------------------------------------------- Laboratorios
+// Igual que el backend cuando no tiene configurado el servicio Whisper ni la API key de NVIDIA:
+// las pantallas se ven completas, pero la transcripción en servidor queda como no disponible.
+const LAB_ROLES = ['master', 'system'];
+const DEMO_LAB_DETAIL = 'Versión de demostración: el servicio de transcripción (Whisper) solo funciona con el backend real.';
+
+route('GET', '/api/lab/health', LAB_ROLES, () => ({ status: 'ok', available: false, detail: DEMO_LAB_DETAIL }));
+route('POST', '/api/lab/transcribe', LAB_ROLES, () => fail(503, DEMO_LAB_DETAIL));
+route('GET', '/api/lab/nvidia/catalog', LAB_ROLES, () => NVIDIA_CATALOG);
+route('GET', '/api/lab/nvidia/voice', LAB_ROLES, () => ({
+  ok: true,
+  models: NVIDIA_CATALOG.voice.map(({ key, label, availability }) => ({
+    key,
+    label,
+    availability,
+    reason: 'Requiere acceso temprano; no hay endpoint ni protocolo publicados para llamarlo.',
+  })),
+}));
+route('POST', '/api/lab/nvidia/asr', LAB_ROLES, () => fail(503, 'Versión de demostración: los modelos de NVIDIA solo se pueden llamar con el backend real.'));
 
 // ------------------------------------------------------------ Despachador
 

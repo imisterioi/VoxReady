@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { API_URL, apiFetch, getCurrentUser } from '../lib/api';
+import { displayEmail } from '../lib/displayEmail';
 import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import { Avatar, Badge, Button, Card, ChoiceChips, EmptyState, Field, PageHeader, Segmented, cx } from '../components/ui';
@@ -261,7 +262,7 @@ export default function EditorTema() {
                     <Avatar initials={initialsOf(v.name)} size="sm" />
                     <span className="flex-1 min-w-0">
                       <span className="block text-sm text-ink truncate">{v.name}</span>
-                      <span className="block text-xs text-muted truncate">{v.email}</span>
+                      <span className="block text-xs text-muted truncate">{displayEmail(v)}</span>
                     </span>
                     {v.area && <Badge tone="outline">{v.area}</Badge>}
                   </label>

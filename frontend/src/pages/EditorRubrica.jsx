@@ -4,6 +4,7 @@ import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, CardHeader, EmptyState, Field, PageHeader, Segmented, cx } from '../components/ui';
 import { apiFetch } from '../lib/api';
+import { displayEmail } from '../lib/displayEmail';
 import useApiData from '../hooks/useApiData';
 import { formatDate } from '../data/directory';
 
@@ -454,7 +455,7 @@ function VoceroOverrides({ patterns }) {
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-ink truncate">{v.name}</div>
                 <div className="text-xs text-muted truncate">
-                  {v.email}
+                  {displayEmail(v)}
                   {v.area ? ` · ${v.area}` : ''}
                 </div>
               </div>

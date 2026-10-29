@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { ROLE_META, STATUS_META, initialsOf, timeAgo } from '../../data/directory';
 import { apiFetch, getCurrentUser } from '../../lib/api';
+import { displayEmail } from '../../lib/displayEmail';
 import useApiData from '../../hooks/useApiData';
 import Icon from '../../components/Icon';
 import UserFormModal from '../../components/UserFormModal';
@@ -119,7 +120,7 @@ export default function Usuarios() {
                         <div className="font-medium text-ink truncate">
                           {u.name} {isMe && <span className="text-xs text-faint font-normal">(tú)</span>}
                         </div>
-                        <div className="text-xs text-muted truncate">{u.email}</div>
+                        <div className="text-xs text-muted truncate">{displayEmail(u)}</div>
                       </div>
                     </div>
                   </td>

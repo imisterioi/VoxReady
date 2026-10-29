@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { API_URL, apiFetch, getToken } from '../lib/api';
+import { API_URL, DEMO_MODE, apiFetch, getToken } from '../lib/api';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, cx } from '../components/ui';
 import { startAudioRecorder, stopAndWait } from '../lib/practice/mediaCapture';
@@ -267,7 +267,11 @@ export default function NvidiaLab() {
 
       {error && <p className="text-xs text-danger">{error}</p>}
       {keyConfigured === false && (
-        <p className="text-xs text-danger">Falta NVIDIA_API_KEY en el backend: las llamadas fallarán con NO_KEY.</p>
+        <p className="text-xs text-danger">
+          {DEMO_MODE
+            ? 'Versión de demostración: el catálogo es el real, pero los modelos solo se pueden llamar con el backend y su API key de NVIDIA.'
+            : 'Falta NVIDIA_API_KEY en el backend: las llamadas fallarán con NO_KEY.'}
+        </p>
       )}
 
       <Card className="p-4">
