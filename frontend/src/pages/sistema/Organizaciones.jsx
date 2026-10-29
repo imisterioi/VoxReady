@@ -108,6 +108,10 @@ export default function Organizaciones() {
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [adminFor, setAdminFor] = useState(null);
+  const [deletingTenant, setDeletingTenant] = useState(null);
+  const [suspendingTenant, setSuspendingTenant] = useState(null);
+  const [suspending, setSuspending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const creating = params.get('nueva') === '1';
   const setCreating = (v) => setParams(v ? { nueva: '1' } : {}, { replace: true });
@@ -120,14 +124,47 @@ export default function Organizaciones() {
     [tenants, query],
   );
 
-  const toggle = async (t) => {
-    const next = t.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
+  // Reactivar (acción directa, sin modal).
+  const reactivate = async (t) => {
     try {
-      await apiFetch(`/api/tenants/${t.id}`, { method: 'PATCH', body: { status: next } });
-      toast.success(`${t.name} ${next === 'ACTIVE' ? 'reactivada' : 'suspendida'}`);
+      await apiFetch(`/api/tenants/${t.id}`, { method: 'PATCH', body: { status: 'ACTIVE' } });
+      toast.success(`${t.name} reactivada`);
       reload();
     } catch (err) {
       toast.error(err.message);
+    }
+  };
+
+  // Suspender requiere confirmación: solo aquí se envía la solicitud.
+  const confirmSuspend = async () => {
+    const t = suspendingTenant;
+    try {
+      setSuspending(true);
+      await apiFetch(`/api/tenants/${t.id}`, { method: 'PATCH', body: { status: 'SUSPENDED' } });
+      toast.success(`${t.name} suspendida`);
+      setSuspendingTenant(null);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSuspending(false);
+    }
+  };
+
+  // Eliminación manual (irreversible): procesa los datos del tenant de inmediato o lo deja en DELETING.
+  const remove = async () => {
+    const t = deletingTenant;
+    try {
+      setDeleting(true);
+      const res = await apiFetch(`/api/tenants/${t.id}`, { method: 'DELETE' });
+      if (res?.deletion === 'pending') toast.success(`${t.name}: eliminación en proceso`);
+      else toast.success(`${t.name} eliminada`);
+      setDeletingTenant(null);
+      reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -177,7 +214,9 @@ export default function Organizaciones() {
                     </p>
                   </div>
                 </div>
-                <Badge tone={t.status === 'ACTIVE' ? 'success' : 'danger'}>{t.status === 'ACTIVE' ? 'Activa' : 'Suspendida'}</Badge>
+                <Badge tone={t.status === 'ACTIVE' ? 'success' : t.status === 'DELETING' ? 'neutral' : 'danger'}>
+                  {t.status === 'ACTIVE' ? 'Activa' : t.status === 'DELETING' ? 'Eliminando…' : 'Suspendida'}
+                </Badge>
               </div>
 
               <div className="grid grid-cols-3 gap-3 mt-6">
@@ -206,8 +245,11 @@ export default function Organizaciones() {
                   <Button variant="ghost" size="sm" icon="plus" onClick={() => setAdminFor(t.id)} disabled={t.status !== 'ACTIVE'}>
                     Admin
                   </Button>
-                  <Button variant="ghost" size="sm" icon={t.status === 'ACTIVE' ? 'lock' : 'refresh'} onClick={() => toggle(t)}>
+                  <Button variant="ghost" size="sm" icon={t.status === 'ACTIVE' ? 'lock' : 'refresh'} onClick={() => (t.status === 'ACTIVE' ? setSuspendingTenant(t) : reactivate(t))} disabled={t.status === 'DELETING'}>
                     {t.status === 'ACTIVE' ? 'Suspender' : 'Reactivar'}
+                  </Button>
+                  <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setDeletingTenant(t)} disabled={t.status === 'DELETING'}>
+                    Eliminar
                   </Button>
                 </div>
               </div>
@@ -217,6 +259,60 @@ export default function Organizaciones() {
       )}
 
       <NewTenantModal open={creating} onClose={() => setCreating(false)} onCreated={reload} />
+
+      {deletingTenant && (
+        <Modal
+          open
+          onClose={() => (deleting ? null : setDeletingTenant(null))}
+          title="¿Eliminar este cliente?"
+          description={deletingTenant.name}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setDeletingTenant(null)} disabled={deleting}>
+                Cancelar
+              </Button>
+              <Button variant="danger" icon="trash" onClick={remove} disabled={deleting}>
+                {deleting ? 'Eliminando…' : 'Eliminar'}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-muted leading-relaxed">
+            Esta acción procesará inmediatamente los datos asociados al tenant y sus usuarios (usuarios, sesiones, grabaciones,
+            transcripciones, reports, reviews, temas y configuración) y <b className="text-ink">no esperará al período de retención</b>.
+            Es irreversible. Los escenarios generales no se modifican.
+          </p>
+        </Modal>
+      )}
+
+      {suspendingTenant && (
+        <Modal
+          open
+          onClose={() => (suspending ? null : setSuspendingTenant(null))}
+          title="¿Suspender esta organización?"
+          description={suspendingTenant.name}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setSuspendingTenant(null)} disabled={suspending}>
+                Cancelar
+              </Button>
+              <Button onClick={confirmSuspend} disabled={suspending}>
+                {suspending ? 'Suspendiendo…' : 'Confirmar suspensión'}
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm text-muted">Al suspender esta organización:</p>
+          <ul className="mt-3 space-y-2 text-sm text-muted list-disc pl-5 leading-relaxed">
+            <li>Todos los usuarios de este tenant perderán el acceso a VoxReady mientras permanezca suspendido.</li>
+            <li>Los datos, sesiones, videos, transcripciones e informes de sus voceros se conservarán.</li>
+            <li>El plazo de retención de los datos de todos sus voceros quedará pausado durante la suspensión.</li>
+            <li>Cuando se reactive la organización, el plazo de retención continuará desde el tiempo restante para los voceros que también estén activos.</li>
+            <li>Si un vocero permanece suspendido, su plazo de retención continuará pausado hasta que se reactive su cuenta.</li>
+            <li>Esta acción no elimina la organización ni sus datos.</li>
+          </ul>
+        </Modal>
+      )}
 
       {adminFor && (
         <UserFormModal

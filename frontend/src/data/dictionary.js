@@ -140,9 +140,9 @@ const I = {
         sub: 'Decide qué se conserva de cada sesión y por cuánto tiempo. Aplica a todos tus voceros.',
         q1: 'Qué se conserva tras cada sesión',
         opt1: 'Video, audio y métricas', opt1d: 'Permite autorrevisión y coaching sobre la grabación.',
-        opt2: 'Solo métricas derivadas', opt2d: 'La grabación se descarta al terminar el análisis.',
+        opt2: 'Solo métricas derivadas', opt2d: 'El contenido se conserva hasta el vencimiento y luego se descarta, manteniendo las métricas.',
         termL: 'Plazo de conservación', terms: ['30 días', '90 días', '180 días', 'Personalizado'],
-        termLeg: 'Al expirar, las grabaciones se eliminan o anonimizan automáticamente.',
+        termLeg: 'Al vencer el período, se eliminan el video, la transcripción y el texto sensible del informe.',
         delL: 'Solicitudes de borrado', th: ['Usuario', 'Solicitado', ''], delRow: ['Vocero #14', '22 jun'], process: 'Procesar',
       },
       m1: {

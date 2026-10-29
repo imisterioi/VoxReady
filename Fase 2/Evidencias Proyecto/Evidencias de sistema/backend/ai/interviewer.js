@@ -34,7 +34,8 @@ function parseList(value) {
 // Instrucciones del entrevistador. El escenario se completa con datos de la tabla Theme;
 // el tono y la estructura (preguntas y repreguntas) vienen de su configuración de entrevista.
 // `turn` describe el turno REAL que se está pidiendo: { kind, mainQuestion, focus, hasTranscript }.
-function buildSystemPrompt(theme, cfg, plan, turn = {}) {
+// silent: el vocero no dijo nada en su último turno (silencio real, no una transcripción fallida).
+function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false) {
   const level = AGGRESSIVENESS[cfg.aggressiveness];
   const who = cfg.interviewerRole || 'un periodista chileno';
   const lines = [`Eres ${who} y entrevistas en vivo al vocero de una organización.`, level.persona];
@@ -60,9 +61,16 @@ function buildSystemPrompt(theme, cfg, plan, turn = {}) {
   }
 
   lines.push('Reglas:', '- Haz UNA sola pregunta, en español, de máximo 35 palabras.');
-  // Una repregunta decidida por la evaluación puede ocurrir aunque la configuración no tenga
-  // repreguntas fijas: en ese caso la instrucción debe describir el turno REAL, no el plan.
-  if (cfg.followUps > 0 || isFollowUp) {
+  if (silent) {
+    // El vocero no respondió: el entrevistador no lo deja pasar
+    lines.push(
+      cfg.aggressiveness === 'BAJA'
+        ? '- El vocero se quedó en silencio. Hazle notar con amabilidad que no respondió e invítalo a contestar la pregunta anterior.'
+        : '- El vocero se quedó en SILENCIO y no respondió. Háblale directamente, de usted: cuestiona su silencio preguntándole qué deben entender de él las personas afectadas (¿no tiene respuesta?, ¿oculta algo?) y vuelve a plantearle la pregunta anterior.',
+    );
+  } else if (cfg.followUps > 0 || isFollowUp) {
+    // Una repregunta decidida por la evaluación puede ocurrir aunque la configuración no tenga
+    // repreguntas fijas: en ese caso la instrucción debe describir el turno REAL, no el plan.
     // Estructura fija: cada pregunta principal va seguida de sus repreguntas
     lines.push(
       isFollowUp
@@ -75,10 +83,7 @@ function buildSystemPrompt(theme, cfg, plan, turn = {}) {
       lines.push('- Si el vocero no dijo nada, insiste en la pregunta anterior de forma más directa.');
     }
   } else {
-    lines.push(
-      `- Si el vocero evade o responde de forma genérica, repregunta. ${level.followUp}`,
-      '- Si el vocero no dijo nada, reformula la pregunta anterior de forma más directa.',
-    );
+    lines.push(`- Si el vocero evade o responde de forma genérica, repregunta. ${level.followUp}`);
   }
   // Contexto de la repregunta: la pregunta principal en curso, el aspecto pendiente y el estado
   // real de la respuesta. La repregunta se apoya en lo que el vocero dijo, no en el plan interno.
@@ -104,7 +109,10 @@ const noAnswerLabel = (turn) => (turn?.spoke === true ? '(habló, pero no se pud
 // `turn` es el turno REAL que se pide (kind/mainQuestion/focus/hasTranscript) y se usa para que el
 // prompt describa la intervención que de verdad se envía.
 function buildMessages(theme, history = [], cfg, plan, turn = {}) {
-  const messages = [{ role: 'system', content: buildSystemPrompt(theme, cfg, plan, turn) }];
+  // Silencio real: el último turno es del vocero, sin texto y sin voz detectada
+  const last = history[history.length - 1];
+  const silent = Boolean(last && last.role !== 'interviewer' && !(last.text || '').trim() && last.spoke !== true);
+  const messages = [{ role: 'system', content: buildSystemPrompt(theme, cfg, plan, turn, silent) }];
 
   for (const item of history.slice(-10)) {
     const text = (item.text || '').trim();

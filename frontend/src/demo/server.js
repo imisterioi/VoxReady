@@ -77,8 +77,13 @@ function summary(db, s) {
     theme: theme ? { id: theme.id, title: theme.title, category: theme.category } : null,
     user: user ? { id: user.id, name: user.name } : null,
     areas: s.report?.areas?.map(({ key, label, score }) => ({ key, label, score })) || [],
+    // Estado del informe como lo informa el backend (la demo evalúa de inmediato)
+    hasReport: Boolean(s.report),
+    evaluation: evaluationState(s),
   };
 }
+
+const evaluationState = (s) => (s.report ? { state: 'done', stage: 'done' } : null);
 
 const fullSession = (db, s) => ({ ...summary(db, s), report: s.report, transcript: s.transcript, review: s.review });
 
@@ -180,7 +185,8 @@ route('GET', '/api/db-test', null, () => ({ status: 'ok', database: 'Navegador (
 route('POST', '/api/auth/login', null, ({ db, body }) => {
   const email = (body?.email || '').trim().toLowerCase();
   const user = db.users.find((u) => u.email === email);
-  if (!user || (body?.password || '') !== (user.password || DEMO_PASSWORD)) fail(401, 'Correo o contraseña incorrectos.');
+  // Una cuenta anonimizada ya no tiene credenciales
+  if (!user || user.anonymizedAt || (body?.password || '') !== (user.password || DEMO_PASSWORD)) fail(401, 'Correo o contraseña incorrectos.');
   const tenant = db.tenants.find((t) => t.id === user.tenantId);
   if (user.status === 'SUSPENDED') fail(403, 'Esta cuenta está suspendida. Contacta a tu administrador.');
   if (tenant?.status === 'SUSPENDED') fail(403, `La organización ${tenant.name} está suspendida.`);
@@ -315,6 +321,148 @@ route('PATCH', '/api/users/:id', ['system', 'admin'], ({ db, user, apiRole, para
   target.status = body.status;
   saveDb();
   return { status: 'ok', user: toApiUser(db, target) };
+});
+
+// ------------------------------------------- Eliminación y anonimización
+// Igual que el backend: se conserva lo estadístico (puntajes y métricas) y se elimina
+// lo que identifica al vocero (nombre, correo, respuestas, comentarios y grabaciones).
+function scrubSession(s) {
+  videos.delete(s.id);
+  s.hasVideo = false;
+  if (Array.isArray(s.transcript)) {
+    s.transcript = s.transcript.map(({ answer, ...turn }) => {
+      const metrics = turn.metrics ? { ...turn.metrics } : turn.metrics;
+      if (metrics) delete metrics.fillerWords;
+      return { ...turn, metrics };
+    });
+  }
+  if (s.report) {
+    const { cita, resumen, mensajesClave, fortalezas, mejoras, ...report } = s.report;
+    if (Array.isArray(report.porPregunta)) report.porPregunta = report.porPregunta.map(({ comentario, ...p }) => p);
+    if (Array.isArray(report.lineasRojas)) report.lineasRojas = report.lineasRojas.map(({ evidencia, ...l }) => l);
+    s.report = report;
+  }
+}
+
+function anonymizeUser(db, target) {
+  if (target.anonymizedAt) return { already: true, sessions: 0 };
+  const sessions = db.sessions.filter((s) => s.userId === target.id);
+  sessions.forEach(scrubSession);
+  Object.assign(target, { name: 'Usuario anonimizado', email: `anon+${target.id}@removed.local`, area: null, password: null, lastLoginAt: null, anonymizedAt: now() });
+  (db.deletionRequests || [])
+    .filter((r) => [r.targetUserId, r.requestedById, r.resolvedById].includes(target.id))
+    .forEach((r) => Object.assign(r, { reason: null, resolutionNote: null }));
+  lastSeen.delete(target.id);
+  return { sessions: sessions.length };
+}
+
+// Elimina manualmente un vocero: sus datos se anonimizan de inmediato
+route('DELETE', '/api/users/:id', ['system', 'admin'], ({ db, user, apiRole, params }) => {
+  const target = userById(db, params.id);
+  if (!target) fail(404, 'Usuario no encontrado.');
+  if (target.role !== 'VOCERO') fail(403, 'Solo se pueden eliminar voceros.');
+  if (apiRole === 'admin' && target.tenantId !== user.tenantId) fail(403, 'Solo puedes eliminar voceros de tu organización.');
+  const result = anonymizeUser(db, target);
+  saveDb();
+  return { status: 'ok', result };
+});
+
+// Elimina una organización con todos sus datos (en la demo se completa al instante)
+route('DELETE', '/api/tenants/:id', ['system', 'master'], ({ db, params }) => {
+  const tenant = db.tenants.find((t) => t.id === params.id);
+  if (!tenant) fail(404, 'Organización no encontrada.');
+  const userIds = new Set(db.users.filter((u) => u.tenantId === tenant.id).map((u) => u.id));
+  const themeIds = new Set(db.themes.filter((t) => t.tenantId === tenant.id).map((t) => t.id));
+  db.sessions.filter((s) => s.tenantId === tenant.id).forEach((s) => videos.delete(s.id));
+  db.sessions = db.sessions.filter((s) => s.tenantId !== tenant.id);
+  db.assignments = db.assignments.filter((a) => !userIds.has(a.userId) && !themeIds.has(a.themeId));
+  db.themes = db.themes.filter((t) => t.tenantId !== tenant.id);
+  db.users = db.users.filter((u) => u.tenantId !== tenant.id);
+  db.deletionRequests = (db.deletionRequests || []).filter((r) => r.tenantId !== tenant.id);
+  db.tenants = db.tenants.filter((t) => t.id !== tenant.id);
+  userIds.forEach((id) => lastSeen.delete(id));
+  // Historial para las métricas de clientes perdidos
+  (db.tenantEvents ||= []).push({ tenantId: tenant.id, type: 'DELETED', at: now(), tenantCreatedAt: tenant.createdAt });
+  saveDb();
+  return { status: 'ok', deletion: 'completed' };
+});
+
+// Solicitudes de borrado (PENDING → APPROVED | REJECTED; APPROVED → COMPLETED)
+const DELETION_TRANSITIONS = { PENDING: ['APPROVED', 'REJECTED'], APPROVED: ['COMPLETED'], REJECTED: [], COMPLETED: [] };
+
+function toApiRequest(db, r) {
+  const person = (id, withEmail = false) => {
+    const u = id && userById(db, id);
+    return u ? { id: u.id, name: u.name, ...(withEmail ? { email: u.email } : {}) } : null;
+  };
+  return {
+    id: r.id,
+    scope: r.scope,
+    reason: r.reason,
+    status: r.status,
+    createdAt: r.createdAt,
+    resolvedAt: r.resolvedAt,
+    resolutionNote: r.resolutionNote,
+    targetUser: person(r.targetUserId, true),
+    requestedBy: person(r.requestedById),
+    resolvedBy: person(r.resolvedById),
+  };
+}
+
+route('GET', '/api/deletion-requests', ['admin', 'system'], ({ db, user, apiRole }) => ({
+  status: 'ok',
+  requests: (db.deletionRequests || [])
+    .filter((r) => apiRole !== 'admin' || r.tenantId === user.tenantId)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .map((r) => toApiRequest(db, r)),
+}));
+
+route('POST', '/api/deletion-requests', ['admin'], ({ db, user, body }) => {
+  const { targetUserId = null, scope = 'RECORDINGS', reason = '' } = body || {};
+  if (!['RECORDINGS', 'ANONYMIZE'].includes(scope)) fail(400, 'Tipo de solicitud no válido.');
+  if (!targetUserId) fail(400, 'Selecciona el vocero cuyos datos se solicita borrar.');
+  const target = userById(db, targetUserId);
+  if (!target || target.tenantId !== user.tenantId || target.role !== 'VOCERO') fail(403, 'Solo puedes solicitar el borrado de voceros de tu organización.');
+  const request = { id: uid(), scope, reason: reason?.trim() || null, status: 'PENDING', createdAt: now(), resolvedAt: null, resolutionNote: null, tenantId: user.tenantId, requestedById: user.id, targetUserId: target.id, resolvedById: null };
+  (db.deletionRequests ||= []).push(request);
+  saveDb();
+  return { status: 'ok', request: toApiRequest(db, request) };
+});
+
+route('PATCH', '/api/deletion-requests/:id', ['admin', 'system'], ({ db, user, apiRole, params, body }) => {
+  const { status, resolutionNote = '' } = body || {};
+  if (!(status in DELETION_TRANSITIONS)) fail(400, 'Estado no válido.');
+  const request = (db.deletionRequests || []).find((r) => r.id === params.id);
+  if (!request) fail(404, 'Solicitud no encontrada.');
+  if (apiRole === 'admin' && request.tenantId !== user.tenantId) fail(403, 'Solo puedes gestionar solicitudes de tu organización.');
+  if (!DELETION_TRANSITIONS[request.status].includes(status)) fail(400, `No es posible pasar de ${request.status} a ${status}.`);
+  // Separación de funciones: un administrador no resuelve su propia solicitud
+  if (apiRole === 'admin' && request.requestedById === user.id) fail(403, 'No puedes resolver tu propia solicitud; la revisa el equipo VoxReady.');
+
+  let effect = null;
+  if (status === 'COMPLETED') {
+    const target = request.targetUserId && userById(db, request.targetUserId);
+    if (request.scope === 'ANONYMIZE') {
+      if (!target) fail(400, 'La solicitud no tiene un vocero objetivo.');
+      effect = anonymizeUser(db, target);
+    } else {
+      const own = db.sessions.filter((s) => s.userId === request.targetUserId && s.hasVideo);
+      own.forEach((s) => {
+        videos.delete(s.id);
+        s.hasVideo = false;
+      });
+      effect = { videosRemoved: own.length };
+    }
+  }
+  const finalized = ['REJECTED', 'COMPLETED'].includes(status);
+  Object.assign(request, {
+    status,
+    resolutionNote: status === 'COMPLETED' && request.scope === 'ANONYMIZE' ? null : resolutionNote?.trim() || null,
+    resolvedAt: finalized ? now() : request.resolvedAt,
+    resolvedById: finalized ? user.id : request.resolvedById,
+  });
+  saveDb();
+  return { status: 'ok', request: toApiRequest(db, request), effect };
 });
 
 route('GET', '/api/system/overview', ['system'], ({ db }) => {
@@ -835,11 +983,10 @@ route('GET', '/api/admin/overview', ['admin'], ({ db, user }) => {
 });
 
 // ------------------------------------------------------------- Prácticas
-route('POST', '/api/sessions', null, ({ db, body }) => {
-  const { email, themeId } = body || {};
-  if (!email || !themeId) fail(400, 'Faltan email o themeId');
-  const user = db.users.find((u) => u.email === email);
-  if (!user) fail(404, 'Usuario no encontrado');
+// Igual que el backend: el vocero sale de la sesión iniciada, no del cuerpo de la petición
+route('POST', '/api/sessions', ['user'], ({ db, user, body }) => {
+  const { themeId } = body || {};
+  if (!themeId) fail(400, 'Falta themeId');
   const theme = themeById(db, themeId);
   if (!theme) fail(404, 'Escenario no encontrado');
   // Los escenarios generales (biblioteca de VoxReady) están disponibles para todos los voceros
@@ -865,6 +1012,18 @@ route('POST', '/api/sessions/:id/video', null, ({ db, params, rawBody }) => {
   return { status: 'ok', mensaje: 'Video guardado correctamente', file: `${session.id}.webm` };
 });
 
+// Audio de la práctica: el backend lo transcribe; la demo no lo necesita
+route('POST', '/api/sessions/:id/audio', null, ({ db, params }) => {
+  if (!db.sessions.some((s) => s.id === params.id)) fail(404, 'Sesión no encontrada');
+  return { status: 'ok' };
+});
+
+// La demo transcribe con el navegador (SesionPractica), así que aquí no hay texto
+route('POST', '/api/sessions/:id/answer-transcript', null, () => ({ status: 'ok', text: '', code: 'NO_TRANSCRIPT' }));
+
+// Precalentamiento del entrevistador: en la demo no hay modelos que despertar
+route('POST', '/api/interviewer/prewarm', [], () => ({ status: 'ok' }));
+
 // Igual que el backend: exige sesión iniciada y toma el escenario de la práctica en curso
 // (sin sessionId usa un escenario genérico, para el Laboratorio)
 route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) => {
@@ -877,8 +1036,13 @@ route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) =
     if (session.score != null) fail(409, 'Esta entrevista ya fue evaluada.');
     theme = themeById(db, session.themeId);
   }
-  const plan = turnPlan(normalizeInterviewConfig(theme?.interviewConfig), history.filter((h) => h.role === 'interviewer').length);
-  if (theme && plan.done) fail(409, 'La entrevista ya completó todas sus preguntas.');
+  const cfg = normalizeInterviewConfig(theme?.interviewConfig);
+  const plan = turnPlan(cfg, history.filter((h) => h.role === 'interviewer').length);
+  // Progreso que informa el backend: cuenta solo las preguntas principales
+  const progress = { mainsAsked: plan.done ? cfg.questionCount : plan.mainNumber, mainsTotal: cfg.questionCount };
+  if (theme && plan.done) {
+    return { status: 'ok', question: null, kind: null, number: plan.total, total: plan.total, done: true, closeReason: 'completed', ...progress };
+  }
   await wait(700 + Math.random() * 700);
   const question = nextQuestion({ theme, history, plan });
   recordAi('interviewer', Math.round(performance.now() - start));
@@ -888,6 +1052,8 @@ route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) =
     kind: plan.kind,
     number: plan.number,
     total: plan.total,
+    done: false,
+    ...progress,
     interview: theme ? resolveInterviewConfig(theme) : null,
     model: 'Entrevistador de demostración',
     ms: Math.round(performance.now() - start),
@@ -917,7 +1083,7 @@ route('GET', '/api/sessions/:id', [], ({ db, user, apiRole, params }) => {
   const session = db.sessions.find((s) => s.id === params.id);
   if (!session) fail(404, 'Sesión no encontrada.');
   if (!canView(user, apiRole, session)) fail(403, 'No puedes ver esta sesión.');
-  return { status: 'ok', session: fullSession(db, session) };
+  return { status: 'ok', session: fullSession(db, session), evaluation: evaluationState(session) };
 });
 
 route('DELETE', '/api/sessions/:id', ['user'], ({ db, user, params }) => {

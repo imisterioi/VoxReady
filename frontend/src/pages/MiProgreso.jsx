@@ -8,6 +8,7 @@ import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, cx } from '../
 import useApiData from '../hooks/useApiData';
 import { formatDate } from '../data/directory';
 import { lessonsForArea } from '../data/lessons';
+import { evaluatedSessions, historyStatus } from '../lib/practice/sessionHistory';
 
 const AREAS = [
   { key: 'expression', label: 'Expresión' },
@@ -20,11 +21,14 @@ const AREAS = [
 export default function MiProgreso() {
   const t = I.es.L.u7;
   const history = useApiData('/api/sessions');
+  // Todas las sesiones del vocero (incluidas las que aún no tienen informe) para el historial.
   const sessions = useMemo(() => history.data?.sessions || [], [history.data]);
-  const latestReport = useApiData(sessions[0] ? `/api/sessions/${sessions[0].id}` : null);
+  // Solo las evaluadas alimentan puntajes, tendencias y recomendaciones: nunca se inventan datos.
+  const evaluated = useMemo(() => evaluatedSessions(sessions), [sessions]);
+  const latestReport = useApiData(evaluated[0] ? `/api/sessions/${evaluated[0].id}` : null);
 
-  // Serie cronológica (últimas 8 prácticas)
-  const chrono = useMemo(() => [...sessions].reverse().slice(-8), [sessions]);
+  // Serie cronológica (últimas 8 prácticas evaluadas)
+  const chrono = useMemo(() => [...evaluated].reverse().slice(-8), [evaluated]);
   const series = AREAS.map((a) => chrono.map((s) => s.areas.find((x) => x.key === a.key)?.score ?? null));
   const globalSeries = chrono.map((s) => s.score);
 
@@ -52,8 +56,8 @@ export default function MiProgreso() {
   const isToday = (day) => day === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear();
   const isPast = (day) => new Date(calYear, calMonth, day) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
-  // Área más débil y recomendaciones del último informe
-  const lastAreas = sessions[0]?.areas.filter((a) => a.score != null) || [];
+  // Área más débil y recomendaciones del último informe EVALUADO (nunca de una sesión pendiente).
+  const lastAreas = evaluated[0]?.areas?.filter((a) => a.score != null) || [];
   const weakest = lastAreas.length ? lastAreas.reduce((a, b) => (b.score < a.score ? b : a)) : null;
   const mejoras = latestReport.data?.session?.report?.mejoras || [];
   const lessons = lessonsForArea(weakest?.key, 3);
@@ -194,12 +198,14 @@ export default function MiProgreso() {
             <div className="p-6 pb-0">
               <CardHeader
                 title="Tus prácticas"
-                description={`${sessions.length} práctica(s) evaluada(s)`}
+                description={`${sessions.length} práctica(s)`}
                 action={<Button to="/vocero/escenarios" size="sm" variant="accent" icon="mic">Practicar</Button>}
               />
             </div>
             <ul className="divide-y divide-line border-t border-line">
-              {sessions.map((s) => (
+              {sessions.map((s) => {
+                const status = historyStatus(s);
+                return (
                 <li key={s.id}>
                   <Link to={`/vocero/informe?sesion=${s.id}`} className="flex items-center gap-4 px-6 py-4 hover:bg-subtle/50 transition-colors">
                     <span className="h-11 w-11 rounded-xl bg-subtle flex items-center justify-center font-display font-semibold text-ink tabular-nums">
@@ -208,9 +214,13 @@ export default function MiProgreso() {
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-ink truncate">{s.theme?.title || 'Práctica'}</div>
                       <div className="text-xs text-muted">{formatDate(s.completedAt || s.createdAt)}</div>
+                      {/* Estado del informe informado por el backend (nunca inferido ni inventado). */}
+                      <div className="mt-1.5">
+                        <Badge tone={status.tone}>{status.label}</Badge>
+                      </div>
                     </div>
                     <div className="hidden md:flex gap-1.5">
-                      {s.areas.map((a) => (
+                      {(s.areas || []).map((a) => (
                         <Badge key={a.key} tone="outline">
                           {a.label}: {a.score ?? '—'}
                         </Badge>
@@ -219,7 +229,8 @@ export default function MiProgreso() {
                     <Icon name="chevronRight" size={16} className="text-faint" />
                   </Link>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </Card>
         </>

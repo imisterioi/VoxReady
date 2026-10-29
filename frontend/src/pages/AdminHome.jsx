@@ -4,6 +4,7 @@ import Icon from '../components/Icon';
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, PageHeader, Stat, Table } from '../components/ui';
 import useApiData from '../hooks/useApiData';
 import { getCurrentUser } from '../lib/api';
+import MetricsDashboard from '../components/MetricsDashboard';
 import { formatDate, initialsOf } from '../data/directory';
 
 const CATEGORY = { CRISIS: 'Crisis', MEDIOS: 'Medios', INSTITUCIONAL: 'Institucional', GENERAL: 'General' };
@@ -122,6 +123,9 @@ export default function AdminHome() {
             </Table>
           )}
         </Card>
+
+      {/* Métricas de la organización */}
+      <MetricsDashboard />
     </>
   );
 }

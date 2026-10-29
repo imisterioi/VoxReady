@@ -1,16 +1,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import I from '../data/dictionary';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button, Card, EmptyState, cx } from '../components/ui';
 import { apiFetch } from '../lib/api';
+import { runAnalysis } from '../lib/practice/analysisRunner';
+import { describeEvaluationError } from '../lib/practice/evaluationErrors';
+import { PENDING_MESSAGE, PENDING_TITLE, describeStage, failureMessage } from '../lib/practice/reportAccess';
 import { RESULT_KEY } from './SesionPractica';
+
+// Motivos que el backend puede devolver en `evaluation.reason`.
+// Mensajes SIEMPRE genéricos: nunca se muestran modelos, proveedores, códigos HTTP ni detalles
+// internos (el detalle técnico queda en la consola del backend).
+const FAIL_REASONS = {
+  NO_API_KEY: 'Falta la clave de la IA en el servidor.',
+  INVALID_AI_RESPONSE: 'La IA devolvió una respuesta no válida. Puedes reintentar.',
+  INTERRUPTED: 'La evaluación se interrumpió. Puedes reintentarla.',
+  AI_UNAVAILABLE: 'No se pudo completar el análisis. Tu grabación se conserva: inténtalo de nuevo en unos minutos.',
+  ERROR: 'Ocurrió un error al evaluar la sesión.',
+};
 
 // Envía la entrevista (transcripción + métricas) a la IA evaluadora y abre el informe.
 export default function Analizando() {
   const t = I.es.L.u5;
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // El id puede venir del resultado recién guardado o de la URL (?sesion=).
+  // Con la URL se puede volver a consultar el estado tras recargar, sin re-evaluar.
   const [payload] = useState(() => {
     try {
       return JSON.parse(sessionStorage.getItem(RESULT_KEY));
@@ -18,6 +35,7 @@ export default function Analizando() {
       return null;
     }
   });
+  const sessionId = payload?.sessionId || params.get('sesion') || null;
 
   const steps = [
     { label: t.p1, icon: 'file' },
@@ -28,31 +46,99 @@ export default function Analizando() {
 
   const [current, setCurrent] = useState(0);
   const [error, setError] = useState('');
+  const [progress, setProgress] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const started = useRef(-1);
+  // El informe tardó más de lo esperado (reintentos automáticos en curso): se muestra un mensaje
+  // informativo, sin errores técnicos, y el sondeo continúa en segundo plano.
+  const [slow, setSlow] = useState(false);
+  // Cada ejecución del análisis tiene su propio AbortController: el cleanup de
+  // StrictMode cancela ESA ejecución y no bloquea la siguiente.
+  const runRef = useRef(null);
+  // Evita repetir el POST /evaluate en el mismo intento (StrictMode remonta el efecto).
+  const postedRef = useRef({ sessionId: null, attempt: -1 });
 
-  const evaluate = useCallback(async () => {
-    setError('');
-    setCurrent(0);
-    try {
-      const { session } = await apiFetch(`/api/sessions/${payload.sessionId}/evaluate`, {
-        method: 'POST',
-        body: { transcript: payload.transcript, metrics: payload.metrics },
-      });
+  const finish = useCallback(
+    (sessionId) => {
       setCurrent(steps.length);
       sessionStorage.removeItem(RESULT_KEY);
-      setTimeout(() => navigate(`/vocero/informe?sesion=${session.id}`), 700);
-    } catch (err) {
-      setError(err.message);
-    }
-  }, [payload, navigate, steps.length]);
+      setTimeout(() => navigate(`/vocero/informe?sesion=${sessionId}`), 700);
+    },
+    [navigate, steps.length],
+  );
 
-  // Una sola evaluación por intento
+  const evaluate = useCallback(async () => {
+    if (!sessionId) return;
+    // Cancela la ejecución anterior (si la hubiera) y abre una nueva.
+    runRef.current?.abort();
+    const controller = new AbortController();
+    runRef.current = controller;
+    const isCurrent = () => runRef.current === controller && !controller.signal.aborted;
+
+    setError('');
+    setCurrent(0);
+    setProgress('Analizando tu entrevista…');
+
+    // Solo se PIDE evaluación si venimos de una práctica recién terminada y no se ha
+    // pedido ya en este mismo intento. Con ?sesion= solo se consulta el estado.
+    const posted = postedRef.current;
+    const shouldPost =
+      Boolean(payload?.sessionId) && (posted.sessionId !== payload.sessionId || posted.attempt !== attempt);
+    if (shouldPost) postedRef.current = { sessionId: payload.sessionId, attempt };
+
+    let result;
+    try {
+      result = await runAnalysis({
+        sessionId,
+        payload: shouldPost ? payload : null,
+        signal: controller.signal,
+        postEvaluate: (id, body) =>
+          apiFetch(`/api/sessions/${id}/evaluate`, {
+            method: 'POST',
+            body: { transcript: body.transcript, metrics: body.metrics },
+          }),
+        fetchSession: (id) => apiFetch(`/api/sessions/${id}`),
+        onStage: (stage) => {
+          if (isCurrent()) setProgress(describeStage({ stage }));
+        },
+      });
+    } catch (error) {
+      // 503 (integración desactivada), 422 (sin ventanas válidas) y 502 (fallo de
+      // transcripción) se muestran como mensaje claro; nunca se abre el informe.
+      if (isCurrent()) setError(describeEvaluationError(error) || '');
+      return;
+    }
+
+    // Una ejecución cancelada no modifica estado ni navega.
+    if (!isCurrent()) return;
+    if (result.status === 'done') {
+      finish(result.sessionId || sessionId);
+      return;
+    }
+    if (result.status === 'failed') {
+      // Un fallo de evaluación se explica con la clasificación del backend (`errorKind`): temporal
+      // (se reintentará solo) o pendiente de revisión técnica. Nunca se muestran códigos internos.
+      const fromEvaluation = result.errorKind ? failureMessage({ errorKind: result.errorKind }) : '';
+      setError(
+        fromEvaluation ||
+          FAIL_REASONS[result.reason] ||
+          (result.httpStatus ? describeEvaluationError({ status: result.httpStatus }) : '') ||
+          'No se pudo completar la evaluación.',
+      );
+      return;
+    }
+    // El sondeo se agotó pero la generación continúa en el backend: se muestra el aviso de «sigue en
+    // segundo plano» (no es un error) y NO se cancela nada. El informe llegará a «Mi progreso».
+    if (result.status === 'pending') setSlow(true);
+  }, [sessionId, payload, attempt, finish]);
+
+  // Arranca al entrar (con payload recién guardado o con ?sesion=) y cancela al salir.
   useEffect(() => {
-    if (!payload?.sessionId || started.current === attempt) return;
-    started.current = attempt;
+    if (!sessionId) return undefined;
     evaluate();
-  }, [payload, attempt, evaluate]);
+    return () => {
+      runRef.current?.abort();
+    };
+  }, [sessionId, evaluate]);
 
   // Avance visual mientras la IA trabaja (el último paso espera la respuesta real)
   useEffect(() => {
@@ -61,7 +147,15 @@ export default function Analizando() {
     return () => clearTimeout(id);
   }, [current, error, steps.length]);
 
-  if (!payload?.sessionId) {
+  // Objetivo de experiencia: informe en ~60 s. Si sigue pendiente, se avisa sin pedir nada al
+  // vocero (la evaluación continúa sola, con reintentos automáticos en el backend).
+  useEffect(() => {
+    if (error) return undefined;
+    const id = setTimeout(() => setSlow(true), 60000);
+    return () => clearTimeout(id);
+  }, [error]);
+
+  if (!sessionId) {
     return (
       <>
         <PracticeSteps />
@@ -78,7 +172,8 @@ export default function Analizando() {
   }
 
   const done = current >= steps.length;
-  const answered = payload.transcript?.length || 0;
+  const pending = slow && !done && !error;
+  const answered = payload?.transcript?.length || 0;
 
   return (
     <>
@@ -86,6 +181,22 @@ export default function Analizando() {
 
       <div className="flex justify-center">
         <Card className="w-full max-w-xl p-8 md:p-12 text-center">
+          {pending ? (
+            <div>
+              <div className="h-20 w-20 mx-auto mb-8 rounded-full bg-accent-soft text-accent-fg flex items-center justify-center">
+                <Icon name="sparkles" size={28} strokeWidth={1.75} />
+              </div>
+              <h1 className="font-display font-semibold text-[28px] leading-tight tracking-[-0.025em] text-ink">{PENDING_TITLE}</h1>
+              <p className="text-sm text-muted mt-2">{PENDING_MESSAGE}</p>
+              {/* El vocero puede salir: el proceso ya reclamado continúa en el backend. */}
+              <div className="mt-8 flex justify-center">
+                <Button variant="secondary" to="/vocero/progreso">
+                  Ir a Mi progreso
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
           <div className="relative h-20 w-20 mx-auto mb-8">
             {!done && !error && <span className="absolute inset-0 rounded-full border-2 border-subtle border-t-accent animate-spin" />}
             <span
@@ -106,7 +217,7 @@ export default function Analizando() {
               ? error
               : done
                 ? 'Abriendo tu informe…'
-                : `${payload.theme?.title || 'Entrevista'} · ${answered} respuesta${answered === 1 ? '' : 's'} · la IA evaluadora suele tardar entre 10 y 40 segundos.`}
+                : `${payload?.theme?.title || 'Entrevista'} · ${answered} respuesta${answered === 1 ? '' : 's'} · ${progress || 'la IA evaluadora suele tardar entre 10 y 40 segundos.'}`}
           </p>
 
           <ul className="mt-10 space-y-1 text-left">
@@ -131,6 +242,8 @@ export default function Analizando() {
               );
             })}
           </ul>
+            </>
+          )}
 
           {error && (
             <div className="mt-8 flex justify-center gap-2">
