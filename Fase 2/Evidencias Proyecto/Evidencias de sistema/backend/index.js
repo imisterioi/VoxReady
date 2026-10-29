@@ -20,6 +20,7 @@ const registerSessionRoutes = require('./routes/sessions');
 const registerPatternRoutes = require('./routes/patterns');
 const registerThemeRoutes = require('./routes/themes');
 const registerDeletionRoutes = require('./routes/deletionRequests');
+const registerRetentionRequestRoutes = require('./routes/retentionRequests');
 const registerLibraryRoutes = require('./routes/library');
 const registerMetricsRoutes = require('./routes/metrics');
 const registerSystemRoutes = require('./routes/system');
@@ -28,15 +29,22 @@ const registerInterviewerRoutes = require('./routes/interviewer');
 const registerNvidiaLabRoutes = require('./routes/nvidiaLab');
 const { processPendingTenantDeletions } = require('./lib/tenantDeletion');
 const { registerJob, runJob } = require('./lib/runtimeStatus');
+const { withRetry } = require('./lib/dbRetry');
 
 // Inicializar Express y Prisma
 const app = express();
 const adapter = new PrismaPg({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
+  // Opciones del pool de `pg` para tolerar interrupciones transitorias de PostgreSQL
+  // en Docker (reinicios, caídas de red, resolución DNS).
+  max: 10,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
 });
 
 const prisma = new PrismaClient({
-  adapter
+  adapter,
+  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : [],
 });
 
 // Configurar middlewares básicos
@@ -53,18 +61,28 @@ registerSessionRoutes(app, prisma, {
 registerPatternRoutes(app, prisma);
 registerThemeRoutes(app, prisma);
 registerDeletionRoutes(app, prisma);
+registerRetentionRequestRoutes(app, prisma); // solicitudes de extensión del plazo de retención
 registerLibraryRoutes(app, prisma);
 registerMetricsRoutes(app, prisma);
 registerSystemRoutes(app, prisma);
 registerLabRoutes(app, prisma); // Laboratorio de transcripción (experimental)
 registerNvidiaLabRoutes(app, prisma); // Laboratorio NVIDIA Build (experimental)
 
-// Endpoint de prueba
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
+// Endpoint de prueba: también verifica conectividad con PostgreSQL.
+app.get('/api/health', async (req, res) => {
+  let dbOk = false;
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    dbOk = true;
+  } catch {
+    // DB no disponible: se reporta pero el endpoint sigue respondiendo.
+  }
+  const status = dbOk ? 'ok' : 'degraded';
+  res.status(dbOk ? 200 : 503).json({
+    status,
     service: 'VoxReady API',
-    mensaje: '¡El backend está vivo y funcionando!'
+    mensaje: dbOk ? '¡El backend está vivo y funcionando!' : 'El backend está vivo pero no alcanza la base de datos.',
+    database: dbOk ? 'conectado' : 'no disponible',
   });
 });
 
@@ -453,8 +471,14 @@ app.listen(PORT, (error) => {
   // Garantiza que la eliminación continúe tras un fallo o reinicio, sin depender de la petición HTTP.
   const DELETION_EVERY_MS = 5 * 60 * 1000;
   registerJob('tenant-deletion', { label: 'Eliminación de organizaciones', everyMs: DELETION_EVERY_MS });
-  const runPendingDeletions = () =>
-    runJob('tenant-deletion', () => processPendingTenantDeletions(prisma)).catch((e) => console.warn('[Eliminación] error:', e.message));
+  const runPendingDeletions = async () => {
+    // Reintento limitado: si PostgreSQL no está disponible, se espera y se reintenta.
+    // El job es idempotente, por tanto es seguro volver a ejecutarlo tras un fallo.
+    await withRetry(
+      () => runJob('tenant-deletion', () => processPendingTenantDeletions(prisma)),
+      { maxAttempts: 5, baseDelayMs: 5000, maxDelayMs: 60000 }
+    ).catch((e) => console.warn('[Eliminación] error tras reintentos:', e.message));
+  };
   setTimeout(runPendingDeletions, 6000);
   setInterval(runPendingDeletions, DELETION_EVERY_MS).unref();
 });

@@ -287,8 +287,8 @@ test('E3-4 el entrevistador recibe spoke/hasTranscript de la última respuesta',
 
 // --- E3-6/E3-7: rama de error recuperable (`!result.ok`) ---
 //
-// Regresión del defecto `ReferenceError: entry is not defined`: la traza `no-question` y el 502
-// recuperable se perdían porque la rama accedía a `entry` fuera de su ámbito (la rama de sesión).
+// Rama de error recuperable: la traza `no-question` y el 502 deben propagarse con su motivo, sin
+// acceder a `entry` fuera de su ámbito (la rama de sesión).
 // Estas pruebas fuerzan los dos códigos posibles (`NO_QUESTION_IN_TIME` y `NO_FOLLOWUP_IN_TIME`).
 
 const CFG_SESION = normalizeInterviewConfig({ questionCount: 3, followUps: 1, aggressiveness: 'MEDIA' });

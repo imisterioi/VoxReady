@@ -130,7 +130,7 @@ async function claimAttempt(prisma, sessionId, { now = () => Date.now(), env = p
 
 // Marca el intento como fallido y PROGRAMA el siguiente (o agota la sesión).
 // Nunca pisa un informe válido ni publica nada. `metrics` es opcional: si llega, se conserva el
-// bloque `evaluation` que ya usa la API (mismo formato que antes de los reintentos).
+// bloque `evaluation` con el mismo formato que consume la API.
 async function markAttemptFailed(prisma, sessionId, {
   error = 'ERROR',
   kind = 'transient',

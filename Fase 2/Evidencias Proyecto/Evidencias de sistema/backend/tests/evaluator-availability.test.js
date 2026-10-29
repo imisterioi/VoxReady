@@ -95,7 +95,7 @@ test('la evaluación usa el orden de la comprobación anticipada, sin límites d
     );
 
     // El disponible va primero, el desconocido en medio y el caído al final (el caído NO se excluye),
-    // pero NINGUNO recibe un recorte de tiempo: el límite corto de 20 s se eliminó.
+    // pero NINGUNO recibe un recorte de tiempo.
     assert.deepEqual(calls.map((item) => item.model), ['ok', 'z-ai/glm-5.3', 'caido']);
     assert.deepEqual(calls.map((item) => item.timeoutMs), [0, 0, 0], 'ningún modelo se corta por tiempo');
     assert.equal(winner.model, 'ok');

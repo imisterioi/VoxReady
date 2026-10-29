@@ -281,8 +281,8 @@ async function seedMetricsDemo(prisma) {
   let n = 0; // índice global de sesión (para variar el contenido demo)
   const nextSessionId = () => uid(700000 + seq++);
 
-  // Cuenta del Administrador del Sistema (SYSTEM, sin tenant). Se AGREGA; no reemplaza
-  // a la cuenta SYSTEM existente del proyecto.
+  // Cuenta del Administrador del Sistema (SYSTEM, sin tenant) para la demo. Es adicional:
+  // no reemplaza a la cuenta SYSTEM del proyecto.
   await prisma.user.upsert({
     where: { email: 'system.demo@voxready.local' },
     update: { name: 'Administrador del Sistema (demo)', role: 'SYSTEM', status: 'ACTIVE', tenantId: null, passwordHash: hashPassword(DEMO_PASSWORD) },

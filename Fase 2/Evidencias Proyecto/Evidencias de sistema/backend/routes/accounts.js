@@ -203,10 +203,17 @@ module.exports = function registerAccountRoutes(app, prisma) {
 
   // ------------------------------------------------------------ Usuarios
 
-  // SYSTEM ve todos; ADMIN ve solo los voceros de su organización
+  // SYSTEM ve todos; ADMIN ve solo los voceros de su organización.
+  // `?tenantId=` (solo SYSTEM) limita la lista a una organización: lo usa la vista de detalle
+  // de organización. Para un ADMIN se ignora: nunca puede salir de su propia organización.
   app.get('/api/users', auth('system', 'admin'), async (req, res) => {
     try {
-      const where = req.apiRole === 'admin' ? { tenantId: req.user.tenantId, role: 'VOCERO' } : {};
+      const requested = typeof req.query?.tenantId === 'string' && req.query.tenantId ? req.query.tenantId : null;
+      const where = req.apiRole === 'admin'
+        ? { tenantId: req.user.tenantId, role: 'VOCERO' }
+        : requested
+          ? { tenantId: requested }
+          : {};
       const users = await prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },

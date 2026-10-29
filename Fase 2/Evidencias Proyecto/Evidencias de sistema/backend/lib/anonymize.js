@@ -2,9 +2,9 @@
 // Conserva el histórico estadístico y elimina los datos identificables.
 //
 // Estrategia de atomicidad: PostgreSQL y el filesystem no comparten transacción.
-// Por eso primero se anonimiza todo en BD dentro de una transacción (sesiones +
-// usuario + solicitudes) y, una vez confirmada, se eliminan los .webm (best-effort
-// con log). Si fallara el borrado de archivos, la BD ya quedó sin PII.
+// Por eso primero se anonimiza todo en BD dentro de una transacción (sesiones + auditoría de
+// transcripción + usuario + solicitudes) y, una vez confirmada, se eliminan las grabaciones
+// (video y audio, best-effort con log). Si fallara el borrado de archivos, la BD ya quedó sin PII.
 const fs = require('fs');
 const path = require('path');
 
@@ -132,33 +132,56 @@ async function deleteUserVideos(prisma, tenantId, userIds) {
   return removeVideoFiles(sessions.map((s) => s.id));
 }
 
+// Neutraliza el TEXTO de la auditoría de transcripción de esas sesiones.
+// Se conserva la fila completa (turno, estado, motor, tiempos, motivo y intentos) porque es
+// información operativa sin datos personales; solo se borra el campo con lo que dijo el vocero.
+// Idempotente: volver a ejecutarlo sobre filas ya limpias no cambia nada.
+async function scrubAuditTranscripts(tx, sessionIds = []) {
+  if (!sessionIds.length) return 0;
+  const result = await tx.transcriptionAudit.updateMany({
+    where: { sessionId: { in: sessionIds } },
+    data: { transcript: null },
+  });
+  return result?.count ?? 0;
+}
+
 // --------------------------------------------------------------- operaciones
 
 // Anonimiza una sola sesión (conserva id/userId/themeId/tenantId/score/completedAt).
 async function anonymizeSession(prisma, sessionId) {
   const session = await prisma.session.findUnique({ where: { id: sessionId } });
   if (!session) return { found: false };
-  await prisma.session.update({ where: { id: session.id }, data: sessionScrubData(session) });
+  // La sesión y su auditoría de transcripción se limpian en la misma transacción.
+  let auditsCleared = 0;
+  await prisma.$transaction(async (tx) => {
+    await tx.session.update({ where: { id: session.id }, data: sessionScrubData(session) });
+    auditsCleared = await scrubAuditTranscripts(tx, [session.id]);
+  });
   const videoRemoved = removeVideoFiles([session.id]) > 0;
-  return { found: true, sessionId: session.id, videoRemoved };
+  return { found: true, sessionId: session.id, videoRemoved, auditsCleared };
 }
 
-// Anonimiza un vocero completo: sus sesiones, el usuario y la PII de solicitudes.
+// Anonimiza un vocero completo: sus sesiones, su auditoría de transcripción, el usuario y la
+// PII de las solicitudes que lo referencian.
 async function anonymizeUser(prisma, userId) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) return { found: false };
-  if (user.anonymizedAt) return { found: true, already: true, userId: user.id, sessions: 0, videosRemoved: 0 };
+  if (user.anonymizedAt) return { found: true, already: true, userId: user.id, sessions: 0, videosRemoved: 0, auditsCleared: 0 };
 
   const sessions = await prisma.session.findMany({
     where: { userId: user.id },
     select: { id: true, transcript: true, metrics: true, report: true, review: true },
   });
 
-  // 1) BD: transacción (sesiones → usuario → solicitudes)
+  // 1) BD: transacción (sesiones → auditoría de transcripción → usuario → solicitudes)
+  let auditsCleared = 0;
   await prisma.$transaction(async (tx) => {
     for (const s of sessions) {
       await tx.session.update({ where: { id: s.id }, data: sessionScrubData(s) });
     }
+    // El texto transcrito por turno vive en la auditoría (una fila por sesión y turno): sin esto
+    // quedaría accesible desde el endpoint de auditoría después de anonimizar.
+    auditsCleared = await scrubAuditTranscripts(tx, sessions.map((s) => s.id));
     await tx.user.update({
       where: { id: user.id },
       data: {
@@ -180,7 +203,7 @@ async function anonymizeUser(prisma, userId) {
   // 2) Filesystem (fuera de la transacción)
   const videosRemoved = removeVideoFiles(sessions.map((s) => s.id));
 
-  return { found: true, already: false, userId: user.id, sessions: sessions.length, videosRemoved };
+  return { found: true, already: false, userId: user.id, sessions: sessions.length, videosRemoved, auditsCleared };
 }
 
 module.exports = {

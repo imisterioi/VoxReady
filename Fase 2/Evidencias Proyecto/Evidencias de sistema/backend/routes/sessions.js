@@ -16,7 +16,10 @@ const { saveStreamToFile } = require('../lib/uploadGuard');
 const { MEDIA_TYPES, UPLOAD_ERRORS } = require('../lib/mediaUpload');
 const { removeVideoFiles } = require('../lib/anonymize');
 const { effectiveElapsedMs, reconcilePauses } = require('../lib/retentionPause');
+const { effectivePlan } = require('../lib/retentionPlan');
+const { syncDuePlans } = require('../lib/retentionSchedule');
 const { registerJob, runJob } = require('../lib/runtimeStatus');
+const { resolveSessionOwner, resolvePaging } = require('../lib/sessionScope');
 
 const RETENTION_JOB = 'retention';
 const RETENTION_EVERY_MS = 6 * 60 * 60 * 1000;
@@ -100,10 +103,30 @@ function cleanReportForRetention(report) {
 //  - dryRun: no borra nada; solo cuenta qué sesiones están vencidas (para el panel del sistema).
 // Devuelve además el detalle por organización en `byTenant`.
 async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) {
+  const now = Date.now();
+  // Un cambio de plan PROGRAMADO se materializa antes de purgar (estado persistente, sobrevive
+  // reinicios). En simulación no se escribe nada: el plan efectivo se calcula igualmente en memoria.
+  if (!dryRun) await syncDuePlans(prisma, { now });
+
   const [sessions, users] = await Promise.all([
     prisma.session.findMany({
       where: tenantId ? { tenantId } : {},
-      select: { id: true, createdAt: true, userId: true, tenantId: true, tenant: { select: { retentionDays: true, status: true } } },
+      select: {
+        id: true,
+        createdAt: true,
+        userId: true,
+        tenantId: true,
+        tenant: {
+          select: {
+            retentionDays: true,
+            retentionMode: true,
+            retentionModePending: true,
+            retentionDaysPending: true,
+            retentionEffectiveAt: true,
+            status: true,
+          },
+        },
+      },
     }),
     prisma.user.findMany({
       where: tenantId ? { tenantId } : {},
@@ -114,7 +137,6 @@ async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) 
   const tally = (id) => (byTenant[id] ||= { sessions: 0, expired: 0, videos: 0, videosRemoved: 0, audios: 0, audiosRemoved: 0 });
   const pausesByUser = new Map(users.map((u) => [u.id, u.retentionPauses]));
 
-  const now = Date.now();
   const isVideoFile = (f) => f.endsWith('.webm') && !f.endsWith('.audio.webm');
   const isAudioFile = (f) => f.endsWith('.audio.webm');
   const videoFiles = new Set(
@@ -140,7 +162,9 @@ async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) 
     const intervals = pausesByUser.get(s.userId) || [];
     if (intervals.some((iv) => !iv.endedAt)) continue;
 
-    const days = s.tenant?.retentionDays ?? 90;
+    // Plan EFECTIVO del tenant: si un cambio programado ya cumplió su fecha, manda ese cambio
+    // (y `syncDuePlans` lo habrá persistido al inicio de la pasada).
+    const days = effectivePlan(s.tenant || {}, now).days;
     // Vencimiento por TIEMPO EFECTIVO: excluye los periodos con la retención pausada
     // (suspensiones del vocero y/o de su tenant).
     const elapsed = effectiveElapsedMs(s.createdAt, intervals, now);
@@ -525,7 +549,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       }
 
       // Transcripción del vocero: NVIDIA Whisper Large v3 sobre el audio de la sesión.
-      // Web Speech API ya no participa. Si el servicio falla o no se puede asignar texto a
+      // Web Speech API no participa. Si el servicio falla o no se puede asignar texto a
       // una respuesta, se devuelve un error controlado y NO se evalúa con texto inventado.
       let rawTranscript = req.body?.transcript;
       let transcriptionDiagnostics = [];
@@ -899,23 +923,51 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     }
   });
 
-  // Historial de prácticas del vocero conectado: TODAS sus sesiones, incluidas las que todavía no
-  // tienen informe (en preparación, con reintento programado, agotadas o fallidas). El estado se
-  // informa en `evaluation` (derivado del estado real) y nunca se inventan puntajes.
+  // Historial de prácticas, PAGINADO EN EL SERVIDOR.
+  // - VOCERO: solo las suyas (comportamiento original; un `userId` ajeno se rechaza).
+  // - ADMIN del cliente: las de los voceros de SU organización, indicando `?userId=`; el
+  //   servidor valida rol y pertenencia al tenant (el id del frontend no autoriza nada).
+  // - MASTER/SYSTEM: las de cualquier vocero.
+  // - `?page=` (desde 1) y `?limit=` (máx. 50; por defecto 50 = tope histórico del endpoint).
+  //   Se devuelven `total` y `pages` para que el cliente pagine sin traer todo el historial.
   // - `orderBy createdAt`: `completedAt` es nulo en las sesiones sin informe, así que ordenar por
-  //   esa columna las dejaba al final y las sacaba del historial.
-  // - El aislamiento es por usuario (cada usuario pertenece a un único tenant).
-  app.get('/api/sessions', auth('user'), async (req, res) => {
+  //   esa columna las dejaría al final y las sacaría del historial.
+  // - El aislamiento entre organizaciones lo resuelve `resolveSessionOwner` (lib/sessionScope).
+  app.get('/api/sessions', auth('user', 'admin', 'master', 'system'), async (req, res) => {
     try {
+      const owner = await resolveSessionOwner({
+        apiRole: req.apiRole,
+        requester: req.user,
+        requestedUserId: req.query?.userId,
+        findUser: (id) => prisma.user.findUnique({ where: { id } }),
+      });
+      if (owner.error) return fail(res, owner.status, owner.error);
+
+      const { page, limit } = resolvePaging(req.query);
+      const where = { userId: owner.id };
+      // El total se consulta primero para no devolver nunca una página vacía: si se pide una
+      // página fuera de rango se sirve la última existente.
+      const total = await prisma.session.count({ where });
+      const pages = Math.max(1, Math.ceil(total / limit));
+      const current = Math.min(page, pages);
       const sessions = await prisma.session.findMany({
-        where: { userId: req.user.id },
+        where,
         orderBy: { createdAt: 'desc' },
-        take: 50,
+        skip: (current - 1) * limit,
+        take: limit,
         include: { theme: true },
       });
+
       res.json({
         status: 'ok',
+        // Vocero consultado (el propio o el indicado por el administrador): permite titular la
+        // vista sin exponer nada más.
+        user: { id: owner.id, name: owner.name || null },
         sessions: sessions.map((session) => ({ ...summary(session), evaluation: evaluationState(session) })),
+        total,
+        page: current,
+        limit,
+        pages,
       });
     } catch (error) {
       console.error('Error listando sesiones:', error);

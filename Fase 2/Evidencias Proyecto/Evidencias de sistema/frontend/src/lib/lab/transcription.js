@@ -304,9 +304,8 @@ function csvCell(value) {
 }
 
 export function toCSV(runs) {
-  // Se conservan las columnas de siempre en el mismo orden (compatibilidad con las
-  // exportaciones anteriores) y se añaden al final las de Whisper Small y el resumen de
-  // motores usados en la ejecución.
+  // Las columnas mantienen el orden original (compatibilidad con las exportaciones anteriores);
+  // las de Whisper Small y el resumen de motores usados en la ejecución se añaden al final.
   const header = [
     'id', 'fecha', 'estado', 'guion', 'duracion_audio_s',
     'webspeech_texto', 'webspeech_wer', 'webspeech_s', 'webspeech_d', 'webspeech_i',

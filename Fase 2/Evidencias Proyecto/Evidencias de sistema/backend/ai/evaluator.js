@@ -8,9 +8,8 @@
 //  - Empatía      → IA evaluadora + conexión visual con la cámara (% configurable).
 //
 // Configuración del evaluador: se lee de `backend/.env` y `backend/.env.local` (ver `index.js`),
-// con los valores por defecto VALIDADOS de `lib/evaluatorModels.js`. Antes había aquí tres
-// identificadores fijos y dos de ellos ya no existen en el proveedor: se eliminaron para que no
-// reaparezcan por olvido (el archivo de entorno, además, tiene prioridad sobre estos valores).
+// con los valores por defecto validados de `lib/evaluatorModels.js`. El archivo de entorno tiene
+// prioridad sobre esos valores por defecto.
 const { parseList } = require('./interviewer');
 const { resolveConfig } = require('./patternConfig');
 const { AGGRESSIVENESS, normalizeInterviewConfig } = require('./interviewConfig');
@@ -523,8 +522,7 @@ async function callEvaluator(model, messages, { timeoutMs = 0, signal = null } =
 // sonda real de modelos). Devuelve el ganador YA VALIDADO y el estado de los demás.
 //
 // Orden: lo decide la comprobación anticipada de disponibilidad (`lib/evaluatorHealth.js`), que solo
-// ORDENA (disponibles primero). Ningún modelo se excluye y ninguno recibe un límite distinto: el
-// recorte a 20 s para modelos caídos se eliminó (abortaba generaciones válidas).
+// ORDENA (disponibles primero). Ningún modelo se excluye y ninguno recibe un límite distinto.
 async function judgeContent(input, { call = callEvaluator, models: modelsOption = null, validate = null } = {}) {
   const messages = buildPrompt(input);
   // ÚNICO límite de tiempo de la llamada al proveedor: el timeout técnico configurable.

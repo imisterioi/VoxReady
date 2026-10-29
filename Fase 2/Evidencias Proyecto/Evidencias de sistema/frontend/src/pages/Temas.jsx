@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Avatar, Badge, Button, Card, Checkbox, EmptyState, Modal, PageHeader, cx } from '../components/ui';
 import { apiFetch } from '../lib/api';
+import { displayEmail } from '../lib/displayEmail';
 import useApiData from '../hooks/useApiData';
 import { initialsOf } from '../data/directory';
 
@@ -278,7 +279,7 @@ function ManageVocerosModal({ theme, voceros, onClose, onSaved }) {
               <Avatar initials={initialsOf(v.name)} size="sm" />
               <span className="flex-1 min-w-0">
                 <span className="block text-sm text-ink truncate">{v.name}</span>
-                <span className="block text-xs text-muted truncate">{v.email}</span>
+                <span className="block text-xs text-muted truncate">{displayEmail(v)}</span>
               </span>
               {v.area && <Badge tone="outline">{v.area}</Badge>}
             </label>

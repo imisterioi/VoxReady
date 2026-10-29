@@ -1,10 +1,11 @@
 // Solicitudes de borrado de la organización (retención / derecho al olvido).
-// - El administrador del cliente crea solicitudes SOLO de su organización.
+// - El administrador del cliente crea solicitudes SOLO de su organización y consulta su estado.
+// - Únicamente el ADMINISTRADOR DEL SISTEMA resuelve las solicitudes (aprobar / rechazar /
+//   completar). El administrador del cliente no puede resolverlas, ni por API.
 // - Al COMPLETAR una solicitud:
 //     scope RECORDINGS → elimina las grabaciones (.webm) del vocero.
 //     scope ANONYMIZE  → anonimiza al vocero completo (usuario + sesiones + videos).
 // - Máquina de estados: PENDING → APPROVED|REJECTED; APPROVED → COMPLETED.
-// - Separación de funciones: un ADMIN no resuelve su propia solicitud (lo hace SYSTEM).
 const { requireAuth } = require('../auth');
 const { anonymizeUser, deleteUserVideos } = require('../lib/anonymize');
 
@@ -39,10 +40,13 @@ module.exports = function registerDeletionRoutes(app, prisma) {
   const auth = (...roles) => requireAuth(prisma, roles);
   const include = { targetUser: true, requestedBy: true, resolvedBy: true };
 
-  // Lista las solicitudes de la organización del administrador
+  // Lista las solicitudes de la organización del administrador.
+  // `?tenantId=` (solo SYSTEM) limita la lista a una organización: lo usa la vista de detalle
+  // de organización. Para un ADMIN se ignora: siempre queda limitado a la suya.
   app.get('/api/deletion-requests', auth('admin', 'system'), async (req, res) => {
     try {
-      const where = req.apiRole === 'admin' ? { tenantId: req.user.tenantId } : {};
+      const requested = typeof req.query?.tenantId === 'string' && req.query.tenantId ? req.query.tenantId : null;
+      const where = req.apiRole === 'admin' ? { tenantId: req.user.tenantId } : requested ? { tenantId: requested } : {};
       const requests = await prisma.deletionRequest.findMany({ where, orderBy: { createdAt: 'desc' }, include });
       res.json({ status: 'ok', requests: requests.map(toApi) });
     } catch (error) {
@@ -81,27 +85,20 @@ module.exports = function registerDeletionRoutes(app, prisma) {
     }
   });
 
-  // Cambia el estado: aprobar, rechazar o completar (al completar ejecuta la acción)
-  app.patch('/api/deletion-requests/:id', auth('admin', 'system'), async (req, res) => {
+  // Cambia el estado: aprobar, rechazar o completar (al completar ejecuta la acción).
+  // SOLO el administrador del sistema puede resolver: el admin del cliente únicamente crea
+  // solicitudes y consulta su estado (la comprobación se hace aquí, no en la interfaz).
+  app.patch('/api/deletion-requests/:id', auth('system'), async (req, res) => {
     try {
       const { status, resolutionNote = '' } = req.body || {};
       if (!STATUSES.includes(status)) return fail(res, 400, 'Estado no válido.');
 
       const request = await prisma.deletionRequest.findUnique({ where: { id: req.params.id } });
       if (!request) return fail(res, 404, 'Solicitud no encontrada.');
-      if (req.apiRole === 'admin' && request.tenantId !== req.user.tenantId) {
-        return fail(res, 403, 'Solo puedes gestionar solicitudes de tu organización.');
-      }
 
       // 1) Máquina de estados
       if (!TRANSITIONS[request.status].includes(status)) {
         return fail(res, 400, `No es posible pasar de ${request.status} a ${status}.`);
-      }
-
-      // 2) Separación de funciones: un ADMIN no resuelve su propia solicitud.
-      //    SYSTEM (staff VoxReady) puede actuar; otro ADMIN del mismo tenant también.
-      if (req.apiRole === 'admin' && request.requestedById === req.user.id) {
-        return fail(res, 403, 'No puedes resolver tu propia solicitud; la revisa el equipo VoxReady.');
       }
 
       // 3) Al COMPLETAR se ejecuta la acción del alcance

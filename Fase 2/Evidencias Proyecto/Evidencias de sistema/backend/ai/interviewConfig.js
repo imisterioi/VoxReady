@@ -188,7 +188,7 @@ function followUpBudget(cfg) {
 // Peor caso alcanzable: principales x (1 + repreguntas posibles de cada una).
 const maxTurnsPotential = (cfg) => (Number(cfg?.questionCount) || 0) * (1 + followUpBudget(cfg).perMain);
 
-// Duracion estimada automatica (orientativa). Ya no se edita por tema.
+// Duracion estimada automatica (orientativa). No se edita por tema.
 const estimateMinutes = (cfg) => Math.max(1, Math.round(totalTurns(cfg) * MINUTES_PER_TURN));
 
 // Validacion autoritativa (la usa el backend antes de guardar y antes de iniciar).

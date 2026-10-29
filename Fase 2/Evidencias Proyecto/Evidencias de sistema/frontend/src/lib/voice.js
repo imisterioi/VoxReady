@@ -85,6 +85,32 @@ export function useInterviewerVoice() {
   return { voices, voice, setVoiceURI };
 }
 
+// Lectura APLAZADA pendiente. Cuando la síntesis está ocupada se cancela y se deja pasar un
+// tick antes de hablar (Chromium descarta la utterance si se cancela y se habla en el mismo
+// tick). Ese temporizador NO lo detiene `speechSynthesis.cancel()`, así que se guarda aquí:
+// sin esto, una pregunta aplazada podía empezar a sonar después de terminar la entrevista.
+let pendingSpeak = null;
+
+function clearPendingSpeak() {
+  if (pendingSpeak != null) {
+    clearTimeout(pendingSpeak);
+    pendingSpeak = null;
+  }
+}
+
+// Silencia al entrevistador por completo: la lectura en curso, la que espera en la cola del
+// navegador y la aplazada. Es la forma segura de cortar la voz al terminar o descartar la
+// práctica. Nunca lanza: sin soporte de síntesis no hay nada que detener.
+export function stopSpeaking() {
+  clearPendingSpeak();
+  if (typeof window === 'undefined') return;
+  try {
+    window.speechSynthesis?.cancel();
+  } catch {
+    /* el navegador no expone cancel(): no hay nada que detener */
+  }
+}
+
 // Lee un texto con la voz indicada. Devuelve la utterance para escuchar eventos.
 // `onEnd` sólo se llama si la reproducción TERMINA normalmente; `onError` recibe el motivo
 // técnico ('not-allowed', 'interrupted', 'synthesis-failed'…). Sin `onError`, se mantiene
@@ -120,8 +146,15 @@ export function speak(text, voice, { onStart, onEnd, onError } = {}) {
   const busy = window.speechSynthesis.speaking || window.speechSynthesis.pending;
   if (busy) {
     window.speechSynthesis.cancel();
-    setTimeout(() => window.speechSynthesis.speak(utterance), 0);
+    // Una sola lectura aplazada: la nueva reemplaza a la anterior y ambas se pueden
+    // cancelar después con `stopSpeaking()`.
+    clearPendingSpeak();
+    pendingSpeak = setTimeout(() => {
+      pendingSpeak = null;
+      window.speechSynthesis.speak(utterance);
+    }, 0);
   } else {
+    clearPendingSpeak();
     window.speechSynthesis.speak(utterance);
   }
   return utterance;

@@ -49,52 +49,12 @@ const DEFAULT_MODELS = [...VALIDATED_DEFAULTS, ...CANDIDATE_DEFAULTS];
 const MAX_MODELS = 6;
 
 // ---------------------------------------------------------------------------------------------
-// HISTORIA Y EVIDENCIA ACUMULADA (registro; la cabecera manda)
+// COBERTURA DE RESPALDOS
 // ---------------------------------------------------------------------------------------------
-//
-// POR QUÉ EXISTE ESTE MÓDULO
-// El incidente real (sesión 16863aa1-…, 23:25) terminó sin informe porque los tres modelos
-// evaluadores fallaron: `moonshotai/kimi-k3` (HTTP 410, ya no publicado), `nvidia/nemotron-3-super-120b-a12b`
-// (HTTP 404) y `google/gemma-4-31b-it` (timeout de 90 s). Los dos primeros venían de
-// `backend/.env.local` y el tercero de un respaldo HARDCODEADO en `ai/evaluator.js`. El código
-// cargaba `.env` y luego `.env.local` (ver `index.js`), así que el archivo de entorno tapaba
-// cualquier valor por defecto del código: cambiar los defaults sin tocar el entorno no habría
-// tenido efecto.
-//
-// REGLAS DE ESTE MÓDULO
-//  - Una sola fuente de verdad para la lista de modelos evaluadores (la usa la evaluación final
-//    y la comprobación anticipada de disponibilidad).
-//  - Precedencia EXPLÍCITA: variables de entorno > valores por defecto VALIDADOS en este entorno.
-//  - Los identificadores obsoletos se eliminan de los defaults: ya no hay respaldos de fábrica
-//    que puedan reaparecer por olvido (el fallback sigue existiendo, pero solo con modelos
-//    verificados).
-//  - Nunca se inventan identificadores: todo valor sale del entorno o de esta lista validada.
-//
-// Validación real (sondas acotadas contra el proveedor, ver informe de la tarea; ninguna toca
-// sesiones reales):
-//  - `z-ai/glm-5.3`                         → responde y COMPLETA un informe sintético a tamaño real
-//                                             (12/12 criterios, finish=stop, 54 s, cap 4000).
-//  - `nvidia/nemotron-3.5-lightning-30b-a3b`→ responde con JSON utilizable a cap 4000 (20,8 s);
-//                                             con caps pequeños se trunca (modelo con razonamiento).
-//  - `moonshotai/kimi-k3`                   → HTTP 410 (ya no publicado).
-//  - `nvidia/nemotron-3-super-120b-a12b`    → HTTP 404.
-//  - `google/gemma-4-31b-it`                → timeout (lento).
-//  - `z-ai/glm-5.3-flash`, `deepseek-ai/deepseek-v4.1-flash` → timeout.
-//  - `moonshotai/kimi-k2.6`, `google/gemma-3-12b-it`, `mistralai/mixtral-8x22b-v0.1`,
-//    `nv-mistralai/mistral-nemo-12b-instruct`, `nvidia/llama-3.1-nemotron-70b-instruct`,
-//    `nvidia/llama-3.1-nemotron-51b-instruct`, `mistralai/mistral-large-2-instruct` → HTTP 404
-//    (aparecen en el catálogo del proveedor pero no aceptan chat/completions).
-// Único modelo evaluador VALIDADO a tamaño real de informe: `z-ai/glm-5.3` completó un informe
-// sintético (12/12 criterios, finish=stop, 54 s, cap 4000). El resto de candidatos probados no
-// superó la validación: `nvidia/nemotron-3.5-lightning-30b-a3b` responde al contrato pero se
-// TRUNCA con la salida de un informe (razona y agota el presupuesto de tokens), y los demás
-// devolvieron 404/410 o agotaron el timeout.
-//
-// LIMITACIÓN CONOCIDA: hoy no hay un segundo modelo evaluador validado, así que la redundancia de
-// respaldos queda sin cubrir hasta que el proveedor publique uno que complete el informe. El
-// mecanismo de respaldo sigue intacto: basta configurar `AI_EVAL_FALLBACK_MODEL` (o añadir un
-// default validado aquí) cuando exista.
-// (Consolidado arriba: la lista validada, los candidatos y el tope viven en la cabecera.)
+// LIMITACIÓN CONOCIDA: no hay todavía un segundo modelo evaluador validado a tamaño real de
+// informe, así que la redundancia de respaldos no está cubierta. El mecanismo sigue disponible:
+// basta configurar `AI_EVAL_FALLBACK_MODEL` (o añadir un default validado aquí) cuando exista un
+// modelo que complete el informe.
 
 // Saneado: texto, sin espacios sobrantes, sin vacíos, sin duplicados, con tope.
 function cleanList(values = []) {

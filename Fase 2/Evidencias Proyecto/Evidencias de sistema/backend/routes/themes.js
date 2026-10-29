@@ -4,6 +4,7 @@
 const { requireAuth } = require('../auth');
 const { parseList } = require('../ai/interviewer');
 const { normalizeInterviewConfig, resolveInterviewConfig, invalidInterviewConfigPayload } = require('../ai/interviewConfig');
+const { buildPlanState, schedulePlanChange, TENANT_PLAN_FIELDS } = require('../lib/retentionSchedule');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
 
@@ -203,19 +204,61 @@ module.exports = function registerThemeRoutes(app, prisma) {
 
   // ------------------------------------------------ Política de retención
 
+  // Plan vigente + fechas REALES (calculadas con la misma lógica que aplica la retención):
+  //  - `nextPurgeAt`: la próxima fecha en que el sistema puede eliminar algo.
+  //  - `periodEndsAt`: el fin del periodo actual (cuando la sesión más reciente cumple el plazo).
+  //  - `pending`: cambio de plan programado, si existe.
   app.get('/api/tenant/settings', auth('admin'), async (req, res) => {
-    const tenant = await prisma.tenant.findUnique({ where: { id: req.user.tenantId } });
-    res.json({ status: 'ok', settings: { retentionMode: tenant.retentionMode, retentionDays: tenant.retentionDays, name: tenant.name } });
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.user.tenantId }, select: { ...TENANT_PLAN_FIELDS, name: true } });
+      if (!tenant) return fail(res, 404, 'Organización no encontrada.');
+      const plan = await buildPlanState(prisma, tenant);
+      res.json({
+        status: 'ok',
+        settings: { retentionMode: plan.mode, retentionDays: plan.days, name: tenant.name },
+        plan,
+      });
+    } catch (error) {
+      console.error('Error leyendo la política de retención:', error);
+      fail(res, 500, 'No se pudo leer la política.');
+    }
   });
 
+  // Solicita un cambio de plan. Se PROGRAMA (no altera retroactivamente las sesiones que ya están
+  // bajo el plan vigente): se aplicará cuando termine el periodo actual. Si no hay datos bajo el
+  // plan vigente, se aplica de inmediato. Pedir el plan ya vigente cancela cualquier cambio
+  // programado (permite deshacer una programación desde la interfaz).
   app.put('/api/tenant/settings', auth('admin'), async (req, res) => {
     try {
       const { retentionMode, retentionDays } = req.body || {};
       if (!['FULL', 'METRICS'].includes(retentionMode)) return fail(res, 400, 'Modo de retención no válido.');
       const days = Math.round(Number(retentionDays));
       if (!Number.isFinite(days) || days < 1 || days > 3650) return fail(res, 400, 'El plazo debe estar entre 1 y 3650 días.');
-      const tenant = await prisma.tenant.update({ where: { id: req.user.tenantId }, data: { retentionMode, retentionDays: days } });
-      res.json({ status: 'ok', settings: { retentionMode: tenant.retentionMode, retentionDays: tenant.retentionDays } });
+
+      const current = await prisma.tenant.findUnique({ where: { id: req.user.tenantId }, select: TENANT_PLAN_FIELDS });
+      if (!current) return fail(res, 404, 'Organización no encontrada.');
+
+      // El plan pedido es el vigente: no hay nada que cambiar (y se cancela lo programado).
+      if (current.retentionMode === retentionMode && current.retentionDays === days) {
+        if (current.retentionEffectiveAt) {
+          await prisma.tenant.update({
+            where: { id: current.id },
+            data: { retentionModePending: null, retentionDaysPending: null, retentionEffectiveAt: null },
+          });
+        }
+        const plan = await buildPlanState(prisma, { ...current, retentionModePending: null, retentionDaysPending: null, retentionEffectiveAt: null });
+        return res.json({ status: 'ok', applied: 'none', settings: { retentionMode: plan.mode, retentionDays: plan.days, name: current.name }, plan });
+      }
+
+      const { tenant, effectiveAt, applied } = await schedulePlanChange(prisma, current, { mode: retentionMode, days });
+      const plan = await buildPlanState(prisma, tenant);
+      res.json({
+        status: 'ok',
+        applied, // 'now' | 'scheduled'
+        effectiveAt,
+        settings: { retentionMode: tenant.retentionMode, retentionDays: tenant.retentionDays, name: tenant.name },
+        plan,
+      });
     } catch (error) {
       console.error('Error guardando retención:', error);
       fail(res, 500, 'No se pudo guardar la política.');

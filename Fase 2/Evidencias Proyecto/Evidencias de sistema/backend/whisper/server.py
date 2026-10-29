@@ -183,8 +183,8 @@ def _config_snapshot(key: str | None = None) -> dict[str, Any]:
     wanted = str(key or "").strip().lower() or REGISTRY.default_key
     state = REGISTRY.state(wanted) or REGISTRY.state(REGISTRY.default_key)
     spec = state.spec if state else None
-    # Valores EFECTIVOS del modelo (por modelo → global). Se conservan las claves que ya
-    # usaba el frontend (`language`, `beam_size`, `vad_filter`) y se añaden las nuevas.
+    # Valores EFECTIVOS del modelo (por modelo → global). Incluye las claves que consume el
+    # frontend (`language`, `beam_size`, `vad_filter`) y las adicionales.
     inference = (
         spec.inference
         if spec

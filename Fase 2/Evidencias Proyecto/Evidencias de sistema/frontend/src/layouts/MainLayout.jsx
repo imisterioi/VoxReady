@@ -8,6 +8,7 @@ import Logo from '../components/Logo';
 import Icon from '../components/Icon';
 import { Avatar, Button, cx } from '../components/ui';
 import { API_URL, apiFetch, clearSession, getCurrentUser, getToken, saveSession } from '../lib/api';
+import { displayEmail } from '../lib/displayEmail';
 import { setOrgPalette, setPaletteLocked } from '../lib/palette';
 
 export default function MainLayout() {
@@ -156,7 +157,7 @@ export default function MainLayout() {
                       <Avatar initials={user.initials} />
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-ink truncate">{user.name}</div>
-                        <div className="text-xs text-muted truncate">{user.email}</div>
+                        <div className="text-xs text-muted truncate">{displayEmail(user)}</div>
                       </div>
                     </div>
                     <div className="px-3 pb-2">
@@ -241,7 +242,7 @@ export default function MainLayout() {
             key={location.pathname}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
+            // exit={{ opacity: 0, y: -0 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
             className="max-w-6xl mx-auto px-4 md:px-6 py-10 md:py-14"
           >

@@ -223,12 +223,7 @@ function orderByHealth(models = [], options = {}) {
     .map((item) => item.model);
 }
 
-// (Antes había aquí `timeoutForModel`, que recortaba a 20 s la llamada de los modelos con fallo
-// "duro" en la sonda. Se ELIMINÓ: cortar la generación por superar una cantidad fija de segundos era
-// justamente el defecto de origen. La salud solo ORDENA; ningún modelo recibe un trato distinto.)
-
-// (El recorte de timeout para modelos con fallo "duro" se ELIMINÓ: abortaba generaciones válidas
-// por superar una cantidad fija de segundos. La salud solo se usa para ORDENAR, nunca para cortar.)
+// La salud solo se usa para ORDENAR los modelos: nunca recorta la generación de ninguno.
 
 module.exports = {
   BASE_URL,

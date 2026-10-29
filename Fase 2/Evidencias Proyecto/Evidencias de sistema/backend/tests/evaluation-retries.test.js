@@ -450,7 +450,7 @@ test('los límites no incluyen un presupuesto de evaluación de 60 s', () => {
   const l = limits({});
   assert.equal(l.attemptBudgetMs, undefined, 'el presupuesto fijo de 60 s ya no existe');
   // El lease se dimensiona con los límites reales: audio ≤120 s + generación (techo del transporte,
-  // 300 s) + 60 s de margen. Antes eran 6 minutos fijos, que ya no cubren un intento completo.
+  // 300 s) + 60 s de margen.
   assert.equal(l.leaseMs, (120 + 300 + 60) * 1000, 'el lease cubre un intento completo (audio + generación)');
   assert.equal(limits({ AI_EVAL_TIMEOUT_MS: '900000' }).leaseMs, (120 + 900 + 60) * 1000, 'crece con el límite configurado');
   assert.equal(limits({ EVAL_RETRY_LEASE_MS: '120000' }).leaseMs, 120000, 'se puede fijar a mano');

@@ -280,7 +280,7 @@ test('se registra el modelo que produjo la evaluación y no los errores de los d
     assert.deepEqual(Object.keys(result.judgement.coherencia), Object.keys(DEFAULT_CONFIG.coherence.criteria));
     assert.deepEqual(Object.keys(result.judgement.empatia), Object.keys(DEFAULT_CONFIG.empathy.criteria));
     assert.equal(result.judgement.resumen, judgement.resumen);
-    // La lista efectiva de modelos ya no incluye respaldos fijos: se compara contra ella misma.
+    // La lista efectiva de modelos no incluye respaldos fijos: se compara contra ella misma.
     assert.equal(result.failed.length, evaluatorModels().length - 1);
     assert.ok(result.failed.every((item) => item.model !== 'modelo-ganador'));
     assert.ok(result.failed.every((item) => item.reason === 'HTTP 503'));

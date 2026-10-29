@@ -23,6 +23,13 @@ model Tenant {
   retentionMode String @default("FULL") // FULL = video + métricas | METRICS = solo métricas
   retentionDays Int    @default(90)
 
+  // Cambio de plan PROGRAMADO (persistente): se aplica cuando llega `retentionEffectiveAt`.
+  // Permite que un cambio de plan no altere retroactivamente las sesiones que ya están bajo el
+  // plan vigente (ver lib/retentionPlan.js). null = no hay cambio pendiente.
+  retentionModePending String?
+  retentionDaysPending Int?
+  retentionEffectiveAt DateTime?
+
   // Estilo de la plataforma (lo define el admin del cliente). null = colores de VoxReady
   brandColor  String? // Color principal, formato #RRGGBB
   accentColor String? // Color de acento, formato #RRGGBB
@@ -32,6 +39,9 @@ model Tenant {
   sessions Session[]
 
   deletionRequests DeletionRequest[]
+
+  // Solicitudes de extensión del plazo de conservación (operación distinta a las de privacidad)
+  retentionExtensionRequests RetentionExtensionRequest[]
 }
 
 // 2. Usuario (Vocero, Admin, Maestro)
@@ -67,6 +77,10 @@ model User {
   deletionRequestsMade     DeletionRequest[] @relation("DeletionRequestedBy")
   deletionRequestsTargeted DeletionRequest[] @relation("DeletionRequestTarget")
   deletionRequestsResolved DeletionRequest[] @relation("DeletionRequestResolvedBy")
+
+  // Solicitudes de extensión del plazo de retención (creadas / resueltas por)
+  retentionExtensionsMade     RetentionExtensionRequest[] @relation("RetentionExtensionRequestedBy")
+  retentionExtensionsResolved RetentionExtensionRequest[] @relation("RetentionExtensionResolvedBy")
 
   // Intervalos en que la retención de este usuario estuvo PAUSADA
   // (por suspensión propia y/o de su tenant; se registra la unión, sin solapamientos)
@@ -180,7 +194,7 @@ model TranscriptionAudit {
 
   status     String // ok | failed
   engine     String? // motor seleccionado (nvidia-whisper-large-v3 | nvidia-canary-1b | local-whisper-small)
-  transcript String? // texto del motor elegido (se borra con la retención)
+  transcript String? // texto del motor elegido (se borra con la retención y con la anonimización)
   totalMs    Int?
   reason     String? // motivo de la selección o del fallo (código, no texto libre del proveedor)
   attempts   Json? // [{ engine, status, ms, code, chars }] — sin duplicar transcripciones
@@ -302,6 +316,40 @@ model DeletionRequest {
 
   resolvedById String?
   resolvedBy   User?   @relation("DeletionRequestResolvedBy", fields: [resolvedById], references: [id])
+}
+
+// 10.b Solicitud de EXTENSIÓN del plazo de conservación.
+//
+// Es una operación DISTINTA a las solicitudes de privacidad (que borran o anonimizan): aquí el
+// admin del cliente pide conservar durante más tiempo los datos que ya existen y el
+// administrador del sistema la aprueba o rechaza. Al aprobarla se aplica de INMEDIATO
+// (retentionDays pasa al plazo solicitado), sin esperar una fecha efectiva, para que el proceso
+// automático de retención no borre los datos que la extensión protege.
+model RetentionExtensionRequest {
+  id String @id @default(uuid())
+
+  // PENDING | APPROVED | REJECTED  (aprobada = aplicada; no hay paso intermedio)
+  status String @default("PENDING")
+
+  reason String?
+  currentDays   Int // plazo vigente en el momento de solicitarla
+  requestedDays Int // plazo solicitado (debe ser mayor que el vigente)
+  appliedDays   Int? // plazo realmente aplicado al aprobar (trazabilidad)
+
+  createdAt      DateTime  @default(now())
+  resolvedAt     DateTime?
+  resolutionNote String?
+
+  tenantId String
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  requestedById String
+  requestedBy   User   @relation("RetentionExtensionRequestedBy", fields: [requestedById], references: [id])
+
+  resolvedById String?
+  resolvedBy   User?  @relation("RetentionExtensionResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([tenantId, status])
 }
 
 // 11. Intervalo de pausa de la retención de un usuario (por suspensión del vocero

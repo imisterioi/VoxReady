@@ -1,6 +1,6 @@
 // Modelos evaluadores: resolución efectiva, prioridad del entorno y ausencia de identificadores
-// obsoletos. El incidente real los tenía en `backend/.env.local` y en un respaldo del código, y
-// como `.env.local` tiene prioridad, cambiar solo los defaults no habría servido.
+// obsoletos. Como `.env.local` tiene prioridad sobre los defaults del código, ambos deben estar
+// alineados para que un identificador retirado no se use.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 

@@ -299,7 +299,7 @@ test('E2-9 el cierre normal al completar las preguntas principales sigue funcion
   assert.equal(second.status, 200);
   assert.equal(second.body.mainsAsked, 2);
   // Completar las principales NO cierra la entrevista por si solo: la peticion siguiente evalua la
-  // ultima respuesta y decide (aclaracion necesaria o cierre). Por eso `done` ya no se adelanta.
+  // ultima respuesta y decide (aclaracion necesaria o cierre). Por eso `done` no se adelanta.
   assert.equal(second.body.done, false, 'la ultima principal se entrega sin done');
 
   const closing = await call(app, {

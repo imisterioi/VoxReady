@@ -208,7 +208,7 @@ async function averageDaysBetweenTrainings(prisma, { tenantId = null, from = nul
 //   Ganados  = organizaciones creadas en el período (incluye las que después se eliminaron).
 //   Perdidos = organizaciones eliminadas en el período (historial TenantEvent).
 //   Suspendidas = suspensiones registradas en el período (clientes en riesgo, no perdidos).
-// El historial empieza cuando se agregó TenantEvent: eliminaciones anteriores no se cuentan.
+// El historial comienza con el registro de TenantEvent: las eliminaciones anteriores no se cuentan.
 async function clientFlow(prisma, { from = null, to = null } = {}) {
   const range = from || to ? { ...(from ? { gte: from } : {}), ...(to ? { lte: to } : {}) } : null;
   const [createdAlive, createdThenDeleted, lost, suspended] = await Promise.all([

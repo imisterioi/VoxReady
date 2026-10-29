@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { SECTORS, formatDate, initialsOf } from '../../data/directory';
 import { apiFetch } from '../../lib/api';
+import { displayEmail } from '../../lib/displayEmail';
 import useApiData from '../../hooks/useApiData';
 import Icon from '../../components/Icon';
 import UserFormModal from '../../components/UserFormModal';
-import { Avatar, Badge, Button, Card, EmptyState, Field, Modal, PageHeader } from '../../components/ui';
+import { Avatar, Badge, Button, Card, EmptyState, Field, Modal, PageHeader, cx } from '../../components/ui';
 
 const EMPTY = { name: '', sector: SECTORS[0], adminName: '', adminEmail: '', adminPassword: '' };
 
@@ -106,6 +107,7 @@ export default function Organizaciones() {
   const { data, loading, error, reload } = useApiData('/api/tenants');
   const tenants = useMemo(() => data?.tenants || [], [data]);
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [adminFor, setAdminFor] = useState(null);
   const [deletingTenant, setDeletingTenant] = useState(null);
@@ -168,6 +170,21 @@ export default function Organizaciones() {
     }
   };
 
+  // Toda la tarjeta abre el detalle de la organización. Los botones internos (Admin, Suspender,
+  // Eliminar) conservan su acción: el clic sobre ellos no dispara la navegación.
+  const openDetail = (event, tenant) => {
+    if (event.target.closest('a, button')) return;
+    navigate(`/sistema/organizaciones/${tenant.id}`);
+  };
+
+  const onCardKeyDown = (event, tenant) => {
+    // Solo cuando el foco está en la propia tarjeta (no en sus botones) y con Enter/Espacio.
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    navigate(`/sistema/organizaciones/${tenant.id}`);
+  };
+
   return (
     <>
       <PageHeader
@@ -201,7 +218,24 @@ export default function Organizaciones() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {rows.map((t) => (
-            <Card key={t.id} className={t.status === 'SUSPENDED' ? 'opacity-70' : ''}>
+            <Card
+              key={t.id}
+              role="link"
+              tabIndex={0}
+              aria-label={`Ver el detalle de ${t.name}`}
+              onClick={(event) => openDetail(event, t)}
+              onKeyDown={(event) => onCardKeyDown(event, t)}
+              className={cx(
+                // Interactiva: al pasar el cursor el borde pasa a un color claro y GANA 1px de
+                // grosor. El grosor se dibuja con un borde INTERIOR reservado (::after), así la
+                // tarjeta no cambia de tamaño ni se desplaza. Sin sombras ni efectos de brillo.
+                'relative cursor-pointer transition-colors duration-200 hover:border-line-strong',
+                "after:pointer-events-none after:absolute after:inset-0 after:rounded-2xl after:border after:border-line-strong after:opacity-0 after:transition-opacity after:duration-200 after:content-[''] hover:after:opacity-100",
+                // Indicador de teclado: anillo suave alrededor de la tarjeta (solo con el foco).
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
+                t.status === 'SUSPENDED' && 'opacity-70',
+              )}
+            >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="h-11 w-11 rounded-xl bg-subtle text-ink font-display font-semibold flex items-center justify-center">
@@ -235,7 +269,7 @@ export default function Organizaciones() {
               <div className="flex items-center justify-between gap-3 mt-5 pt-5 border-t border-line">
                 <div className="flex -space-x-2">
                   {t.admins.slice(0, 4).map((a) => (
-                    <span key={a.id} title={`${a.name} · ${a.email}`} className="ring-2 ring-surface rounded-full">
+                    <span key={a.id} title={`${a.name} · ${displayEmail(a)}`} className="ring-2 ring-surface rounded-full">
                       <Avatar initials={initialsOf(a.name)} size="sm" />
                     </span>
                   ))}

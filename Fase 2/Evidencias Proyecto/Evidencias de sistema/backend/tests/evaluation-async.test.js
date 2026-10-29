@@ -540,7 +540,7 @@ test('el límite del proveedor es el timeout técnico configurado, nunca un pres
     logs.push(args.map(String).join(' '));
   };
   try {
-    // Se inyecta a propósito un presupuesto de 60 s: ya no existe y NO debe recortar el timeout.
+    // Se inyecta a propósito un presupuesto de 60 s: no debe recortar el timeout.
     const result = await judgeContent(
       {
         theme: theme(),

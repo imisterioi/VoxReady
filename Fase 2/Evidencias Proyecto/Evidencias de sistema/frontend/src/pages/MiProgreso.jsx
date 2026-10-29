@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import I from '../data/dictionary';
 import { CHARTCOLORS } from '../data/mockData';
@@ -9,6 +9,9 @@ import useApiData from '../hooks/useApiData';
 import { formatDate } from '../data/directory';
 import { lessonsForArea } from '../data/lessons';
 import { evaluatedSessions, historyStatus } from '../lib/practice/sessionHistory';
+import { analyticsPath, progressPath } from '../lib/practice/progressSource';
+import { historyWindow } from '../lib/practice/historyPaging';
+import Pagination from '../components/Pagination';
 
 const AREAS = [
   { key: 'expression', label: 'Expresión' },
@@ -17,14 +20,35 @@ const AREAS = [
   { key: 'empathy', label: 'Empatía' },
 ];
 
-// Progreso real del vocero a partir de sus prácticas evaluadas (GET /api/sessions)
-export default function MiProgreso() {
+// Progreso real del vocero a partir de sus prácticas evaluadas (GET /api/sessions).
+//
+// audience:
+//  - 'user'  → el propio vocero ve su progreso (comportamiento original, sin `?userId=`).
+//  - 'admin' → el administrador del cliente consulta el progreso de UNO de sus voceros
+//    (`/admin/vocero/:userId`). El backend valida el rol y la organización: el identificador
+//    de la ruta nunca es la autorización.
+export default function MiProgreso({ audience = 'user' }) {
   const t = I.es.L.u7;
-  const history = useApiData('/api/sessions');
-  // Todas las sesiones del vocero (incluidas las que aún no tienen informe) para el historial.
+  const isAdmin = audience === 'admin';
+  const { userId = null } = useParams();
+  // Historial paginado en el servidor: 10 filas al entrar, ampliables a 20 dentro de la página.
+  const [historyPage, setHistoryPage] = useState(1);
+  const [expanded, setExpanded] = useState(false);
+  // El vocero siempre consulta lo suyo; el administrador, el vocero indicado en la ruta.
+  const history = useApiData(progressPath({ audience, userId, page: historyPage }));
   const sessions = useMemo(() => history.data?.sessions || [], [history.data]);
+  const total = history.data?.total ?? sessions.length;
+  const win = historyWindow({ total, page: historyPage, expanded });
+  // Filas visibles de la página actual (10, o 20 si se amplió el historial).
+  const visibleSessions = useMemo(() => sessions.slice(0, win.visible), [sessions, win.visible]);
+  // Nombre del vocero consultado: lo informa el backend junto con sus sesiones.
+  const voceroName = isAdmin ? history.data?.user?.name || null : null;
+  // Estadísticas (series, tendencia, recomendaciones): ventana acotada e independiente de la
+  // página del historial, para que el progreso no cambie al pasar de página.
+  const analytics = useApiData(analyticsPath({ audience, userId }));
+  const analyticsSessions = useMemo(() => analytics.data?.sessions || [], [analytics.data]);
   // Solo las evaluadas alimentan puntajes, tendencias y recomendaciones: nunca se inventan datos.
-  const evaluated = useMemo(() => evaluatedSessions(sessions), [sessions]);
+  const evaluated = useMemo(() => evaluatedSessions(analyticsSessions), [analyticsSessions]);
   const latestReport = useApiData(evaluated[0] ? `/api/sessions/${evaluated[0].id}` : null);
 
   // Serie cronológica (últimas 8 prácticas evaluadas)
@@ -62,25 +86,90 @@ export default function MiProgreso() {
   const mejoras = latestReport.data?.session?.report?.mejoras || [];
   const lessons = lessonsForArea(weakest?.key, 3);
 
+  const header = isAdmin ? (
+    <PageHeader
+      eyebrow="Administración · Progreso"
+      title={voceroName ? `Progreso de ${voceroName}` : 'Progreso del vocero'}
+      description="Métricas, puntuaciones por área y evolución histórica de las prácticas evaluadas de este vocero."
+      actions={
+        <Button to="/admin/voceros" variant="secondary" icon="arrowLeft">
+          Volver a voceros
+        </Button>
+      }
+    />
+  ) : (
+    <PageHeader eyebrow={t.eyebrow} title={t.title} description={t.sub} />
+  );
+
+  // El administrador llega desde la lista de voceros: sin identificador no hay nada que mostrar.
+  if (isAdmin && !userId) {
+    return (
+      <>
+        {header}
+        <Card>
+          <EmptyState
+            icon="users"
+            title="No se indicó el vocero"
+            description="Abre el progreso desde la lista de voceros de tu organización."
+            action={
+              <Button to="/admin/voceros" variant="secondary">
+                Ver voceros
+              </Button>
+            }
+          />
+        </Card>
+      </>
+    );
+  }
+
+  // Un fallo del backend (permiso, red…) se informa: no se disfraza de "sin datos".
+  if (isAdmin && history.error) {
+    return (
+      <>
+        {header}
+        <Card>
+          <EmptyState
+            tone="danger"
+            icon="server"
+            title="No se pudo cargar el progreso"
+            description={history.error}
+            action={
+              <Button variant="secondary" icon="refresh" onClick={history.reload}>
+                Reintentar
+              </Button>
+            }
+          />
+        </Card>
+      </>
+    );
+  }
+
   if (history.loading && !history.data) {
     return (
-      <Card>
-        <EmptyState icon="refresh" title="Cargando tu progreso…" />
-      </Card>
+      <>
+        {isAdmin && header}
+        <Card>
+          <EmptyState icon="refresh" title={isAdmin ? 'Cargando el progreso…' : 'Cargando tu progreso…'} />
+        </Card>
+      </>
     );
   }
 
   return (
     <>
-      <PageHeader eyebrow={t.eyebrow} title={t.title} description={t.sub} />
+      {header}
 
-      {sessions.length === 0 ? (
+      {total === 0 ? (
         <Card className="mb-6">
           <EmptyState
             icon="chart"
             title="Aún no hay datos de progreso"
-            description="Completa tu primera práctica para ver tu evolución por área."
-            action={<Button to="/vocero/escenarios" variant="accent" icon="mic">Practicar ahora</Button>}
+            description={
+              isAdmin
+                ? 'Este vocero todavía no tiene prácticas registradas.'
+                : 'Completa tu primera práctica para ver tu evolución por área.'
+            }
+            action={isAdmin ? undefined : <Button to="/vocero/escenarios" variant="accent" icon="mic">Practicar ahora</Button>}
           />
         </Card>
       ) : (
@@ -115,7 +204,7 @@ export default function MiProgreso() {
           <Card className="mb-6">
             <CardHeader
               title={t.trendL}
-              description={`Tus últimas ${chrono.length} práctica(s)`}
+              description={isAdmin ? `Últimas ${chrono.length} práctica(s)` : `Tus últimas ${chrono.length} práctica(s)`}
               action={
                 <div className="hidden sm:flex gap-4 flex-wrap">
                   {AREAS.map((a, i) => (
@@ -193,21 +282,33 @@ export default function MiProgreso() {
             )}
           </Card>
 
-          {/* Historial */}
+          {/* Historial paginado: 10 filas al entrar, ampliables a 20; paginación si hay más de 20 */}
           <Card padded={false} className="overflow-hidden mb-6">
             <div className="p-6 pb-0">
               <CardHeader
-                title="Tus prácticas"
-                description={`${sessions.length} práctica(s)`}
-                action={<Button to="/vocero/escenarios" size="sm" variant="accent" icon="mic">Practicar</Button>}
+                title={isAdmin ? 'Prácticas del vocero' : 'Tus prácticas'}
+                description={
+                  win.showPagination
+                    ? `${total} práctica(s) · mostrando ${visibleSessions.length} · página ${win.page} de ${win.pages}`
+                    : `${total} práctica(s)`
+                }
+                action={
+                  isAdmin ? undefined : (
+                    <Button to="/vocero/escenarios" size="sm" variant="accent" icon="mic">
+                      Practicar
+                    </Button>
+                  )
+                }
               />
             </div>
             <ul className="divide-y divide-line border-t border-line">
-              {sessions.map((s) => {
+              {visibleSessions.map((s) => {
                 const status = historyStatus(s);
+                // El administrador abre el informe en su propia ruta (audiencia admin).
+                const reportTo = isAdmin ? `/admin/informe?sesion=${s.id}` : `/vocero/informe?sesion=${s.id}`;
                 return (
                 <li key={s.id}>
-                  <Link to={`/vocero/informe?sesion=${s.id}`} className="flex items-center gap-4 px-6 py-4 hover:bg-subtle/50 transition-colors">
+                  <Link to={reportTo} className="flex items-center gap-4 px-6 py-4 hover:bg-subtle/50 transition-colors">
                     <span className="h-11 w-11 rounded-xl bg-subtle flex items-center justify-center font-display font-semibold text-ink tabular-nums">
                       {s.score ?? '—'}
                     </span>
@@ -232,6 +333,34 @@ export default function MiProgreso() {
                 );
               })}
             </ul>
+
+            {/* Ampliar de 10 a 20 (solo si hay más de 10 y quedan filas por mostrar en la página) */}
+            {win.showExpand && win.canExpand && (
+              <div className="border-t border-line">
+                <button
+                  type="button"
+                  onClick={() => setExpanded((v) => !v)}
+                  className="w-full flex items-center justify-center gap-2 py-3 text-[13px] font-medium text-muted hover:text-ink hover:bg-subtle/50 transition-colors"
+                >
+                  <Icon name="chevronDown" size={16} className={expanded ? 'rotate-180' : ''} />
+                  {expanded ? 'Ver menos' : `Ver más (${Math.min(win.inBlock, 20) - win.visible} más)`}
+                </button>
+              </div>
+            )}
+
+            {/* Paginación: solo cuando hay más de 20 sesiones */}
+            {win.showPagination && (
+              <div className="border-t border-line px-6 py-4">
+                <Pagination
+                  page={win.page}
+                  pages={win.pages}
+                  onChange={(next) => {
+                    setExpanded(false); // cada página empieza mostrando 10
+                    setHistoryPage(next);
+                  }}
+                />
+              </div>
+            )}
           </Card>
         </>
       )}
@@ -239,7 +368,18 @@ export default function MiProgreso() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recomendaciones reales */}
         <Card>
-          <CardHeader title={t.recoTitle} description={weakest ? `Tu área más débil: ${weakest.label.toLowerCase()}` : 'Basadas en tu última práctica'} />
+          <CardHeader
+            title={t.recoTitle}
+            description={
+              weakest
+                ? isAdmin
+                  ? `Área más débil: ${weakest.label.toLowerCase()}`
+                  : `Tu área más débil: ${weakest.label.toLowerCase()}`
+                : isAdmin
+                  ? 'Basadas en la última práctica del vocero'
+                  : 'Basadas en tu última práctica'
+            }
+          />
           <div className="space-y-3">
             {mejoras.slice(0, 3).map((m, i) => (
               <div key={m} className="flex gap-4 p-4 rounded-xl border border-line">
@@ -247,21 +387,32 @@ export default function MiProgreso() {
                 <p className="text-[13px] text-ink leading-relaxed">{m}</p>
               </div>
             ))}
-            {!mejoras.length && <p className="text-sm text-muted">Tras tu primera práctica verás aquí las recomendaciones de la IA.</p>}
+            {!mejoras.length && (
+              <p className="text-sm text-muted">
+                {isAdmin
+                  ? 'Este vocero aún no tiene recomendaciones de la IA.'
+                  : 'Tras tu primera práctica verás aquí las recomendaciones de la IA.'}
+              </p>
+            )}
           </div>
-          <div className="mt-5 pt-5 border-t border-line">
-            <div className="text-xs text-muted mb-3">Lecciones sugeridas</div>
-            <div className="flex flex-wrap gap-2">
-              {lessons.map((l) => (
-                <Button key={l.id} variant="secondary" size="sm" icon="book" to={`/vocero/leccion/${l.id}`}>
-                  {l.title}
-                </Button>
-              ))}
+          {/* Las microlecciones son del vocero (ruta propia): el administrador solo las ve aquí
+              cuando consulta su propio progreso. */}
+          {!isAdmin && (
+            <div className="mt-5 pt-5 border-t border-line">
+              <div className="text-xs text-muted mb-3">Lecciones sugeridas</div>
+              <div className="flex flex-wrap gap-2">
+                {lessons.map((l) => (
+                  <Button key={l.id} variant="secondary" size="sm" icon="book" to={`/vocero/leccion/${l.id}`}>
+                    {l.title}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </Card>
 
-        {/* Calendario */}
+        {/* Calendario: recordatorio personal del vocero (no aplica a la vista del administrador) */}
+        {!isAdmin && (
         <Card className="flex flex-col">
           <CardHeader title={t.calTitle} description={t.calHelp} />
           <div className="flex items-center justify-between mb-4">
@@ -323,6 +474,7 @@ export default function MiProgreso() {
             </Button>
           </div>
         </Card>
+        )}
       </div>
     </>
   );

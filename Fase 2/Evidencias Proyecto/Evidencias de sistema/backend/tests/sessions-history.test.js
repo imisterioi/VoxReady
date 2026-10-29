@@ -9,12 +9,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 
+// `requireAuth` real informa siempre el rol en `req.apiRole`: el doble de prueba también lo hace
+// (la ruta decide el alcance de la consulta a partir de ese rol).
 const authPath = require.resolve('../auth');
 require.cache[authPath] = {
   id: authPath,
   filename: authPath,
   loaded: true,
-  exports: { requireAuth: () => (req, _res, next) => { req.user = { id: 'u1' }; next(); } },
+  exports: { requireAuth: () => (req, _res, next) => { req.user = { id: 'u1' }; req.apiRole = 'user'; next(); } },
 };
 
 const registerSessionRoutes = require('../routes/sessions');
@@ -45,15 +47,20 @@ const sessionRow = (extra = {}) => ({
   ...extra,
 });
 
-// Prisma falso mínimo: solo lo que usa el endpoint (filtro por usuario, orden y límite).
+// Prisma falso mínimo: solo lo que usa el endpoint (filtro por usuario, orden, límite y total).
 function createStore(rows) {
+  const matches = (row, where = {}) => (where.userId ? row.userId === where.userId : true);
   return {
     session: {
-      async findMany({ where = {}, orderBy, take } = {}) {
-        let out = rows.filter((row) => (where.userId ? row.userId === where.userId : true));
+      async count({ where = {} } = {}) {
+        return rows.filter((row) => matches(row, where)).length;
+      },
+      async findMany({ where = {}, orderBy, take, skip } = {}) {
+        let out = rows.filter((row) => matches(row, where));
         if (orderBy?.createdAt === 'desc') {
           out = [...out].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
         }
+        if (skip) out = out.slice(skip);
         return take ? out.slice(0, take) : out;
       },
     },
