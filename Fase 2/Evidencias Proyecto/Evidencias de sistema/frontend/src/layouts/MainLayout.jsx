@@ -92,6 +92,9 @@ export default function MainLayout() {
     location.pathname.startsWith(p),
   );
 
+  // La entrevista usa toda la altura de la pantalla: menos margen y sin pie de página
+  const inSession = location.pathname.startsWith('/vocero/sesion');
+
   const linkClass = ({ isActive }) =>
     cx(
       'relative inline-flex items-center gap-2 h-9 px-3.5 rounded-lg text-[13.5px] font-medium whitespace-nowrap transition-colors',
@@ -243,14 +246,14 @@ export default function MainLayout() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.2, ease: 'easeOut' }}
-            className="max-w-6xl mx-auto px-4 md:px-6 py-10 md:py-14"
+            className={cx('mx-auto px-4 md:px-6', inSession ? 'max-w-[1500px] py-4' : 'max-w-6xl py-10 md:py-14')}
           >
             <Outlet />
           </motion.div>
         </AnimatePresence>
       </main>
 
-      <footer className="border-t border-line">
+      <footer className={cx('border-t border-line', inSession && 'hidden')}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between text-xs text-faint">
           <span>© 2026 VoxReady</span>
           <span className="hidden sm:inline">Entrenamiento de voceros con IA</span>

@@ -77,8 +77,13 @@ function summary(db, s) {
     theme: theme ? { id: theme.id, title: theme.title, category: theme.category } : null,
     user: user ? { id: user.id, name: user.name } : null,
     areas: s.report?.areas?.map(({ key, label, score }) => ({ key, label, score })) || [],
+    // Estado del informe como lo informa el backend (la demo evalúa de inmediato)
+    hasReport: Boolean(s.report),
+    evaluation: evaluationState(s),
   };
 }
+
+const evaluationState = (s) => (s.report ? { state: 'done', stage: 'done' } : null);
 
 const fullSession = (db, s) => ({ ...summary(db, s), report: s.report, transcript: s.transcript, review: s.review });
 
@@ -835,11 +840,10 @@ route('GET', '/api/admin/overview', ['admin'], ({ db, user }) => {
 });
 
 // ------------------------------------------------------------- Prácticas
-route('POST', '/api/sessions', null, ({ db, body }) => {
-  const { email, themeId } = body || {};
-  if (!email || !themeId) fail(400, 'Faltan email o themeId');
-  const user = db.users.find((u) => u.email === email);
-  if (!user) fail(404, 'Usuario no encontrado');
+// Igual que el backend: el vocero sale de la sesión iniciada, no del cuerpo de la petición
+route('POST', '/api/sessions', ['user'], ({ db, user, body }) => {
+  const { themeId } = body || {};
+  if (!themeId) fail(400, 'Falta themeId');
   const theme = themeById(db, themeId);
   if (!theme) fail(404, 'Escenario no encontrado');
   // Los escenarios generales (biblioteca de VoxReady) están disponibles para todos los voceros
@@ -865,6 +869,18 @@ route('POST', '/api/sessions/:id/video', null, ({ db, params, rawBody }) => {
   return { status: 'ok', mensaje: 'Video guardado correctamente', file: `${session.id}.webm` };
 });
 
+// Audio de la práctica: el backend lo transcribe; la demo no lo necesita
+route('POST', '/api/sessions/:id/audio', null, ({ db, params }) => {
+  if (!db.sessions.some((s) => s.id === params.id)) fail(404, 'Sesión no encontrada');
+  return { status: 'ok' };
+});
+
+// La demo transcribe con el navegador (SesionPractica), así que aquí no hay texto
+route('POST', '/api/sessions/:id/answer-transcript', null, () => ({ status: 'ok', text: '', code: 'NO_TRANSCRIPT' }));
+
+// Precalentamiento del entrevistador: en la demo no hay modelos que despertar
+route('POST', '/api/interviewer/prewarm', [], () => ({ status: 'ok' }));
+
 // Igual que el backend: exige sesión iniciada y toma el escenario de la práctica en curso
 // (sin sessionId usa un escenario genérico, para el Laboratorio)
 route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) => {
@@ -877,8 +893,13 @@ route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) =
     if (session.score != null) fail(409, 'Esta entrevista ya fue evaluada.');
     theme = themeById(db, session.themeId);
   }
-  const plan = turnPlan(normalizeInterviewConfig(theme?.interviewConfig), history.filter((h) => h.role === 'interviewer').length);
-  if (theme && plan.done) fail(409, 'La entrevista ya completó todas sus preguntas.');
+  const cfg = normalizeInterviewConfig(theme?.interviewConfig);
+  const plan = turnPlan(cfg, history.filter((h) => h.role === 'interviewer').length);
+  // Progreso que informa el backend: cuenta solo las preguntas principales
+  const progress = { mainsAsked: plan.done ? cfg.questionCount : plan.mainNumber, mainsTotal: cfg.questionCount };
+  if (theme && plan.done) {
+    return { status: 'ok', question: null, kind: null, number: plan.total, total: plan.total, done: true, closeReason: 'completed', ...progress };
+  }
   await wait(700 + Math.random() * 700);
   const question = nextQuestion({ theme, history, plan });
   recordAi('interviewer', Math.round(performance.now() - start));
@@ -888,6 +909,8 @@ route('POST', '/api/interviewer/next-question', [], async ({ db, user, body }) =
     kind: plan.kind,
     number: plan.number,
     total: plan.total,
+    done: false,
+    ...progress,
     interview: theme ? resolveInterviewConfig(theme) : null,
     model: 'Entrevistador de demostración',
     ms: Math.round(performance.now() - start),
@@ -917,7 +940,7 @@ route('GET', '/api/sessions/:id', [], ({ db, user, apiRole, params }) => {
   const session = db.sessions.find((s) => s.id === params.id);
   if (!session) fail(404, 'Sesión no encontrada.');
   if (!canView(user, apiRole, session)) fail(403, 'No puedes ver esta sesión.');
-  return { status: 'ok', session: fullSession(db, session) };
+  return { status: 'ok', session: fullSession(db, session), evaluation: evaluationState(session) };
 });
 
 route('DELETE', '/api/sessions/:id', ['user'], ({ db, user, params }) => {

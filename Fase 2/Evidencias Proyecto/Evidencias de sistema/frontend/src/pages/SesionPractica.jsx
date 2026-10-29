@@ -708,199 +708,200 @@ export default function SesionPractica() {
 
   return (
     <>
-      <PracticeSteps />
+      <PracticeSteps className="!mb-4" />
 
-      <div className="rounded-[28px] bg-[#0B1118] p-3 md:p-4 ring-1 ring-black/5 shadow-lift">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {/* La entrevista ocupa el alto de la pantalla: cámara grande a la izquierda y,
+          a la derecha, el entrevistador, la pregunta y los controles */}
+      <div className="rounded-[28px] bg-[#0B1118] p-3 ring-1 ring-black/5 shadow-lift grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3 lg:h-[calc(100vh-160px)] lg:min-h-[440px] lg:max-h-[760px]">
+        {/* Cámara del vocero */}
+        <div className="relative h-[56vw] lg:h-auto rounded-2xl overflow-hidden bg-black">
+          <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover -scale-x-100" />
+
+          {phase === 'loading' && !error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F]">
+              <span className="h-6 w-6 rounded-full border-2 border-white/10 border-t-white/60 animate-spin" />
+              <span className="text-xs text-white/50">Preparando cámara, micrófono y entrevistador…</span>
+            </div>
+          )}
+
+          {phase !== 'loading' && textMode && mediaWarning && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F] text-white/40">
+              <Icon name="video" size={32} strokeWidth={1.25} />
+              <span className="text-xs">Sin cámara · modo texto</span>
+            </div>
+          )}
+
+          {phase !== 'loading' && (
+            <>
+              <div className="absolute top-4 right-4 flex items-center gap-2 rounded-full bg-black/60 backdrop-blur px-3 h-7 text-white text-xs tabular-nums">
+                <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
+                REC {formatTime(seconds)}
+              </div>
+              <div className="absolute bottom-4 left-4 flex items-center gap-2">
+                {/* Nivel del micrófono */}
+                <div className="flex items-end gap-[2px] h-7 rounded-full bg-black/60 backdrop-blur px-3 py-2">
+                  {[0.15, 0.3, 0.45, 0.6, 0.75].map((th) => (
+                    <span
+                      key={th}
+                      className={cx('w-1 rounded-full transition-colors', phase === 'listening' && micLevel > th * 0.5 ? 'bg-emerald-400' : 'bg-white/25')}
+                      style={{ height: `${30 + th * 90}%` }}
+                    />
+                  ))}
+                </div>
+                {/* Detección corporal */}
+                <div className="flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur px-3 h-7 text-white text-xs">
+                  <Icon
+                    name="person"
+                    size={12}
+                    className={bodyStatus === 'ok' ? 'text-emerald-400' : bodyStatus === 'none' ? 'text-amber-400' : 'text-white/40'}
+                  />
+                  {{ loading: 'Cargando análisis…', ok: 'Cuerpo detectado', none: 'No te veo', off: 'Sin análisis corporal' }[bodyStatus]}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Entrevistador, pregunta y controles */}
+        <div className="flex flex-col gap-3 min-h-0">
           {/* Entrevistador IA */}
-          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-br from-[#16263A] to-[#0E1824] flex items-center justify-center">
-            <div className="relative">
+          <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-[#16263A] to-[#0E1824] px-4 py-3">
+            <div className="relative shrink-0">
               {phase === 'speaking' && <span className="absolute inset-0 rounded-full bg-accent/30 animate-pulse-ring" />}
               <span
                 className={cx(
-                  'relative h-24 w-24 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-300',
+                  'relative h-14 w-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-300',
                   phase === 'speaking' ? 'bg-gradient-to-br from-accent to-brand-deep scale-105' : 'bg-gradient-to-br from-[#3A4A5E] to-[#1E2A38]',
                 )}
               >
                 {phase === 'thinking' || phase === 'loading' ? (
-                  <span className="h-8 w-8 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+                  <span className="h-6 w-6 rounded-full border-2 border-white/20 border-t-white animate-spin" />
                 ) : (
-                  <Icon name="sparkles" size={34} strokeWidth={1.5} />
+                  <Icon name="sparkles" size={24} strokeWidth={1.5} />
                 )}
               </span>
             </div>
-
-            <div className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 h-7 text-white/90 text-xs">
-              <span className={cx('h-1.5 w-1.5 rounded-full', phase === 'speaking' ? 'bg-accent-bright animate-pulse' : 'bg-white/40')} />
-              {t.interviewer}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm font-medium text-white/90">
+                <span className={cx('h-1.5 w-1.5 rounded-full', phase === 'speaking' ? 'bg-accent-bright animate-pulse' : 'bg-white/40')} />
+                {t.interviewer}
+              </div>
+              {scenario && <div className="text-xs text-white/40 truncate mt-0.5">{scenario.title}</div>}
             </div>
-            {scenario && <div className="absolute bottom-4 inset-x-4 text-center text-[11px] text-white/40 truncate">{scenario.title}</div>}
           </div>
 
-          {/* Cámara del vocero */}
-          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-black">
-            <video ref={videoRef} autoPlay muted playsInline className="w-full h-full object-cover -scale-x-100" />
-
-            {phase === 'loading' && !error && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F]">
-                <span className="h-6 w-6 rounded-full border-2 border-white/10 border-t-white/60 animate-spin" />
-                <span className="text-xs text-white/50">Preparando cámara, micrófono y entrevistador…</span>
-              </div>
-            )}
-
-            {phase !== 'loading' && textMode && mediaWarning && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F] text-white/40">
-                <Icon name="video" size={32} strokeWidth={1.25} />
-                <span className="text-xs">Sin cámara · modo texto</span>
-              </div>
-            )}
-
-            {phase !== 'loading' && (
-              <>
-                <div className="absolute top-4 right-4 flex items-center gap-2 rounded-full bg-black/60 backdrop-blur px-3 h-7 text-white text-xs tabular-nums">
-                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-                  REC {formatTime(seconds)}
-                </div>
-                <div className="absolute bottom-4 left-4 flex items-center gap-2">
-                  {/* Nivel del micrófono */}
-                  <div className="flex items-end gap-[2px] h-7 rounded-full bg-black/60 backdrop-blur px-3 py-2">
-                    {[0.15, 0.3, 0.45, 0.6, 0.75].map((th) => (
-                      <span
-                        key={th}
-                        className={cx('w-1 rounded-full transition-colors', phase === 'listening' && micLevel > th * 0.5 ? 'bg-emerald-400' : 'bg-white/25')}
-                        style={{ height: `${30 + th * 90}%` }}
-                      />
-                    ))}
-                  </div>
-                  {/* Detección corporal */}
-                  <div className="flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur px-3 h-7 text-white text-xs">
-                    <Icon
-                      name="person"
-                      size={12}
-                      className={bodyStatus === 'ok' ? 'text-emerald-400' : bodyStatus === 'none' ? 'text-amber-400' : 'text-white/40'}
-                    />
-                    {{ loading: 'Cargando análisis…', ok: 'Cuerpo detectado', none: 'No te veo', off: 'Sin análisis corporal' }[bodyStatus]}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Pregunta y respuesta en vivo */}
-        <div className="px-4 md:px-8 pt-8 pb-6 text-center min-h-[180px]">
-          <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-4">
-            {phase === 'loading' ? 'Preparando' : mainLabel}
-          </div>
-          <p className="font-display font-medium text-[22px] md:text-[28px] leading-[1.35] tracking-[-0.015em] text-white max-w-3xl mx-auto">
-            {question ? `“${question}”` : '…'}
-          </p>
-
-          {phase === 'listening' && !textMode && (
-            <p className="mt-5 text-sm text-white/60 max-w-2xl mx-auto leading-relaxed">
-              Habla con naturalidad: tu respuesta se transcribirá al finalizar la sesión.
+          {/* Pregunta y respuesta */}
+          <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-white/[0.03] px-5 py-4 flex flex-col">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-2">
+              {phase === 'loading' ? 'Preparando' : mainLabel}
+            </div>
+            <p className="font-display font-medium text-[19px] xl:text-[21px] leading-[1.3] tracking-[-0.015em] text-white">
+              {question ? `“${question}”` : '…'}
             </p>
-          )}
 
-          {phase === 'listening' && textMode && (
-            <div className="mt-5 max-w-2xl mx-auto">
+            {phase === 'listening' && !textMode && (
+              <p className="mt-3 text-sm text-white/60 leading-relaxed">
+                Habla con naturalidad: tu respuesta se transcribirá al finalizar la sesión.
+              </p>
+            )}
+
+            {phase === 'listening' && textMode && (
               <textarea
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
                 placeholder="Escribe aquí tu respuesta."
-                className="w-full min-h-[90px] rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 p-3 text-sm focus:outline-none focus:border-white/30"
+                className="mt-3 w-full flex-1 min-h-[64px] rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 p-3 text-sm focus:outline-none focus:border-white/30"
               />
+            )}
+
+            <p className="mt-auto pt-3 text-xs text-white/40 flex items-center gap-1.5">
+              {phase === 'listening' && !textMode && answerLeft != null && answerLeft <= 10 ? (
+                <>
+                  <Icon name="clock" size={12} /> Te quedan {answerLeft}s para responder
+                </>
+              ) : phase === 'listening' && silenceIn ? (
+                <>
+                  <Icon name="clock" size={12} /> Silencio detectado · continuamos en {silenceIn}s
+                </>
+              ) : (
+                status
+              )}
+            </p>
+          </div>
+
+          {mediaWarning && !error && (
+            <div className="flex items-center gap-3 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-2 text-[13px] text-amber-200">
+              <Icon name="info" size={16} className="shrink-0" />
+              <span className="flex-1">{mediaWarning}</span>
             </div>
           )}
 
-          <p className="mt-4 text-xs text-white/40 flex items-center justify-center gap-1.5">
-            {phase === 'listening' && !textMode && answerLeft != null && answerLeft <= 10 ? (
-              <>
-                <Icon name="clock" size={12} /> Te quedan {answerLeft}s para responder
-              </>
-            ) : phase === 'listening' && silenceIn ? (
-              <>
-                <Icon name="clock" size={12} /> Silencio detectado · continuamos en {silenceIn}s
-              </>
-            ) : (
-              status
-            )}
-          </p>
-        </div>
-
-        {mediaWarning && !error && (
-          <div className="mx-1 mb-4 flex items-center gap-3 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-200">
-            <Icon name="info" size={16} className="shrink-0" />
-            <span className="flex-1">{mediaWarning}</span>
-          </div>
-        )}
-
-        {error && (
-          <div className="mx-1 mb-4 flex items-center gap-3 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
-            <Icon name="alert" size={16} className="shrink-0" />
-            <span className="flex-1">{error}</span>
-            {!scenario && (
-              <Button variant="secondary" size="sm" to="/vocero/escenarios">
-                Elegir escenario
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* Controles */}
-        <div className="flex flex-col md:flex-row md:items-center gap-3 rounded-2xl bg-white/[0.04] p-3 md:p-4">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={discardSession}
-              disabled={phase === 'finishing'}
-              className="h-11 px-4 rounded-xl hover:bg-red-500/10 text-white/60 hover:text-red-300 text-sm font-medium inline-flex items-center gap-2 transition-colors disabled:opacity-40"
-            >
-              <Icon name="x" size={16} /> Descartar
-            </button>
-            <button
-              type="button"
-              onClick={repeatQuestion}
-              disabled={phase !== 'listening'}
-              className="h-11 px-4 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-sm font-medium inline-flex items-center gap-2 transition-colors disabled:opacity-40"
-            >
-              <Icon name="repeat" size={16} /> {t.repeat}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 md:flex-1 md:max-w-xs md:mx-auto">
-            <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-              <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${progressPercent(progress)}%` }} />
+          {error && (
+            <div className="flex items-center gap-3 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-2 text-[13px] text-red-300">
+              <Icon name="alert" size={16} className="shrink-0" />
+              <span className="flex-1">{error}</span>
+              {!scenario && (
+                <Button variant="secondary" size="sm" to="/vocero/escenarios">
+                  Elegir escenario
+                </Button>
+              )}
             </div>
-            <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
-              {progress.mainsAsked} de {progress.mainsTotal ?? '—'} principales
-            </span>
-          </div>
+          )}
 
-          <div className="flex items-center gap-2 md:ml-auto">
-            <button
-              type="button"
-              onClick={finishEarly}
-              disabled={phase === 'finishing' || phase === 'loading' || (turnCount === 0 && phase !== 'listening')}
-              className="h-11 px-4 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-sm font-medium transition-colors disabled:opacity-40"
-            >
-              {t.finish}
-            </button>
+          {/* Controles */}
+          <div className="rounded-2xl bg-white/[0.04] p-3 space-y-3">
+            <div className="flex items-center gap-3 px-1">
+              <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${progressPercent(progress)}%` }} />
+              </div>
+              <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
+                {progress.mainsAsked} de {progress.mainsTotal ?? '—'} principales
+              </span>
+            </div>
+
             <Button
               variant="accent"
               size="lg"
+              className="w-full"
               onClick={() => finishAnswer()}
               disabled={phase !== 'listening' || (textMode && !typed.trim())}
             >
               {phase === 'finishing' ? 'Guardando…' : 'Terminé de responder'}
             </Button>
+
+            <div className="flex items-center justify-between gap-1">
+              <button
+                type="button"
+                onClick={discardSession}
+                disabled={phase === 'finishing'}
+                className="h-9 px-3 rounded-xl hover:bg-red-500/10 text-white/60 hover:text-red-300 text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors disabled:opacity-40"
+              >
+                <Icon name="x" size={15} /> Descartar
+              </button>
+              <button
+                type="button"
+                onClick={repeatQuestion}
+                disabled={phase !== 'listening'}
+                className="h-9 px-3 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors disabled:opacity-40"
+              >
+                <Icon name="repeat" size={15} /> {t.repeat}
+              </button>
+              <button
+                type="button"
+                onClick={finishEarly}
+                disabled={phase === 'finishing' || phase === 'loading' || (turnCount === 0 && phase !== 'listening')}
+                className="h-9 px-3 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-[13px] font-medium transition-colors disabled:opacity-40"
+              >
+                {t.finish}
+              </button>
+            </div>
           </div>
+
+          <p className="text-[11px] text-white/30 flex items-start gap-1.5 px-1">
+            <Icon name="info" size={12} className="mt-0.5 shrink-0" /> Usa audífonos para que el micrófono no capte la voz del entrevistador.
+          </p>
         </div>
       </div>
-
-      <p className="text-center text-xs text-faint mt-6 flex items-center justify-center gap-1.5">
-        <Icon name="info" size={13} /> Usa audífonos para que el micrófono no capte la voz del entrevistador. {t.hint}
-      </p>
     </>
   );
 }

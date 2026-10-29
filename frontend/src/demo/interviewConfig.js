@@ -53,7 +53,7 @@ const LIMITS = {
   interviewerRole: 120,
 };
 
-const MINUTES_PER_TURN = 1.2; // pregunta leída en voz alta + respuesta
+const DEFAULT_MINUTES = 5; // duración máxima predeterminada de la entrevista (igual que el backend)
 
 const isObject = (v) => v && typeof v === 'object' && !Array.isArray(v);
 
@@ -87,7 +87,8 @@ function resolveInterviewConfig(theme) {
   return {
     ...cfg,
     totalTurns: total,
-    estimatedMinutes: cfg.estimatedMinutes ?? Math.max(1, Math.round(total * MINUTES_PER_TURN)),
+    // Duración máxima: si el escenario no la guardó se usa la predeterminada (5 min), igual que el backend
+    estimatedMinutes: cfg.estimatedMinutes ?? DEFAULT_MINUTES,
     estimatedMinutesAuto: cfg.estimatedMinutes == null,
     aggressivenessLabel: AGGRESSIVENESS[cfg.aggressiveness].label,
   };

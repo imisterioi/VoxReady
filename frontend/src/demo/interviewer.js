@@ -73,6 +73,23 @@ const FOLLOW_UPS = {
   ],
 };
 
+// El vocero no respondió: el entrevistador se lo hace notar e insiste (q = la pregunta anterior)
+const SILENCE = {
+  BAJA: [(q) => `Veo que no alcanzó a responder. Tómese un momento y cuénteme: ${q}`],
+  MEDIA: [
+    (q) => `No me respondió. ¿Prefiere no referirse al tema, o puede contestar? ${q}`,
+    (q) => `Su silencio no ayuda a quienes esperan una explicación. Se lo pregunto de nuevo: ${q}`,
+  ],
+  ALTA: [
+    (q) => `Se queda callado. ¿Su silencio significa que no tiene una respuesta? ${q}`,
+    (q) => `Las personas afectadas están viendo que usted no responde. ¿Qué deben entender de ese silencio? ${q}`,
+  ],
+  EXTREMA: [
+    (q) => `¿Su silencio es la confirmación de que su organización no tiene nada que decir? ${q}`,
+    (q) => `Guardar silencio también es una respuesta. ¿Está ocultando algo? ${q}`,
+  ],
+};
+
 // plan: qué toca en este turno (pregunta nueva o repregunta) según la configuración del escenario
 export function nextQuestion({ theme, history = [], plan = null }) {
   const t = theme || { title: 'la crisis que enfrenta su empresa', category: 'CRISIS' };
@@ -85,7 +102,10 @@ export function nextQuestion({ theme, history = [], plan = null }) {
   // 1) Apertura
   if (turn === 0) return openers[0](t);
 
-  // 2) Si no respondió o fue muy breve, repregunta de forma más directa
+  // 2) Si se quedó callado, el entrevistador lo cuestiona por su silencio
+  if (!lastAnswer) return pick(SILENCE[level], turn)(asked[asked.length - 1].replace(/^.*?¿/, '¿'));
+
+  // 3) Si la respuesta fue muy breve, repregunta de forma más directa
   if (lastAnswer.split(/\s+/).filter(Boolean).length < 6) {
     return `No respondió a mi pregunta. Se lo planteo de forma directa: ${asked[asked.length - 1].replace(/^.*?¿/, '¿')}`;
   }

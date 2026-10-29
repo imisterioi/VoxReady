@@ -72,6 +72,11 @@ function configTests() {
   ok(extreme.includes('hostil') && extreme.includes('REPREGUNTA') && extreme.includes('peor interpretación'), '8. Presión extrema: la repregunta devuelve la respuesta en su peor interpretación');
   ok(prompt({ interviewerRole: 'un dirigente sindical' }, 0).startsWith('Eres un dirigente sindical'), '9. Se puede definir quién entrevista');
 
+  const cfgHigh = normalizeInterviewConfig({ aggressiveness: 'ALTA', followUps: 1 });
+  const silentPrompt = buildSystemPrompt(theme, cfgHigh, turnPlan(cfgHigh, 2), {}, true);
+  ok(silentPrompt.includes('SILENCIO') && !silentPrompt.includes('pregunta NUEVA'), '9b. Si el vocero se queda callado, el entrevistador lo cuestiona por su silencio en vez de cambiar de tema');
+  ok(!buildSystemPrompt(theme, cfgHigh, turnPlan(cfgHigh, 2)).includes('SILENCIO'), '9c. Si respondió, no se menciona el silencio');
+
   console.log('\nAnálisis de sensibilidad del video');
   const body = { available: true, faceAvailable: true, analyzedSeconds: 100, facingSeconds: 70, awaySeconds: 30, smileSeconds: 8 };
   const transcript = [{ metrics: { video: { facingSeconds: 40, awaySeconds: 10, smileSeconds: 6 } } }, { metrics: {} }];
