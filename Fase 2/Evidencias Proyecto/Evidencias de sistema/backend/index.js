@@ -14,6 +14,7 @@ const { generateQuestion, warmUp, askModelFromContext, interviewModels, intervie
 const { createInterviewSession } = require('./lib/interviewSession');
 const interviewRegistry = require('./lib/interviewRegistry');
 const { LIMITS: INTERVIEW_LIMITS, normalizeInterviewConfig, resolveInterviewConfig, turnPlan, invalidInterviewConfigPayload } = require('./ai/interviewConfig');
+const { resolveLanguage, normalizeLanguage, languages: enabledLanguages, DEFAULT: DEFAULT_LANGUAGE, scenarioLanguageAllowed } = require('./lib/language');
 const { requireAuth } = require('./auth');
 const registerAccountRoutes = require('./routes/accounts');
 const registerSessionRoutes = require('./routes/sessions');
@@ -68,6 +69,12 @@ registerSystemRoutes(app, prisma);
 registerLabRoutes(app, prisma); // Laboratorio de transcripción (experimental)
 registerNvidiaLabRoutes(app, prisma); // Laboratorio NVIDIA Build (experimental)
 
+// Idiomas habilitados en la plataforma (público): lo consumen los selectores de la interfaz.
+// Al habilitar un idioma nuevo en `lib/language.js`, aparece aquí automáticamente.
+app.get('/api/languages', (req, res) => {
+  res.json({ status: 'ok', default: DEFAULT_LANGUAGE, languages: enabledLanguages() });
+});
+
 // Endpoint de prueba: también verifica conectividad con PostgreSQL.
 app.get('/api/health', async (req, res) => {
   let dbOk = false;
@@ -115,6 +122,8 @@ app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
     // El usuario se determina EXCLUSIVAMENTE desde el token (req.user).
     // Cualquier ?email= enviado por el cliente se ignora (no selecciona identidad).
     const user = req.user;
+    // Idioma efectivo del vocero: decide qué catálogo ve (escenarios generales Y propios).
+    const language = resolveLanguage(user, user.tenant);
 
     // Los temas marcados como "disponible para todos los voceros" se asignan automáticamente
     if (user.tenantId) {
@@ -135,7 +144,8 @@ app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
       where: {
         userId: user.id,
         status: 'PENDING',
-        theme: { deletedAt: null }
+        // Los escenarios personalizados también se filtran por idioma: no se mezclan catálogos.
+        theme: { deletedAt: null, language }
       },
       include: {
         theme: true
@@ -147,6 +157,7 @@ app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
 
     const orgScenarios = assignments.filter((assignment) => !assignment.theme.isGlobal).map((assignment) => ({
       scope: 'org', // escenario de la organización del vocero
+      language: assignment.theme.language,
       assignmentId: assignment.id,
       id: assignment.theme.id,
       title: assignment.theme.title,
@@ -161,13 +172,15 @@ app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
       assignedAt: assignment.assignedAt
     }));
 
-    // Escenarios generales de la biblioteca de VoxReady: todos los voceros los ven
+    // Catálogo general del idioma activo: los escenarios generales están SEPARADOS por idioma y no
+    // se traducen automáticamente. El vocero ve el catálogo del idioma con el que está practicando.
     const globalThemes = await prisma.theme.findMany({
-      where: { isGlobal: true, deletedAt: null },
+      where: { isGlobal: true, deletedAt: null, language },
       orderBy: { title: 'asc' }
     });
     const generalScenarios = globalThemes.map((theme) => ({
       scope: 'general',
+      language: theme.language,
       assignmentId: null,
       id: theme.id,
       title: theme.title,
@@ -186,6 +199,7 @@ app.get('/api/scenarios/my', requireAuth(prisma), async (req, res) => {
 
     res.json({
       status: 'ok',
+      language,
       scenarios
     });
 
@@ -241,6 +255,16 @@ app.post('/api/sessions', requireAuth(prisma), async (req, res) => {
       });
     }
 
+    // El catálogo se separa por idioma: no se puede iniciar una práctica con un escenario que no
+    // pertenece al idioma activo del vocero (da igual si es general o propio).
+    const sessionLang = resolveLanguage(user, user.tenant);
+    if (!scenarioLanguageAllowed(theme.language, sessionLang)) {
+      return res.status(403).json({
+        status: 'error',
+        mensaje: 'Este escenario no está disponible en tu idioma.'
+      });
+    }
+
     const assignment = isGeneral ? true : await prisma.scenarioAssignment.findUnique({
       where: {
         userId_themeId: {
@@ -262,7 +286,10 @@ app.post('/api/sessions', requireAuth(prisma), async (req, res) => {
         status: 'CREATED',
         userId: user.id,
         themeId: theme.id,
-        tenantId: user.tenantId
+        tenantId: user.tenantId,
+        // Idioma con el que se inicia la sesión: congela el idioma de la entrevista y de su
+        // informe. Cambiar después la preferencia del vocero no altera esta práctica.
+        language: sessionLang
       }
     });
 
@@ -539,6 +566,10 @@ app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {
           Boolean(availableToAllVoceros),
 
         interviewConfig: normalizeInterviewConfig(req.body.interview),
+
+        // Idioma del contenido del escenario personalizado. Si el editor no lo envía, se usa el
+        // idioma con el que el administrador está trabajando (nunca se traduce automáticamente).
+        language: normalizeLanguage(req.body.language) || resolveLanguage(user, user.tenant),
 
         tenantId: user.tenantId,
       },

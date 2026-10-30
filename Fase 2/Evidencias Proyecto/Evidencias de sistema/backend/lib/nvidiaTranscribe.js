@@ -88,10 +88,16 @@ async function transcribeAnswers({
   }
 
   if (failures.length) {
+    // Si TODAS las respuestas fallaron por incompatibilidad de idioma, se propaga ese motivo: es un
+    // problema de configuración que no se arregla reintentando y no debe confundirse con un fallo
+    // puntual del servicio.
+    const unsupported = failures.every((failure) => failure.code === 'LANGUAGE_UNSUPPORTED');
     return {
       ok: false,
-      code: 'ANSWER_TRANSCRIPTION_FAILED',
-      message: `${failures.length} respuesta(s) no se pudieron transcribir con ningún motor.`,
+      code: unsupported ? 'LANGUAGE_UNSUPPORTED' : 'ANSWER_TRANSCRIPTION_FAILED',
+      message: unsupported
+        ? 'Ningún motor de transcripción configurado admite el idioma de esta sesión.'
+        : `${failures.length} respuesta(s) no se pudieron transcribir con ningún motor.`,
       failures,
       windows,
       answers,

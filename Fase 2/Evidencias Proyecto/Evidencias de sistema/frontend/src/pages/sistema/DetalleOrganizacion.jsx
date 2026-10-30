@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { STATUS_META, formatDate, initialsOf, timeAgo } from '../../data/directory';
+import { useI18n } from '../../lib/i18n';
+import { statusMeta, formatDate, initialsOf, timeAgo } from '../../data/directory';
 import { apiFetch } from '../../lib/api';
 import { displayEmail } from '../../lib/displayEmail';
 import useApiData from '../../hooks/useApiData';
@@ -9,42 +10,39 @@ import { Avatar, Badge, Button, Card, CardHeader, EmptyState, Field, Modal, Page
 import RequestsPanel from '../../components/RequestsPanel';
 import { buildRequestsFeed } from '../../lib/requestsFeed';
 
-// Etiquetas de lo que YA gestiona el sistema (no se inventan tipos de solicitud):
-// `DeletionRequest.scope` y su máquina de estados (PENDING → APPROVED|REJECTED → COMPLETED).
-const SCOPE_LABELS = {
-  RECORDINGS: 'Borrado de grabaciones',
-  ANONYMIZE: 'Anonimización completa',
-};
-const REQUEST_STATUS = {
-  PENDING: { label: 'Pendiente', tone: 'accent' },
-  APPROVED: { label: 'Aprobada', tone: 'warning' },
-  REJECTED: { label: 'Rechazada', tone: 'neutral' },
-  COMPLETED: { label: 'Completada', tone: 'success' },
-};
-const RETENTION_LABELS = {
-  FULL: 'Grabaciones + métricas',
-  METRICS: 'Solo métricas',
-};
-const TENANT_STATUS = {
-  ACTIVE: { label: 'Activa', tone: 'success' },
-  SUSPENDED: { label: 'Suspendida', tone: 'danger' },
-  DELETING: { label: 'Eliminando…', tone: 'neutral' },
-};
+// Tonos de lo que YA gestiona el sistema (no se inventan tipos de solicitud): `DeletionRequest.scope`
+// y su máquina de estados (PENDING → APPROVED|REJECTED → COMPLETED). Las etiquetas visibles las aporta
+// el diccionario: los códigos internos no se traducen.
+const REQUEST_STATUS_TONES = { PENDING: 'accent', APPROVED: 'warning', REJECTED: 'neutral', COMPLETED: 'success' };
+const RETENTION_LABEL_KEYS = { FULL: 'retentionFull', METRICS: 'retentionMetrics' };
 
 const numberOr = (value) => (Number.isFinite(value) ? value : '—');
-
-// Estados de una solicitud de extensión del plazo de retención.
-const EXTENSION_STATUS = {
-  PENDING: { label: 'Pendiente', tone: 'accent' },
-  APPROVED: { label: 'Aprobada y aplicada', tone: 'success' },
-  REJECTED: { label: 'Rechazada', tone: 'neutral' },
-};
 
 // Detalle de una organización para el Administrador del Sistema: información general, voceros,
 // solicitudes de privacidad y estadísticas. Todo sale de endpoints que ya existen
 // (`/api/tenants`, `/api/system/jobs`, `/api/users`, `/api/deletion-requests`,
 // `/api/metrics/overview`): no se inventan datos ni se añaden modelos.
 export default function DetalleOrganizacion() {
+  const { d, lang } = useI18n();
+  const t = d.L.sys.organizaciones.detalle;
+  const p = d.L.privacy;
+  // Etiquetas visibles de estados y modos (los valores internos no se traducen).
+  const userStatusOf = (value) => statusMeta(d)[value] || { label: value, tone: 'neutral' };
+  const tenantStatusOf = (value) => ({
+    tone: value === 'ACTIVE' ? 'success' : value === 'SUSPENDED' ? 'danger' : 'neutral',
+    label: t.tenantStatus[value] || value,
+  });
+  const reqStatusOf = (value) => ({
+    tone: REQUEST_STATUS_TONES[value] || 'neutral',
+    label: p.privacyStatus[value] || value,
+  });
+  const extStatusOf = (value) => ({
+    tone: t.extTones[value] || 'neutral',
+    label: p.extensionStatus[value] || value,
+  });
+  const retentionLabel = (mode) => (mode ? t[RETENTION_LABEL_KEYS[mode]] || mode : mode);
+  const scopeLabel = (scope) =>
+    scope === 'ANONYMIZE' ? p.scopeAnonymize : scope === 'RECORDINGS' ? p.scopeRecordings : scope;
   const { id } = useParams();
   const query = id ? `tenantId=${encodeURIComponent(id)}` : null;
 
@@ -80,7 +78,7 @@ export default function DetalleOrganizacion() {
     try {
       setSaving(true);
       await apiFetch(`/api/deletion-requests/${openRequest.id}`, { method: 'PATCH', body: { status, resolutionNote } });
-      toast.success(status === 'REJECTED' ? 'Solicitud rechazada' : 'Solicitud actualizada');
+      toast.success(status === 'REJECTED' ? t.privacyRejected : t.privacyUpdated);
       setOpenRequest(null);
       setResolutionNote('');
       requests.reload();
@@ -99,8 +97,8 @@ export default function DetalleOrganizacion() {
       const result = await apiFetch(`/api/retention-requests/${openExtension.id}`, { method: 'PATCH', body: { status, resolutionNote } });
       toast.success(
         status === 'REJECTED'
-          ? 'Solicitud de extensión rechazada'
-          : `Extensión aplicada: ${result?.effect?.retentionDays ?? openExtension.requestedDays} días`,
+          ? t.extensionRejected
+          : t.extensionApplied(result?.effect?.retentionDays ?? openExtension.requestedDays),
       );
       setOpenExtension(null);
       setResolutionNote('');
@@ -123,39 +121,39 @@ export default function DetalleOrganizacion() {
       }).map((entry) => {
         const r = entry.request;
         if (entry.kind === 'privacy') {
-          const status = REQUEST_STATUS[r.status] || { label: r.status, tone: 'neutral' };
+          const st = reqStatusOf(r.status);
           return {
             key: `privacy-${r.id}`,
             kind: 'privacy',
             raw: r,
-            title: SCOPE_LABELS[r.scope] || r.scope,
+            title: scopeLabel(r.scope) || r.scope,
             subtitle: [
-              r.targetUser ? `${r.targetUser.name} · ${displayEmail(r.targetUser)}` : 'Organización completa',
-              r.reason || 'Sin motivo indicado',
-              formatDate(r.createdAt),
+              r.targetUser ? `${r.targetUser.name} · ${displayEmail(r.targetUser)}` : p.wholeOrg,
+              r.reason || p.noReason,
+              formatDate(r.createdAt, lang),
             ].join(' · '),
             meta: r.resolvedAt
-              ? `Resuelta el ${formatDate(r.resolvedAt)}${r.resolvedBy?.name ? ` por ${r.resolvedBy.name}` : ''}`
-              : `Solicitada por ${r.requestedBy?.name || '—'}`,
-            status,
-            actionLabel: ['PENDING', 'APPROVED'].includes(r.status) ? 'Revisar' : 'Ver',
+              ? p.resolvedOn(formatDate(r.resolvedAt, lang), r.resolvedBy?.name)
+              : t.requestedBy(r.requestedBy?.name || '—'),
+            status: st,
+            actionLabel: ['PENDING', 'APPROVED'].includes(r.status) ? t.review : p.view,
           };
         }
-        const status = EXTENSION_STATUS[r.status] || { label: r.status, tone: 'neutral' };
+        const st = extStatusOf(r.status);
         return {
           key: `retention-${r.id}`,
           kind: 'retention',
           raw: r,
-          title: `Extensión a ${r.requestedDays} días (vigente: ${r.currentDays})`,
-          subtitle: [r.reason || 'Sin motivo indicado', formatDate(r.createdAt)].join(' · '),
+          title: p.extensionRow(r.requestedDays, r.currentDays),
+          subtitle: [r.reason || p.noReason, formatDate(r.createdAt, lang)].join(' · '),
           meta: r.resolvedAt
-            ? `Resuelta el ${formatDate(r.resolvedAt)}${r.resolvedBy?.name ? ` por ${r.resolvedBy.name}` : ''}`
-            : `Solicitada por ${r.requestedBy?.name || '—'}`,
-          status,
-          actionLabel: r.status === 'PENDING' ? 'Revisar' : 'Ver',
+            ? p.resolvedOn(formatDate(r.resolvedAt, lang), r.resolvedBy?.name)
+            : t.requestedBy(r.requestedBy?.name || '—'),
+          status: st,
+          actionLabel: r.status === 'PENDING' ? t.review : p.view,
         };
       }),
-    [requests.data, extensions.data],
+    [requests.data, extensions.data, lang],
   );
 
   // Abrir la ventana de detalle de la solicitud seleccionada (privacidad o extensión).
@@ -167,16 +165,16 @@ export default function DetalleOrganizacion() {
 
   const header = (
     <PageHeader
-      eyebrow="Administración del sistema · Organización"
-      title={tenant?.name || 'Organización'}
+      eyebrow={t.eyebrow}
+      title={tenant?.name || t.orgFallback}
       description={
         tenant
-          ? `${tenant.sector || 'Sin sector'} · creada el ${formatDate(tenant.createdAt)}`
-          : 'Información general, voceros, solicitudes de privacidad y estadísticas.'
+          ? t.headerOf(tenant.sector ? d.L.dir.sectorLabels[tenant.sector] || tenant.sector : t.noSector, formatDate(tenant.createdAt, lang))
+          : t.headerSub
       }
       actions={
         <Button to="/sistema/organizaciones" variant="secondary" icon="arrowLeft">
-          Volver a organizaciones
+          {t.backToOrgs}
         </Button>
       }
     />
@@ -187,7 +185,7 @@ export default function DetalleOrganizacion() {
       <>
         {header}
         <Card>
-          <EmptyState icon="refresh" title="Cargando la organización…" />
+          <EmptyState icon="refresh" title={t.loadingL} />
         </Card>
       </>
     );
@@ -201,11 +199,11 @@ export default function DetalleOrganizacion() {
           <EmptyState
             tone="danger"
             icon="server"
-            title="No se pudieron cargar las organizaciones"
+            title={t.loadFailed}
             description={tenants.error}
             action={
               <Button variant="secondary" icon="refresh" onClick={tenants.reload}>
-                Reintentar
+                {t.retry}
               </Button>
             }
           />
@@ -221,11 +219,11 @@ export default function DetalleOrganizacion() {
         <Card>
           <EmptyState
             icon="search"
-            title="Organización no encontrada"
-            description="Puede que se haya eliminado. Vuelve a la lista de organizaciones."
+            title={t.notFoundTitle}
+            description={t.notFoundDesc}
             action={
               <Button to="/sistema/organizaciones" variant="secondary">
-                Ver organizaciones
+                {t.seeOrgs}
               </Button>
             }
           />
@@ -234,7 +232,7 @@ export default function DetalleOrganizacion() {
     );
   }
 
-  const status = TENANT_STATUS[tenant.status] || { label: tenant.status, tone: 'neutral' };
+  const tenantStatus = tenantStatusOf(tenant.status);
 
   return (
     <>
@@ -243,37 +241,38 @@ export default function DetalleOrganizacion() {
       {/* Información general */}
       <Card className="mb-6">
         <CardHeader
-          title="Información general"
-          description="Estado, datos de la organización y política de retención vigente."
-          action={<Badge tone={status.tone}>{status.label}</Badge>}
+          title={t.infoTitle}
+          description={t.infoDesc}
+          action={<Badge tone={tenantStatus.tone}>{tenantStatus.label}</Badge>}
         />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Info label="Sector" value={tenant.sector || 'Sin sector'} />
-          <Info label="Creada" value={formatDate(tenant.createdAt)} />
           <Info
-            label="Retención de datos"
-            value={job ? `${RETENTION_LABELS[job.retentionMode] || job.retentionMode} · ${job.retentionDays} días` : '—'}
-            hint={job ? undefined : 'Sin datos del job de retención.'}
+            label={t.sectorL}
+            value={tenant.sector ? d.L.dir.sectorLabels[tenant.sector] || tenant.sector : t.noSector}
+          />
+          <Info label={t.createdL} value={formatDate(tenant.createdAt, lang)} />
+          <Info
+            label={t.retentionL}
+            value={job ? t.retentionValue(retentionLabel(job.retentionMode), job.retentionDays) : '—'}
+            hint={job ? undefined : t.noJobData}
           />
           <Info
-            label="Solicitudes abiertas"
+            label={t.openRequestsL}
             value={job ? numberOr(job.openDeletionRequests) : '—'}
-            hint="Pendientes o aprobadas sin completar."
+            hint={t.openRequestsHint}
           />
         </div>
 
         {tenant.status === 'DELETING' && (
           <p className="mt-5 text-sm text-muted leading-relaxed">
-            Esta organización está en proceso de eliminación
-            {job?.deletionRequestedAt ? ` (solicitada el ${formatDate(job.deletionRequestedAt)})` : ''}. Sus datos se
-            procesan de inmediato, sin esperar el período de retención.
+            {t.deletingNote(job?.deletionRequestedAt ? formatDate(job.deletionRequestedAt, lang) : null)}
           </p>
         )}
 
         <div className="mt-6 pt-5 border-t border-line">
-          <div className="eyebrow mb-3">Administradores de la organización</div>
+          <div className="eyebrow mb-3">{t.adminsEyebrow}</div>
           {admins.length === 0 ? (
-            <p className="text-sm text-muted">Esta organización no tiene administradores registrados.</p>
+            <p className="text-sm text-muted">{t.noAdmins}</p>
           ) : (
             <ul className="flex flex-wrap gap-4">
               {admins.map((a) => (
@@ -283,8 +282,8 @@ export default function DetalleOrganizacion() {
                     <div className="text-sm font-medium text-ink">{a.name}</div>
                     <div className="text-xs text-muted">{displayEmail(a)}</div>
                   </div>
-                  <Badge tone={STATUS_META[a.status]?.tone || 'neutral'}>
-                    {STATUS_META[a.status]?.label || a.status}
+                  <Badge tone={userStatusOf(a.status).tone}>
+                    {userStatusOf(a.status).label}
                   </Badge>
                 </li>
               ))}
@@ -296,28 +295,28 @@ export default function DetalleOrganizacion() {
       {/* Estadísticas de la organización */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <Stat
-          label="Voceros"
+          label={t.statVoceros}
           value={voceros.length}
           icon="users"
-          hint={`${voceros.filter((v) => v.status === 'ACTIVE').length} activos`}
+          hint={t.actives(voceros.filter((v) => v.status === 'ACTIVE').length)}
         />
         <Stat
-          label="Sesiones registradas"
+          label={t.statSessions}
           value={job ? numberOr(job.sessions) : '—'}
           icon="activity"
-          hint="Todas las prácticas de la organización."
+          hint={t.statSessionsHint}
         />
         <Stat
-          label="Grabaciones guardadas"
+          label={t.statRecordings}
           value={job ? numberOr(job.recordings) : '—'}
           icon="video"
-          hint="Dentro de su plazo de retención."
+          hint={t.statRecordingsHint}
         />
         <Stat
-          label="Voceros anonimizados"
+          label={t.statAnonymized}
           value={job ? numberOr(job.anonymizedUsers) : '—'}
           icon="shield"
-          hint="Datos personales ya eliminados."
+          hint={t.statAnonymizedHint}
         />
       </div>
 
@@ -325,37 +324,35 @@ export default function DetalleOrganizacion() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
         {/* Uso de la plataforma (endpoint de métricas existente, histórico completo) */}
         <Card>
-          <CardHeader title="Uso de la plataforma" description="Datos agregados del sistema de métricas (todo el histórico)." />
+          <CardHeader title={t.usageTitle} description={t.usageDesc} />
           {metrics.loading && !metrics.data ? (
-            <EmptyState icon="refresh" title="Cargando estadísticas…" />
+            <EmptyState icon="refresh" title={t.loadingStats} />
           ) : metrics.error ? (
-            <EmptyState tone="danger" icon="server" title="No se pudieron cargar las estadísticas" description={metrics.error} />
+            <EmptyState tone="danger" icon="server" title={t.statsFailed} description={metrics.error} />
           ) : !summary ? (
-            <EmptyState icon="chart" title="Sin estadísticas disponibles" />
+            <EmptyState icon="chart" title={t.noStats} />
           ) : (
             <div className="space-y-3">
-              <MetricRow label="Voceros vigentes" value={numberOr(summary.vocerosActive)} />
-              <MetricRow label="Prácticas evaluadas" value={numberOr(summary.sessions)} />
-              <MetricRow label="Promedio por vocero" value={numberOr(summary.avgPerVocero)} />
-              <MetricRow label="Ritmo semanal" value={numberOr(summary.perWeek)} />
-              <MetricRow label="Días entre prácticas" value={numberOr(summary.avgDaysBetween)} />
-              <MetricRow label="Conectados ahora" value={numberOr(summary.connected)} />
-              <p className="text-xs text-faint pt-2">
-                «—» significa que el sistema no tiene ese dato: no se calcula ni se estima aquí.
-              </p>
+              <MetricRow label={t.mVocerosActive} value={numberOr(summary.vocerosActive)} />
+              <MetricRow label={t.mSessions} value={numberOr(summary.sessions)} />
+              <MetricRow label={t.mAvgPerVocero} value={numberOr(summary.avgPerVocero)} />
+              <MetricRow label={t.mPerWeek} value={numberOr(summary.perWeek)} />
+              <MetricRow label={t.mAvgDaysBetween} value={numberOr(summary.avgDaysBetween)} />
+              <MetricRow label={t.mConnected} value={numberOr(summary.connected)} />
+              <p className="text-xs text-faint pt-2">{t.dashNote}</p>
             </div>
           )}
         </Card>
 
         <Card>
-          <CardHeader title="Voceros con más prácticas" description="Ranking del sistema de métricas (histórico completo)." />
+          <CardHeader title={t.topTitle} description={t.topDesc} />
           {metrics.loading && !metrics.data ? (
-            <EmptyState icon="refresh" title="Cargando ranking…" />
+            <EmptyState icon="refresh" title={t.loadingRanking} />
           ) : topVoceros.length === 0 ? (
             <EmptyState
               icon="users"
-              title="Sin voceros con prácticas"
-              description="Todavía no hay prácticas evaluadas en esta organización."
+              title={t.noTopTitle}
+              description={t.noTopDesc}
             />
           ) : (
             <ul className="divide-y divide-line">
@@ -365,14 +362,14 @@ export default function DetalleOrganizacion() {
                     <Avatar initials={initialsOf(v.name)} size="sm" />
                     <span className="text-sm text-ink truncate">{v.name}</span>
                   </div>
-                  <span className="text-sm text-muted tabular-nums">{v.sessions} práctica(s)</span>
+                  <span className="text-sm text-muted tabular-nums">{t.practicesOf(v.sessions)}</span>
                 </li>
               ))}
             </ul>
           )}
           {preferredThemes.length > 0 && (
             <div className="mt-5 pt-5 border-t border-line">
-              <div className="eyebrow mb-3">Escenarios más practicados</div>
+              <div className="eyebrow mb-3">{t.preferredThemes}</div>
               <div className="flex flex-wrap gap-2">
                 {preferredThemes.map((t) => (
                   <Badge key={t.id} tone="outline">
@@ -390,23 +387,23 @@ export default function DetalleOrganizacion() {
           desbordar, como en el resto de VoxReady) */}
       <Card className="mb-6">
         <CardHeader
-          title="Voceros de la organización"
-          description={`${voceros.length} vocero(s) · sesiones completadas por vocero`}
+          title={t.vocerosTitle}
+          description={t.vocerosDesc(voceros.length)}
         />
         {users.error ? (
-          <EmptyState tone="danger" icon="server" title="No se pudieron cargar los voceros" description={users.error} />
+          <EmptyState tone="danger" icon="server" title={t.vocerosLoadFailed} description={users.error} />
         ) : users.loading && !users.data ? (
-          <EmptyState icon="refresh" title="Cargando voceros…" />
+          <EmptyState icon="refresh" title={t.loadingVoceros} />
         ) : voceros.length === 0 ? (
-          <EmptyState icon="users" title="Sin voceros" description="Esta organización todavía no tiene voceros creados." />
+          <EmptyState icon="users" title={t.noVocerosTitle} description={t.noVocerosDesc} />
         ) : (
           <Table
             columns={[
-              { label: 'Vocero' },
-              { label: 'Público interno' },
-              { label: 'Sesiones' },
-              { label: 'Estado' },
-              { label: 'Último ingreso' },
+              { label: t.colVocero },
+              { label: t.colArea },
+              { label: t.colSessions },
+              { label: t.colStatus },
+              { label: t.colLastLogin },
             ]}
           >
             {voceros.map((u) => (
@@ -421,15 +418,15 @@ export default function DetalleOrganizacion() {
                   </div>
                 </td>
                 <td className="py-3.5 px-6">
-                  <Badge tone="outline">{u.area || '—'}</Badge>
+                  <Badge tone="outline">{u.area ? d.L.dir.areaLabels[u.area] || u.area : '—'}</Badge>
                 </td>
                 <td className="py-3.5 px-6 text-ink tabular-nums">{u.sessions || 0}</td>
                 <td className="py-3.5 px-6 whitespace-nowrap">
-                  <Badge tone={STATUS_META[u.status]?.tone || 'neutral'}>
-                    {STATUS_META[u.status]?.label || u.status}
+                  <Badge tone={userStatusOf(u.status).tone}>
+                    {userStatusOf(u.status).label}
                   </Badge>
                 </td>
-                <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastLoginAt)}</td>
+                <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastLoginAt, d)}</td>
               </tr>
             ))}
           </Table>
@@ -441,30 +438,30 @@ export default function DetalleOrganizacion() {
           etiqueta de tipo por fila y filtro interno. Cada fila abre su detalle y las acciones de
           resolución siguen siendo solo del administrador del sistema. */}
       <RequestsPanel
-        title="Solicitudes"
-        description="Solicitudes de privacidad (borrado y anonimización) y de extensión del plazo de retención de esta organización. Ábrelas para revisarlas y resolverlas."
+        title={t.requestsTitle}
+        description={t.requestsDesc}
         items={requestItems}
         filter={requestFilter}
         onFilterChange={setRequestFilter}
         onOpen={openRequestDetail}
         loading={requests.loading || extensions.loading}
         error={requests.error || extensions.error}
-        emptyTitle="Sin solicitudes"
-        emptyDescription="Esta organización no tiene solicitudes de privacidad ni de extensión registradas."
-        note="Las solicitudes de privacidad y de extensión del plazo se resuelven aquí, y solo el administrador del sistema puede hacerlo (el backend lo comprueba). El administrador de la organización puede crearlas y consultar su estado desde su apartado de retención."
+        emptyTitle={t.requestsEmptyTitle}
+        emptyDescription={t.requestsEmptyDesc}
+        note={t.requestsNote}
       />
 
       {/* Detalle de una solicitud de privacidad: revisar y resolver (solo el administrador del sistema) */}
       <Modal
         open={Boolean(openRequest)}
         onClose={() => setOpenRequest(null)}
-        title={openRequest ? SCOPE_LABELS[openRequest.scope] || openRequest.scope : 'Solicitud de privacidad'}
-        description={openRequest ? `Estado: ${REQUEST_STATUS[openRequest.status]?.label || openRequest.status}` : ''}
+        title={openRequest ? scopeLabel(openRequest.scope) || openRequest.scope : t.privacyModalFallback}
+        description={openRequest ? p.stateL(reqStatusOf(openRequest.status).label) : ''}
         footer={
           openRequest ? (
             <>
               <Button variant="ghost" onClick={() => setOpenRequest(null)} disabled={saving}>
-                Cerrar
+                {p.close}
               </Button>
               {openRequest.status === 'PENDING' && (
                 <>
@@ -475,16 +472,16 @@ export default function DetalleOrganizacion() {
                     onClick={() => resolvePrivacy('REJECTED')}
                     disabled={saving}
                   >
-                    Rechazar
+                    {t.reject}
                   </Button>
                   <Button icon="check" onClick={() => resolvePrivacy('APPROVED')} disabled={saving}>
-                    {saving ? 'Guardando…' : 'Aprobar'}
+                    {saving ? t.savingL : t.approve}
                   </Button>
                 </>
               )}
               {openRequest.status === 'APPROVED' && (
                 <Button icon="trash" onClick={() => resolvePrivacy('COMPLETED')} disabled={saving}>
-                  {saving ? 'Procesando…' : 'Completar y aplicar'}
+                  {saving ? t.processing : t.completeApply}
                 </Button>
               )}
             </>
@@ -493,49 +490,49 @@ export default function DetalleOrganizacion() {
       >
         {openRequest && (
           <div className="space-y-4">
-            <DetailRow label="Organización" value={tenant?.name || '—'} />
+            <DetailRow label={t.orgL} value={tenant?.name || '—'} />
             <DetailRow
-              label="Vocero"
+              label={d.L.dir.vocero}
               value={
                 openRequest.targetUser
                   ? `${openRequest.targetUser.name} · ${displayEmail(openRequest.targetUser)}`
-                  : 'Organización completa'
+                  : p.wholeOrg
               }
             />
-            <DetailRow label="Tipo" value={SCOPE_LABELS[openRequest.scope] || openRequest.scope} />
-            <DetailRow label="Solicitada" value={formatDate(openRequest.createdAt)} />
+            <DetailRow label={t.typeL} value={scopeLabel(openRequest.scope) || openRequest.scope} />
+            <DetailRow label={p.requestedL} value={formatDate(openRequest.createdAt, lang)} />
             <DetailRow
-              label="Solicitada por"
-              value={openRequest.requestedBy ? `${openRequest.requestedBy.name} (administrador de la organización)` : '—'}
+              label={t.requestedByL}
+              value={openRequest.requestedBy ? `${openRequest.requestedBy.name}${t.orgAdminSuffix}` : '—'}
             />
             <DetailRow
-              label="Resolución"
+              label={p.resolutionL}
               value={
                 openRequest.resolvedAt
-                  ? `${formatDate(openRequest.resolvedAt)}${openRequest.resolvedBy?.name ? ` · ${openRequest.resolvedBy.name}` : ''}`
-                  : 'Pendiente'
+                  ? p.resolvedOn(formatDate(openRequest.resolvedAt, lang), openRequest.resolvedBy?.name)
+                  : t.pendingL
               }
             />
-            <DetailRow label="Motivo" value={openRequest.reason || 'Sin motivo indicado'} />
-            {openRequest.resolutionNote && <DetailRow label="Nota de resolución" value={openRequest.resolutionNote} />}
+            <DetailRow label={p.reasonL} value={openRequest.reason || p.noReason} />
+            {openRequest.resolutionNote && <DetailRow label={p.resolutionNoteL} value={openRequest.resolutionNote} />}
 
             {['PENDING', 'APPROVED'].includes(openRequest.status) && (
               <Field
-                label="Nota de resolución"
-                hint="Opcional. Queda registrada en la solicitud. Completar una anonimización no guarda texto libre."
+                label={p.resolutionNoteL}
+                hint={t.noteHint}
               >
                 <textarea
                   className="textarea min-h-[80px]"
                   value={resolutionNote}
                   onChange={(event) => setResolutionNote(event.target.value)}
-                  placeholder="Ej. Verificada con el administrador de la organización."
+                  placeholder={t.notePh}
                 />
               </Field>
             )}
 
             {openRequest.status === 'APPROVED' && (
               <p className="text-xs text-muted leading-relaxed">
-                Al completar se ejecuta la acción: borrar las grabaciones del vocero o anonimizarlo. Es irreversible.
+                {t.completeNote}
               </p>
             )}
           </div>
@@ -546,13 +543,13 @@ export default function DetalleOrganizacion() {
       <Modal
         open={Boolean(openExtension)}
         onClose={() => setOpenExtension(null)}
-        title="Solicitud de extensión del plazo de retención"
-        description={openExtension ? `Estado: ${EXTENSION_STATUS[openExtension.status]?.label || openExtension.status}` : ''}
+        title={t.extTitle}
+        description={openExtension ? p.stateL(extStatusOf(openExtension.status).label) : ''}
         footer={
           openExtension ? (
             <>
               <Button variant="ghost" onClick={() => setOpenExtension(null)} disabled={saving}>
-                Cerrar
+                {p.close}
               </Button>
               {openExtension.status === 'PENDING' && (
                 <>
@@ -563,10 +560,10 @@ export default function DetalleOrganizacion() {
                     onClick={() => resolveExtension('REJECTED')}
                     disabled={saving}
                   >
-                    Rechazar
+                    {t.reject}
                   </Button>
                   <Button icon="check" onClick={() => resolveExtension('APPROVED')} disabled={saving}>
-                    {saving ? 'Aplicando…' : 'Aprobar y aplicar'}
+                    {saving ? t.applyingL : t.approveApply}
                   </Button>
                 </>
               )}
@@ -576,43 +573,42 @@ export default function DetalleOrganizacion() {
       >
         {openExtension && (
           <div className="space-y-4">
-            <DetailRow label="Organización" value={openExtension.tenant?.name || tenant?.name || '—'} />
-            <DetailRow label="Plazo vigente al solicitarla" value={`${openExtension.currentDays} días`} />
-            <DetailRow label="Plazo solicitado" value={`${openExtension.requestedDays} días`} />
+            <DetailRow label={t.orgL} value={openExtension.tenant?.name || tenant?.name || '—'} />
+            <DetailRow label={t.currentTermAtRequest} value={p.daysL(openExtension.currentDays)} />
+            <DetailRow label={t.requestedTerm} value={p.daysL(openExtension.requestedDays)} />
             {openExtension.appliedDays ? (
-              <DetailRow label="Plazo aplicado" value={`${openExtension.appliedDays} días`} />
+              <DetailRow label={t.appliedTerm} value={p.daysL(openExtension.appliedDays)} />
             ) : null}
-            <DetailRow label="Solicitada" value={formatDate(openExtension.createdAt)} />
+            <DetailRow label={p.requestedL} value={formatDate(openExtension.createdAt, lang)} />
             <DetailRow
-              label="Solicitada por"
+              label={t.requestedByL}
               value={
-                openExtension.requestedBy ? `${openExtension.requestedBy.name} (administrador de la organización)` : '—'
+                openExtension.requestedBy ? `${openExtension.requestedBy.name}${t.orgAdminSuffix}` : '—'
               }
             />
             <DetailRow
-              label="Resolución"
+              label={p.resolutionL}
               value={
                 openExtension.resolvedAt
-                  ? `${formatDate(openExtension.resolvedAt)}${openExtension.resolvedBy?.name ? ` · ${openExtension.resolvedBy.name}` : ''}`
-                  : 'Pendiente'
+                  ? p.resolvedOn(formatDate(openExtension.resolvedAt, lang), openExtension.resolvedBy?.name)
+                  : t.pendingL
               }
             />
-            <DetailRow label="Motivo" value={openExtension.reason || 'Sin motivo indicado'} />
-            {openExtension.resolutionNote && <DetailRow label="Nota de resolución" value={openExtension.resolutionNote} />}
+            <DetailRow label={p.reasonL} value={openExtension.reason || p.noReason} />
+            {openExtension.resolutionNote && <DetailRow label={p.resolutionNoteL} value={openExtension.resolutionNote} />}
 
             {openExtension.status === 'PENDING' && (
               <>
-                <Field label="Nota de resolución" hint="Opcional. Queda registrada en la solicitud.">
+                <Field label={p.resolutionNoteL} hint={t.noteHintShort}>
                   <textarea
                     className="textarea min-h-[80px]"
                     value={resolutionNote}
                     onChange={(event) => setResolutionNote(event.target.value)}
-                    placeholder="Ej. Aprobada por necesidad de auditoría."
+                    placeholder={t.notePhExt}
                   />
                 </Field>
                 <p className="text-xs text-muted leading-relaxed">
-                  Aprobar aplica el nuevo plazo de inmediato: los datos que ya existen quedan protegidos y la
-                  retención no los borrará hasta que se cumpla el plazo extendido.
+                  {t.approveExtNote}
                 </p>
               </>
             )}

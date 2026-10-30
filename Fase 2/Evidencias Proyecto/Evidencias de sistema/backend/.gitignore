@@ -6,3 +6,5 @@ whisper/.env
 whisper/muestras/
 whisper/modelos/
 uploads/
+# Respaldos locales de la base de datos de demostración (contienen datos de ejemplo)
+backups/

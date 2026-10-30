@@ -1,6 +1,11 @@
 // Microlecciones: teoría breve + video público de YouTube + ejemplo comentado.
 // "area" vincula la lección con el área del informe que ayuda a mejorar,
 // para recomendarla según el punto más débil del vocero.
+//
+// El texto de cada lección es contenido FIJO del sistema y está disponible en español e inglés
+// (`lessons.en.js`). El idioma activo decide cuál se muestra; el contenido no se traduce en
+// caliente ni se modifica. La ficha del video (título/autor) es metadato de terceros y se conserva.
+import { LESSONS_EN } from './lessons.en.js';
 
 export const LESSONS = [
   {
@@ -115,6 +120,15 @@ export const LESSONS = [
 ];
 
 export const getLesson = (id) => LESSONS.find((l) => l.id === id);
+
+// Lección con el texto del idioma activo (español por defecto). No altera la lección original:
+// solo elige el texto de la interfaz; el contenido nunca se traduce automáticamente.
+export function localizedLesson(lesson, lang = 'es') {
+  if (!lesson || lang !== 'en') return lesson;
+  const en = LESSONS_EN[lesson.id];
+  if (!en) return lesson;
+  return { ...lesson, ...en, example: { ...lesson.example, ...(en.example || {}) } };
+}
 
 // Lecciones recomendadas para un área débil (o las primeras si no hay datos)
 export function lessonsForArea(areaKey, limit = 2) {

@@ -6,6 +6,7 @@
 const { requireAuth } = require('../auth');
 const { parseList } = require('../ai/interviewer');
 const { normalizeInterviewConfig, resolveInterviewConfig, invalidInterviewConfigPayload } = require('../ai/interviewConfig');
+const { SUPPORTED, DEFAULT: DEFAULT_LANGUAGE, normalizeLanguage } = require('../lib/language');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
 const CATEGORIES = ['CRISIS', 'MEDIOS', 'INSTITUCIONAL', 'GENERAL'];
@@ -20,6 +21,8 @@ const toApiLibraryTheme = (t) => ({
   redLines: parseList(t.redLines),
   publics: parseList(t.publics),
   interview: resolveInterviewConfig(t),
+  // Idioma del catálogo al que pertenece el escenario general ('es' | 'en').
+  language: normalizeLanguage(t.language) || DEFAULT_LANGUAGE,
   sessions: t._count?.sessions ?? 0,
   createdAt: t.createdAt,
 });
@@ -37,7 +40,10 @@ function readTheme(body = {}) {
   // se usan los valores por defecto (validos, con 5 minutos de duracion).
   const configError = invalidInterviewConfigPayload(body.interview, { requireDuration: body.interview !== undefined });
   if (configError) return { configError };
+  // Idioma del catálogo: si no llega un valor válido se conserva el actual (o el predeterminado).
+  const language = normalizeLanguage(body.language);
   return {
+    language,
     data: {
       title: title.trim(),
       context: context.trim(),
@@ -55,14 +61,17 @@ module.exports = function registerLibraryRoutes(app, prisma) {
   const auth = (...roles) => requireAuth(prisma, roles);
   const active = { isGlobal: true, deletedAt: null };
 
-  const titleTaken = (title, exceptId) =>
-    prisma.theme.findFirst({ where: { ...active, title, ...(exceptId ? { NOT: { id: exceptId } } : {}) } });
+  // El título debe ser único DENTRO del catálogo (idioma) al que pertenece el escenario general.
+  const titleTaken = (title, language, exceptId) =>
+    prisma.theme.findFirst({ where: { ...active, title, language, ...(exceptId ? { NOT: { id: exceptId } } : {}) } });
 
-  // Lista de escenarios generales (el admin del cliente la ve para copiarlos)
+  // Lista de escenarios generales (el admin del cliente la ve para copiarlos).
+  // `?language=es|en` limita la lista a un catálogo; sin el parámetro se devuelven los dos.
   app.get('/api/library/themes', auth('system', 'master', 'admin'), async (req, res) => {
     try {
+      const language = normalizeLanguage(req.query?.language);
       const themes = await prisma.theme.findMany({
-        where: active,
+        where: { ...active, ...(language ? { language } : {}) },
         orderBy: { title: 'asc' },
         include: { _count: { select: { sessions: true } } },
       });
@@ -75,11 +84,12 @@ module.exports = function registerLibraryRoutes(app, prisma) {
 
   app.post('/api/library/themes', auth('system'), async (req, res) => {
     try {
-      const { error, configError, data } = readTheme(req.body);
+      const { error, configError, data, language } = readTheme(req.body);
       if (error) return fail(res, 400, error);
       if (configError) return res.status(422).json(configError);
-      if (await titleTaken(data.title)) return fail(res, 409, 'Ya existe un escenario general con ese nombre.');
-      const theme = await prisma.theme.create({ data: { ...data, isGlobal: true, tenantId: null } });
+      const target = language || DEFAULT_LANGUAGE;
+      if (await titleTaken(data.title, target)) return fail(res, 409, 'Ya existe un escenario general con ese nombre.');
+      const theme = await prisma.theme.create({ data: { ...data, language: target, isGlobal: true, tenantId: null } });
       res.status(201).json({ status: 'ok', theme: toApiLibraryTheme(theme) });
     } catch (error) {
       console.error('Error creando escenario general:', error);
@@ -91,11 +101,12 @@ module.exports = function registerLibraryRoutes(app, prisma) {
     try {
       const theme = await prisma.theme.findUnique({ where: { id: req.params.id } });
       if (!theme?.isGlobal || theme.deletedAt) return fail(res, 404, 'Escenario general no encontrado.');
-      const { error, configError, data } = readTheme(req.body);
+      const { error, configError, data, language } = readTheme(req.body);
       if (error) return fail(res, 400, error);
       if (configError) return res.status(422).json(configError);
-      if (await titleTaken(data.title, theme.id)) return fail(res, 409, 'Ya existe un escenario general con ese nombre.');
-      const updated = await prisma.theme.update({ where: { id: theme.id }, data });
+      const target = language || normalizeLanguage(theme.language) || DEFAULT_LANGUAGE;
+      if (await titleTaken(data.title, target, theme.id)) return fail(res, 409, 'Ya existe un escenario general con ese nombre.');
+      const updated = await prisma.theme.update({ where: { id: theme.id }, data: { ...data, language: target } });
       res.json({ status: 'ok', theme: toApiLibraryTheme(updated) });
     } catch (error) {
       console.error('Error actualizando escenario general:', error);
@@ -139,6 +150,10 @@ module.exports = function registerLibraryRoutes(app, prisma) {
           redLines: source.redLines,
           publics: source.publics,
           interviewConfig: source.interviewConfig ?? undefined,
+          // La copia CONSERVA el idioma del escenario general de origen (no se traduce ni se
+          // reasigna al idioma del administrador): un escenario general en inglés sigue siendo
+          // inglés aunque lo copie un administrador que trabaja en español.
+          language: normalizeLanguage(source.language) || DEFAULT_LANGUAGE,
           tenantId: req.user.tenantId,
           isGlobal: false,
         },

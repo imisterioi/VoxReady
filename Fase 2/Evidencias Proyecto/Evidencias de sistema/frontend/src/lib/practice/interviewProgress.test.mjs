@@ -60,8 +60,11 @@ test('etiquetas: pregunta principal vs repregunta', () => {
 test('6) la duracion maxima es obligatoria: el formulario muestra 5 minutos', () => {
   const source = readFileSync(new URL('../../components/InterviewConfig.jsx', import.meta.url), 'utf8');
   // La duracion MAXIMA de la entrevista la define el usuario y es obligatoria (nunca queda vacia).
+  // El texto visible ya no vive en el componente: viene del diccionario central (`L.cfg.minutesL`).
+  const es = readFileSync(new URL('../../data/dictionary.js', import.meta.url), 'utf8');
   assert.equal(source.includes("onChange={set('estimatedMinutes')}"), true, 'debe existir un input editable de duracion');
-  assert.equal(source.includes('Duración máxima de la entrevista'), true);
+  assert.equal(source.includes('t.minutesL'), true, 'la etiqueta de duracion viene del diccionario');
+  assert.equal(es.includes('Duración máxima de la entrevista'), true, 'el diccionario declara la etiqueta de duracion');
   assert.equal(DEFAULT_MINUTES, 5, 'el valor inicial/predeterminado es 5 minutos');
   assert.match(source, /estimatedMinutes: DEFAULT_MINUTES/, 'el formulario parte de 5 minutos');
   assert.match(source, /estimatedMinutes: Number\(form\.estimatedMinutes\)/, 'el payload envia siempre un numero (nunca null)');
@@ -126,7 +129,7 @@ test('13) la etiqueta de pregunta del componente usa el progreso del backend', (
   const source = readFileSync(new URL('../../pages/SesionPractica.jsx', import.meta.url), 'utf8');
   assert.equal(source.includes('currentNumber'), false, 'no debe quedar ninguna referencia al contador local eliminado');
 
-  const labelLine = source.split('\n').find((line) => line.includes("'Preparando'"));
+  const labelLine = source.split('\n').find((line) => line.includes('mainLabel') && line.includes('?'));
   assert.ok(labelLine, 'debe existir la etiqueta de estado de la pregunta');
   assert.ok(labelLine.includes('mainLabel'), 'la etiqueta debe salir de progressLabel (mainsAsked/mainsTotal)');
   assert.equal(labelLine.includes('turnCount'), false, 'la etiqueta no se recalcula con un contador local');

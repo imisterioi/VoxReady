@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Badge, Button, Card, Checkbox, Field, PageHeader, Progress, cx } from '../components/ui';
@@ -9,7 +9,9 @@ import { ScenarioBriefModal } from '../components/ScenarioBrief';
 // El escenario (contexto, mensajes clave y líneas rojas) se muestra en una
 // ventana emergente al entrar; se puede volver a abrir con "Ver escenario".
 export default function CheckTecnico() {
-  const t = I.es.L.u3;
+  const { d } = useI18n();
+  const t = d.L.u3;
+  const tb = d.L.u3b;
   const navigate = useNavigate();
   const [briefOpen, setBriefOpen] = useState(true);
 
@@ -97,7 +99,7 @@ export default function CheckTecnico() {
         requestAnimationFrame(measureBrightness);
     } catch (err) {
       console.error('Error al activar cámara:', err);
-      setError('No se pudo acceder a la cámara. Revisa los permisos del navegador.');
+      setError(tb.errCamera);
     }
   };
 
@@ -221,7 +223,7 @@ export default function CheckTecnico() {
       setMicrophoneActive(true);
     } catch (error) {
       console.error('Error al activar el micrófono:', error);
-      setError('No se pudo acceder al micrófono.');
+      setError(tb.errMic);
     }
   };
 
@@ -231,7 +233,7 @@ export default function CheckTecnico() {
 
   const startCalibration = () => {
     if (!cameraActive) {
-      setError('Primero debes activar la cámara.');
+      setError(tb.errCameraFirst);
       return;
     }
 
@@ -280,7 +282,7 @@ export default function CheckTecnico() {
       }
     } catch (error) {
       console.error('Error obteniendo dispositivos:', error);
-      setError('No se pudieron obtener los dispositivos.');
+      setError(tb.errDevices);
     }
   };
 
@@ -327,14 +329,14 @@ export default function CheckTecnico() {
 
   const getBrightnessStatus = () => {
     if (brightness < 45) {
-      return { label: 'Mala', level: 1, tone: 'danger', bar: 'bg-danger' };
+      return { label: tb.lightBad, level: 1, tone: 'danger', bar: 'bg-danger' };
     }
 
     if (brightness < 100) {
-      return { label: 'Buena', level: 2, tone: 'success', bar: 'bg-success' };
+      return { label: tb.lightGood, level: 2, tone: 'success', bar: 'bg-success' };
     }
 
-    return { label: 'Excelente', level: 3, tone: 'success', bar: 'bg-success' };
+    return { label: tb.lightExcellent, level: 3, tone: 'success', bar: 'bg-success' };
   };
 
   const brightnessStatus = getBrightnessStatus();
@@ -356,11 +358,11 @@ export default function CheckTecnico() {
     calibrationDone;
 
   const checks = [
-    { label: 'Cámara', ok: cameraActive, icon: 'camera' },
-    { label: 'Micrófono', ok: microphoneActive, icon: 'mic' },
-    { label: 'Iluminación', ok: lightingOk, icon: 'sun', warn: cameraActive && !lightingOk },
-    { label: 'Calibración corporal', ok: calibrationDone, icon: 'person', progress: calibrating },
-    { label: 'Consentimiento', ok: consentOk, icon: 'shield' },
+    { label: tb.checkCamera, ok: cameraActive, icon: 'camera' },
+    { label: tb.checkMic, ok: microphoneActive, icon: 'mic' },
+    { label: tb.checkLighting, ok: lightingOk, icon: 'sun', warn: cameraActive && !lightingOk },
+    { label: tb.checkCalibration, ok: calibrationDone, icon: 'person', progress: calibrating },
+    { label: tb.checkConsent, ok: consentOk, icon: 'shield' },
   ];
   const doneCount = checks.filter((c) => c.ok).length;
 
@@ -379,7 +381,7 @@ export default function CheckTecnico() {
           <>
             {escenario && (
               <Button variant="secondary" size="sm" icon="file" onClick={() => setBriefOpen(true)}>
-                Ver escenario
+                {tb.viewScenario}
               </Button>
             )}
             {escenario && <Badge tone="outline" icon="layers">{escenario.title}</Badge>}
@@ -392,8 +394,8 @@ export default function CheckTecnico() {
       {!escenario && (
         <div className="mb-6 flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-ink">
           <Icon name="info" size={16} className="text-warning" />
-          <span className="flex-1">Aún no elegiste un escenario.</span>
-          <Button size="sm" variant="secondary" to="/vocero/escenarios">Elegir escenario</Button>
+          <span className="flex-1">{tb.noScenario}</span>
+          <Button size="sm" variant="secondary" to="/vocero/escenarios">{tb.chooseScenario}</Button>
         </div>
       )}
 
@@ -422,11 +424,11 @@ export default function CheckTecnico() {
                   <Icon name="camera" size={24} />
                 </span>
                 <div>
-                  <div className="text-white/80 text-sm font-medium">Cámara desactivada</div>
-                  <div className="text-white/40 text-xs mt-1">Actívala para ver la vista previa</div>
+                  <div className="text-white/80 text-sm font-medium">{tb.cameraOff}</div>
+                  <div className="text-white/40 text-xs mt-1">{tb.cameraOffHint}</div>
                 </div>
                 <Button variant="secondary" size="sm" icon="camera" onClick={activateCamera}>
-                  Activar cámara
+                  {tb.activateCamera}
                 </Button>
               </div>
             )}
@@ -436,11 +438,11 @@ export default function CheckTecnico() {
                 <div className="absolute top-3 left-3 flex items-center gap-2">
                   <div className="flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur px-3 h-7 text-white text-xs">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                    Cámara activa
+                    {tb.cameraActive}
                   </div>
                   <div className="flex items-center gap-1.5 rounded-full bg-black/50 backdrop-blur px-3 h-7 text-white text-xs">
                     <Icon name="sun" size={12} className={lightingOk ? 'text-emerald-400' : 'text-red-400'} />
-                    Luz {brightnessStatus.label.toLowerCase()}
+                    {tb.light(brightnessStatus.label.toLowerCase())}
                   </div>
                 </div>
                 {/* Guía de encuadre */}
@@ -453,15 +455,15 @@ export default function CheckTecnico() {
 
           <Card>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <Field label="Cámara">
+              <Field label={tb.fieldCamera}>
                 <div className="flex gap-2">
                   <select value={selectedCamera} onChange={(e) => setSelectedCamera(e.target.value)} className="input flex-1 min-w-0">
                     {cameras.length === 0 ? (
-                      <option value="">No se encontraron cámaras</option>
+                      <option value="">{tb.noCameras}</option>
                     ) : (
                       cameras.map((camera, index) => (
                         <option key={camera.deviceId || index} value={camera.deviceId}>
-                          {camera.label || `Cámara ${index + 1}`}
+                          {camera.label || tb.cameraN(index + 1)}
                         </option>
                       ))
                     )}
@@ -471,7 +473,7 @@ export default function CheckTecnico() {
                     size="icon"
                     onClick={activateCamera}
                     disabled={cameraActive}
-                    title={cameraActive ? 'Cámara activa' : 'Activar cámara'}
+                    title={cameraActive ? tb.cameraActive : tb.activateCamera}
                     className="h-10 w-10"
                   >
                     <Icon name={cameraActive ? 'check' : 'camera'} size={16} />
@@ -479,7 +481,7 @@ export default function CheckTecnico() {
                 </div>
               </Field>
 
-              <Field label="Micrófono">
+              <Field label={tb.fieldMic}>
                 <div className="flex gap-2">
                   <select
                     value={selectedMicrophone}
@@ -487,11 +489,11 @@ export default function CheckTecnico() {
                     className="input flex-1 min-w-0"
                   >
                     {microphones.length === 0 ? (
-                      <option value="">No se encontraron micrófonos</option>
+                      <option value="">{tb.noMics}</option>
                     ) : (
                       microphones.map((microphone, index) => (
                         <option key={microphone.deviceId || index} value={microphone.deviceId}>
-                          {microphone.label || `Micrófono ${index + 1}`}
+                          {microphone.label || tb.micN(index + 1)}
                         </option>
                       ))
                     )}
@@ -501,7 +503,7 @@ export default function CheckTecnico() {
                     size="icon"
                     onClick={activateMicrophone}
                     disabled={microphoneActive}
-                    title={microphoneActive ? 'Micrófono activo' : 'Activar micrófono'}
+                    title={microphoneActive ? tb.micActive : tb.activateMic}
                     className="h-10 w-10"
                   >
                     <Icon name={microphoneActive ? 'check' : 'mic'} size={16} />
@@ -513,7 +515,7 @@ export default function CheckTecnico() {
             {/* Nivel del micrófono */}
             <div className="mt-6">
               <div className="flex justify-between text-xs text-muted mb-2">
-                <span>Nivel del micrófono</span>
+                <span>{tb.micLevel}</span>
                 <span className="tabular-nums">{microphoneActive ? `${Math.round(microphoneLevel)}%` : '—'}</span>
               </div>
               <div className="flex items-end gap-[3px] h-8">
@@ -532,7 +534,7 @@ export default function CheckTecnico() {
             {/* Iluminación */}
             <div className="mt-6">
               <div className="flex items-center justify-between text-xs text-muted mb-2">
-                <span>Iluminación</span>
+                <span>{tb.lighting}</span>
                 {cameraActive ? (
                   <Badge tone={brightnessStatus.tone}>{brightnessStatus.label}</Badge>
                 ) : (
@@ -551,14 +553,14 @@ export default function CheckTecnico() {
                 ))}
               </div>
               <div className="grid grid-cols-3 text-[11px] text-faint mt-1.5">
-                <span>Mala</span>
-                <span className="text-center">Buena</span>
-                <span className="text-right">Excelente</span>
+                <span>{tb.lightBad}</span>
+                <span className="text-center">{tb.lightGood}</span>
+                <span className="text-right">{tb.lightExcellent}</span>
               </div>
               {cameraActive && !lightingOk && (
                 <p className="flex items-start gap-1.5 text-xs text-danger mt-3 leading-relaxed">
                   <Icon name="sun" size={13} className="mt-0.5" />
-                  Tu rostro se ve muy oscuro. Busca una fuente de luz frente a ti, no detrás.
+                  {tb.darkWarning}
                 </p>
               )}
             </div>
@@ -567,16 +569,16 @@ export default function CheckTecnico() {
             <div className="mt-6 pt-6 border-t border-line flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-ink">Calibración corporal</span>
+                  <span className="text-sm font-medium text-ink">{tb.calibration}</span>
                   <span className="text-xs text-muted tabular-nums">
-                    {calibrating ? `${Math.round(calibrationProgress * 100)}%` : calibrationDone ? 'Completada' : 'Pendiente'}
+                    {calibrating ? `${Math.round(calibrationProgress * 100)}%` : calibrationDone ? tb.completed : tb.pending}
                   </span>
                 </div>
                 <Progress value={calibrationProgress * 100} tone={calibrationDone ? 'success' : 'accent'} />
-                <p className="text-xs text-faint mt-2">Durante la calibración permanece quieto frente a la cámara.</p>
+                <p className="text-xs text-faint mt-2">{tb.calibrationHint}</p>
               </div>
               <Button variant="secondary" icon="person" onClick={startCalibration} disabled={!cameraActive || calibrating}>
-                {calibrating ? 'Calibrando…' : 'Iniciar calibración'}
+                {calibrating ? tb.calibrating : tb.startCalibration}
               </Button>
             </div>
           </Card>
@@ -586,9 +588,9 @@ export default function CheckTecnico() {
         <div className="space-y-6">
           <Card>
             <div className="flex items-center justify-between mb-4">
-              <span className="eyebrow">Estado</span>
+              <span className="eyebrow">{tb.status}</span>
               <span className="text-xs text-muted tabular-nums">
-                {doneCount} de {checks.length}
+                {tb.statusOf(doneCount, checks.length)}
               </span>
             </div>
             <ul className="space-y-3">
@@ -604,7 +606,7 @@ export default function CheckTecnico() {
                   </span>
                   <span className={cx('text-sm flex-1', c.ok ? 'text-ink' : 'text-muted')}>{c.label}</span>
                   <span className={cx('text-xs', c.warn ? 'text-danger' : 'text-faint')}>
-                    {c.ok ? 'Listo' : c.warn ? 'Insuficiente' : c.progress ? 'En curso' : 'Pendiente'}
+                    {c.ok ? tb.ready : c.warn ? tb.insufficient : c.progress ? tb.inProgress : tb.pending}
                   </span>
                 </li>
               ))}

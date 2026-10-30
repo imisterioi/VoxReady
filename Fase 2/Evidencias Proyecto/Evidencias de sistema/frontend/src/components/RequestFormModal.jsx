@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { useI18n } from '../lib/i18n';
 import { Button, Field, Modal } from './ui';
 import { displayEmail } from '../lib/displayEmail';
 import {
   MAX_DAYS,
-  REQUEST_TYPES,
   buildRequestPayload,
   emptyRequestForm,
-  requestType,
+  localizedRequestType,
+  requestTypes,
   suggestedExtensionDays,
   switchRequestType,
   validateRequestForm,
@@ -27,8 +28,11 @@ export default function RequestFormModal({
   pendingExtension = null,
   saving = false,
 }) {
+  const { d } = useI18n();
+  const t = d.L.req.form;
+  const types = requestTypes(d);
   const [form, setForm] = useState(() => emptyRequestForm());
-  const type = requestType(form.type) || REQUEST_TYPES[0];
+  const type = localizedRequestType(form.type, d) || types[0];
   const set = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
 
   // Al cambiar de tipo se parte de un formulario limpio del nuevo tipo.
@@ -41,9 +45,9 @@ export default function RequestFormModal({
   const extensionBlocked = type.kind === 'retention' && Boolean(pendingExtension);
 
   const submit = () => {
-    const validation = validateRequestForm(form, { currentDays });
+    const validation = validateRequestForm(form, { currentDays, d });
     if (!validation.ok) return toast.error(validation.error);
-    const payload = buildRequestPayload(form, { currentDays });
+    const payload = buildRequestPayload(form, { currentDays, d });
     if (payload) onSubmit?.(payload);
   };
 
@@ -51,23 +55,23 @@ export default function RequestFormModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="Nueva solicitud"
-      description={`${type.description} La resolución la realiza el equipo VoxReady.`}
+      title={t.newTitle}
+      description={`${type.description} ${t.resolvedByTeam}`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={saving}>
-            Cancelar
+            {t.cancel}
           </Button>
           <Button icon="check" onClick={submit} disabled={saving || extensionBlocked}>
-            {saving ? 'Enviando…' : 'Crear solicitud'}
+            {saving ? t.sending : t.create}
           </Button>
         </>
       }
     >
       <div className="space-y-5">
-        <Field label="Tipo de solicitud" hint="Según el tipo verás solo los campos que necesita.">
+        <Field label={t.typeL} hint={t.typeHint}>
           <select className="input" value={form.type} onChange={(event) => changeType(event.target.value)}>
-            {REQUEST_TYPES.map((option) => (
+            {types.map((option) => (
               <option key={option.value} value={option.value}>
                 {option.label}
               </option>
@@ -77,9 +81,9 @@ export default function RequestFormModal({
 
         {type.kind === 'privacy' ? (
           <>
-            <Field label="Vocero" hint="Solo voceros de tu organización.">
+            <Field label={t.voceroL} hint={t.voceroHint}>
               <select className="input" value={form.targetUserId} onChange={set('targetUserId')}>
-                <option value="">Selecciona un vocero…</option>
+                <option value="">{t.selectVocero}</option>
                 {voceros.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name} · {displayEmail(v)}
@@ -87,24 +91,24 @@ export default function RequestFormModal({
                 ))}
               </select>
             </Field>
-            <Field label="Motivo" hint="Opcional. Queda registrado en la solicitud.">
+            <Field label={t.reasonL} hint={t.reasonHint}>
               <textarea
                 className="textarea min-h-[80px]"
                 value={form.reason}
                 onChange={set('reason')}
-                placeholder="Ej. Solicitud del titular por derecho al olvido."
+                placeholder={t.reasonPh}
               />
             </Field>
           </>
         ) : (
           <>
             <div className="rounded-xl bg-subtle/60 px-4 py-3">
-              <div className="text-[11px] text-muted">Plazo vigente</div>
-              <div className="text-sm font-medium text-ink mt-0.5">{currentDays} días</div>
+              <div className="text-[11px] text-muted">{t.currentPeriod}</div>
+              <div className="text-sm font-medium text-ink mt-0.5">{t.days(currentDays)}</div>
             </div>
             <Field
-              label="Plazo solicitado (días)"
-              hint={`Debe ser mayor que el plazo vigente. Máximo ${MAX_DAYS} días.`}
+              label={t.requestedDaysL}
+              hint={t.requestedDaysHint(MAX_DAYS)}
             >
               <input
                 type="number"
@@ -115,21 +119,20 @@ export default function RequestFormModal({
                 onChange={set('requestedDays')}
               />
             </Field>
-            <Field label="Motivo" hint="Opcional, pero ayuda a justificar la extensión.">
+            <Field label={t.reasonL} hint={t.reasonExtensionHint}>
               <textarea
                 className="textarea min-h-[80px]"
                 value={form.reason}
                 onChange={set('reason')}
-                placeholder="Ej. Necesitamos conservar las grabaciones para una auditoría interna."
+                placeholder={t.extensionPh}
               />
             </Field>
             <p className="text-xs text-muted leading-relaxed">
-              Al aprobarse, la extensión se aplica de inmediato: los datos existentes quedan protegidos y la
-              retención no los borrará hasta que se cumpla el nuevo plazo.
+              {t.extensionNote}
             </p>
             {extensionBlocked && (
               <p className="text-xs text-danger leading-relaxed">
-                Ya tienes una solicitud de extensión pendiente: espera su resolución antes de pedir otra.
+                {t.extensionBlocked}
               </p>
             )}
           </>

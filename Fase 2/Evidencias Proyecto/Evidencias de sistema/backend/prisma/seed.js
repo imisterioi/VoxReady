@@ -4,6 +4,7 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 require('dotenv').config();
 const { seedDemo, seedMetricsDemo } = require('./seed-demo');
 const { LIBRARY_SCENARIOS } = require('./library-scenarios');
+const { LIBRARY_SCENARIOS_EN } = require('./library-scenarios.en');
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL,
@@ -20,10 +21,13 @@ async function main() {
     where: {
       id: '00000000-0000-0000-0000-000000000001',
     },
-    update: {},
+    update: { defaultLanguage: 'es', sector: 'Retail', status: 'ACTIVE' },
     create: {
       id: '00000000-0000-0000-0000-000000000001',
       name: 'Empresa Demo',
+      sector: 'Retail',
+      status: 'ACTIVE',
+      defaultLanguage: 'es',
     },
   });
 
@@ -32,15 +36,19 @@ async function main() {
       email: 'vocero@demo.com',
     },
     update: {
-      name: 'Vocero Demo',
+      name: 'Ana Torres',
       role: 'VOCERO',
       tenantId: tenant.id,
+      area: 'Dirección',
+      language: 'es',
     },
     create: {
-      name: 'Vocero Demo',
+      name: 'Ana Torres',
       email: 'vocero@demo.com',
       role: 'VOCERO',
       tenantId: tenant.id,
+      area: 'Dirección',
+      language: 'es',
     },
   });
 
@@ -49,15 +57,17 @@ async function main() {
       email: 'admin@demo.com',
     },
     update: {
-      name: 'Administrador Demo',
+      name: 'Carlos Ruiz',
       role: 'ADMIN',
       tenantId: tenant.id,
+      language: 'es',
     },
     create: {
-      name: 'Administrador Demo',
+      name: 'Carlos Ruiz',
       email: 'admin@demo.com',
       role: 'ADMIN',
       tenantId: tenant.id,
+      language: 'es',
     },
   });
 
@@ -106,41 +116,21 @@ async function main() {
 
   const scenarios = [];
 
+  // Escenarios personalizados del vocero: contenido en español con `language` EXPLÍCITO (no se
+  // depende del valor por defecto del esquema). `upsert` por (tenantId, title) → idempotente.
   for (const data of scenarioData) {
-    const existingScenario = await prisma.theme.findFirst({
-      where: {
-        title: data.title,
-        tenantId: tenant.id,
-      },
-      select: {
-        id: true,
-      },
+    const payload = {
+      context: data.context,
+      keyMessages: data.keyMessages,
+      category: data.category,
+      language: 'es',
+    };
+
+    const scenario = await prisma.theme.upsert({
+      where: { tenantId_title: { tenantId: tenant.id, title: data.title } },
+      update: payload,
+      create: { ...payload, title: data.title, tenantId: tenant.id },
     });
-
-    let scenario;
-
-    if (existingScenario) {
-      scenario = await prisma.theme.update({
-        where: {
-          id: existingScenario.id,
-        },
-        data: {
-          context: data.context,
-          keyMessages: data.keyMessages,
-          category: data.category,
-        },
-      });
-    } else {
-      scenario = await prisma.theme.create({
-        data: {
-          title: data.title,
-          context: data.context,
-          keyMessages: data.keyMessages,
-          category: data.category,
-          tenantId: tenant.id,
-        },
-      });
-    }
 
     scenarios.push(scenario);
   }
@@ -164,24 +154,36 @@ async function main() {
   // Cuentas con contraseña, segunda organización y escenario de prueba integral
   await seedDemo(prisma, { tenant, scenarios });
 
-  // Biblioteca de escenarios generales (sin organización, visibles para todos los voceros)
-  for (const s of LIBRARY_SCENARIOS) {
-    const data = {
-      context: s.context,
-      category: s.category,
-      optic: s.optic,
-      keyMessages: JSON.stringify(s.keyMessages),
-      redLines: JSON.stringify(s.redLines),
-      publics: JSON.stringify([]),
-      isGlobal: true,
-      tenantId: null,
-      deletedAt: null,
-    };
-    const existing = await prisma.theme.findFirst({ where: { isGlobal: true, title: s.title }, select: { id: true } });
-    if (existing) await prisma.theme.update({ where: { id: existing.id }, data });
-    else await prisma.theme.create({ data: { ...data, title: s.title } });
+  // Biblioteca de escenarios generales: un catálogo INDEPENDIENTE por idioma (no se traducen
+  // entre sí). Cada escenario queda marcado con el idioma de su catálogo.
+  const catalogs = [
+    { language: 'es', scenarios: LIBRARY_SCENARIOS },
+    { language: 'en', scenarios: LIBRARY_SCENARIOS_EN },
+  ];
+  let libraryTotal = 0;
+  for (const { language, scenarios } of catalogs) {
+    for (const s of scenarios) {
+      const data = {
+        context: s.context,
+        category: s.category,
+        optic: s.optic,
+        keyMessages: JSON.stringify(s.keyMessages),
+        redLines: JSON.stringify(s.redLines),
+        publics: JSON.stringify([]),
+        isGlobal: true,
+        tenantId: null,
+        deletedAt: null,
+        language,
+      };
+      const existing = await prisma.theme.findFirst({ where: { isGlobal: true, title: s.title, language }, select: { id: true } });
+      if (existing) await prisma.theme.update({ where: { id: existing.id }, data });
+      else await prisma.theme.create({ data: { ...data, title: s.title } });
+      libraryTotal += 1;
+    }
   }
-  console.log(`Escenarios generales: ${LIBRARY_SCENARIOS.length}`);
+  console.log(
+    `Escenarios generales: ${libraryTotal} (español: ${LIBRARY_SCENARIOS.length}, inglés: ${LIBRARY_SCENARIOS_EN.length})`,
+  );
 
   // Datos demo para las métricas administrativas (organizaciones, usuarios, temas, asignaciones y sesiones)
   const demoCounts = await seedMetricsDemo(prisma);

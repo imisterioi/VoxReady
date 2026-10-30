@@ -1,8 +1,7 @@
 import Icon from './Icon';
 import { Badge, Button, Modal } from './ui';
+import { useI18n } from '../lib/i18n';
 import { InterviewSummary } from './InterviewConfig';
-
-const CATEGORY = { CRISIS: 'Crisis', MEDIOS: 'Medios', INSTITUCIONAL: 'Institucional', GENERAL: 'General' };
 
 // Los temas guardan listas como JSON (editor de temas) o texto plano (seed antiguo)
 export function parseList(value) {
@@ -18,6 +17,7 @@ export function parseList(value) {
 }
 
 function BriefContent({ scenario, compact = false }) {
+  const { d } = useI18n();
   const keyMessages = parseList(scenario.keyMessages);
   const redLines = parseList(scenario.redLines);
 
@@ -25,8 +25,8 @@ function BriefContent({ scenario, compact = false }) {
     <div className="space-y-6">
       <div>
         <div className="flex flex-wrap items-center gap-2 mb-2">
-          <Badge tone="accent">{CATEGORY[scenario.category] || scenario.category || 'Escenario'}</Badge>
-          {scenario.optic && <Badge tone="outline">Óptica {scenario.optic.toLowerCase()}</Badge>}
+          <Badge tone="accent">{d.ui.brief.category[scenario.category] || scenario.category || d.ui.brief.scenario}</Badge>
+          {scenario.optic && <Badge tone="outline">{d.ui.brief.optic(scenario.optic.toLowerCase())}</Badge>}
           <InterviewSummary interview={scenario.interview} className="contents" />
         </div>
         {!compact && <h2 className="font-display text-[22px] font-semibold tracking-[-0.02em] text-ink">{scenario.title}</h2>}
@@ -37,7 +37,7 @@ function BriefContent({ scenario, compact = false }) {
         <div className="rounded-xl border border-success/25 bg-success/[0.04] p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink mb-3">
             <Icon name="check" size={15} strokeWidth={2.5} className="text-success" />
-            Mensajes clave que debes sostener
+            {d.ui.brief.keyMessages}
           </div>
           <ul className="space-y-2">
             {keyMessages.map((m) => (
@@ -46,14 +46,14 @@ function BriefContent({ scenario, compact = false }) {
                 {m}
               </li>
             ))}
-            {!keyMessages.length && <li className="text-[13px] text-muted">Sin mensajes definidos.</li>}
+            {!keyMessages.length && <li className="text-[13px] text-muted">{d.ui.brief.noKeyMessages}</li>}
           </ul>
         </div>
 
         <div className="rounded-xl border border-danger/25 bg-danger/[0.04] p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-ink mb-3">
             <Icon name="alert" size={15} className="text-danger" />
-            Líneas rojas (nunca decir)
+            {d.ui.brief.redLines}
           </div>
           <ul className="space-y-2">
             {redLines.map((m) => (
@@ -62,7 +62,7 @@ function BriefContent({ scenario, compact = false }) {
                 {m}
               </li>
             ))}
-            {!redLines.length && <li className="text-[13px] text-muted">Sin líneas rojas definidas.</li>}
+            {!redLines.length && <li className="text-[13px] text-muted">{d.ui.brief.noRedLines}</li>}
           </ul>
         </div>
       </div>
@@ -72,6 +72,7 @@ function BriefContent({ scenario, compact = false }) {
 
 // Ventana emergente con el escenario (se abre al entrar a la preparación)
 export function ScenarioBriefModal({ scenario, open, onClose }) {
+  const { d } = useI18n();
   if (!scenario) return null;
   return (
     <Modal
@@ -79,10 +80,10 @@ export function ScenarioBriefModal({ scenario, open, onClose }) {
       onClose={onClose}
       width="max-w-2xl"
       title={scenario.title}
-      description="Lee el escenario antes de preparar tu cámara y micrófono."
+      description={d.ui.brief.modalDescription}
       footer={
         <Button onClick={onClose} iconRight="arrowRight">
-          Entendido, preparar equipo
+          {d.ui.brief.understood}
         </Button>
       }
     >

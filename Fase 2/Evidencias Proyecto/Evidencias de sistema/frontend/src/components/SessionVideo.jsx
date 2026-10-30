@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Icon from './Icon';
 import { cx } from './ui';
 import { API_URL, getToken } from '../lib/api';
+import { useI18n } from '../lib/i18n';
 import { sessionVideoUrl } from '../lib/practice/sessionVideo';
 
 // Reproductor de la grabación de una sesión (GET /api/sessions/:id/video).
@@ -12,6 +13,7 @@ import { sessionVideoUrl } from '../lib/practice/sessionVideo';
 // se fuerza el cálculo saltando al final y volviendo al inicio, así la barra
 // de avance funciona.
 export default function SessionVideo({ sessionId, className }) {
+  const { d } = useI18n();
   const [failed, setFailed] = useState(false);
   const src = sessionVideoUrl(sessionId, { apiUrl: API_URL, token: getToken() });
 
@@ -36,8 +38,8 @@ export default function SessionVideo({ sessionId, className }) {
     return (
       <div className={cx('aspect-video bg-subtle/60 flex flex-col items-center justify-center gap-2 text-center px-6', className)}>
         <Icon name="video" size={24} className="text-faint" />
-        <p className="text-sm text-muted">No hay grabación disponible.</p>
-        <p className="text-xs text-faint">Pudo no haberse subido, o se eliminó según la política de retención de la organización.</p>
+        <p className="text-sm text-muted">{d.ui.video.unavailable}</p>
+        <p className="text-xs text-faint">{d.ui.video.unavailableHint}</p>
       </div>
     );
   }

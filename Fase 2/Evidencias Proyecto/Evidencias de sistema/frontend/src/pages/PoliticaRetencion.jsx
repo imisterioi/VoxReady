@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import { Button, Card, CardHeader, EmptyState, Modal, PageHeader, Radio, Segmented } from '../components/ui';
 import RequestsPanel from '../components/RequestsPanel';
@@ -13,31 +13,28 @@ import useApiData from '../hooks/useApiData';
 import { formatDate } from '../data/directory';
 
 const PRESETS = [
-  { value: '30', label: '30 días' },
-  { value: '90', label: '90 días' },
-  { value: '180', label: '180 días' },
-  { value: 'custom', label: 'Personalizado' },
+  { value: '30', labelKey: 'preset30' },
+  { value: '90', labelKey: 'preset90' },
+  { value: '180', labelKey: 'preset180' },
+  { value: 'custom', labelKey: 'presetCustom' },
 ];
 
-// Cómo se lee cada modo de conservación para el administrador del cliente.
-const MODE_LABELS = {
-  FULL: 'Video, audio y métricas',
-  METRICS: 'Solo métricas derivadas',
-};
+// Cómo se lee cada modo de conservación para el administrador del cliente (el valor no se traduce).
+const MODE_LABEL_KEYS = { FULL: 'modeFull', METRICS: 'modeMetrics' };
 
-// Estados de una solicitud de privacidad
+// Estados de una solicitud de privacidad (el código interno no se traduce).
 const REQ_STATUS = {
-  PENDING: { label: 'Pendiente', tone: 'warning' },
-  APPROVED: { label: 'Aprobada', tone: 'accent' },
-  REJECTED: { label: 'Rechazada', tone: 'danger' },
-  COMPLETED: { label: 'Completada', tone: 'success' },
+  PENDING: 'warning',
+  APPROVED: 'accent',
+  REJECTED: 'danger',
+  COMPLETED: 'success',
 };
 
 // Estados de una solicitud de extensión del plazo
 const EXT_STATUS = {
-  PENDING: { label: 'Pendiente de revisión', tone: 'warning' },
-  APPROVED: { label: 'Aprobada y aplicada', tone: 'success' },
-  REJECTED: { label: 'Rechazada', tone: 'danger' },
+  PENDING: 'warning',
+  APPROVED: 'success',
+  REJECTED: 'danger',
 };
 
 // Política de retención de la organización (GET/PUT /api/tenant/settings).
@@ -49,7 +46,13 @@ const EXT_STATUS = {
 // - Para conservar más tiempo los datos que ya existen se crea una SOLICITUD DE EXTENSIÓN, que
 //   resuelve únicamente el equipo VoxReady (administrador del sistema).
 export default function PoliticaRetencion() {
-  const t = I.es.L.a3;
+  const { d, lang } = useI18n();
+  const t = d.L.a3;
+  const p = d.L.privacy;
+  // Etiqueta visible de un modo de conservación y de un estado (los códigos no se traducen).
+  const modeLabel = (value) => (value ? t[MODE_LABEL_KEYS[value]] || value : value);
+  const reqStatus = (status) => ({ tone: REQ_STATUS[status] || 'neutral', label: p.privacyStatus[status] || status });
+  const extStatus = (status) => ({ tone: EXT_STATUS[status] || 'neutral', label: p.extensionStatus[status] || status });
   const settings = useApiData('/api/tenant/settings');
   const practices = useApiData('/api/practices');
 
@@ -98,8 +101,8 @@ export default function PoliticaRetencion() {
   const effectiveAt = plan?.periodEndsAt ? new Date(plan.periodEndsAt) : new Date();
 
   const openConfirm = () => {
-    if (!dirty) return toast('El plan seleccionado ya es el vigente.');
-    if (!Number.isFinite(days) || days < 1 || days > MAX_DAYS) return toast.error(`El plazo debe estar entre 1 y ${MAX_DAYS} días.`);
+    if (!dirty) return toast(t.planAlreadyCurrent);
+    if (!Number.isFinite(days) || days < 1 || days > MAX_DAYS) return toast.error(t.termRangeError(MAX_DAYS));
     setConfirmOpen(true);
   };
 
@@ -107,9 +110,9 @@ export default function PoliticaRetencion() {
     try {
       setSaving(true);
       const result = await apiFetch('/api/tenant/settings', { method: 'PUT', body: { retentionMode: mode, retentionDays: days } });
-      if (result?.applied === 'now') toast.success('Plan actualizado');
-      else if (result?.applied === 'none') toast.success('El plan vigente ya era ese: se canceló el cambio programado');
-      else toast.success(`Cambio programado para el ${formatDate(result?.effectiveAt)}`);
+      if (result?.applied === 'now') toast.success(t.planUpdated);
+      else if (result?.applied === 'none') toast.success(t.planCancelled);
+      else toast.success(t.changeScheduledFor(formatDate(result?.effectiveAt, lang)));
       setConfirmOpen(false);
       settings.reload();
       practices.reload();
@@ -126,7 +129,7 @@ export default function PoliticaRetencion() {
     try {
       setSavingRequest(true);
       await apiFetch(payload.endpoint, { method: 'POST', body: payload.body });
-      toast.success('Solicitud creada');
+      toast.success(t.requestCreated);
       setCreating(false);
       // Se refrescan las dos listas: la solicitud nueva puede ser de cualquiera de los dos tipos.
       requests.reload();
@@ -148,39 +151,39 @@ export default function PoliticaRetencion() {
       }).map((entry) => {
         const r = entry.request;
         if (entry.kind === 'privacy') {
-          const status = REQ_STATUS[r.status] || { label: r.status, tone: 'neutral' };
+          const status = reqStatus(r.status);
           return {
             key: `privacy-${r.id}`,
             kind: 'privacy',
             raw: r,
-            title: r.scope === 'ANONYMIZE' ? 'Anonimización completa' : 'Borrado de grabaciones',
+            title: r.scope === 'ANONYMIZE' ? p.scopeAnonymize : p.scopeRecordings,
             subtitle: [
-              r.targetUser ? `${r.targetUser.name} · ${displayEmail(r.targetUser)}` : 'Organización completa',
-              r.reason || 'Sin motivo indicado',
-              formatDate(r.createdAt),
+              r.targetUser ? `${r.targetUser.name} · ${displayEmail(r.targetUser)}` : p.wholeOrg,
+              r.reason || p.noReason,
+              formatDate(r.createdAt, lang),
             ].join(' · '),
             meta: r.resolvedAt
-              ? `Resuelta el ${formatDate(r.resolvedAt)}${r.resolvedBy?.name ? ` por ${r.resolvedBy.name}` : ''}`
-              : 'Pendiente: la revisa el equipo VoxReady',
+              ? p.resolvedOn(formatDate(r.resolvedAt, lang), r.resolvedBy?.name)
+              : p.pendingReview,
             status,
-            actionLabel: 'Ver',
+            actionLabel: p.view,
           };
         }
-        const status = EXT_STATUS[r.status] || { label: r.status, tone: 'neutral' };
+        const status = extStatus(r.status);
         return {
           key: `retention-${r.id}`,
           kind: 'retention',
           raw: r,
-          title: `Extensión a ${r.requestedDays} días (vigente: ${r.currentDays})`,
-          subtitle: [r.reason || 'Sin motivo indicado', formatDate(r.createdAt)].join(' · '),
+          title: p.extensionRow(r.requestedDays, r.currentDays),
+          subtitle: [r.reason || p.noReason, formatDate(r.createdAt, lang)].join(' · '),
           meta: r.resolvedAt
-            ? `Resuelta el ${formatDate(r.resolvedAt)}${r.resolvedBy?.name ? ` por ${r.resolvedBy.name}` : ''}`
-            : 'Pendiente: la revisa el equipo VoxReady',
+            ? p.resolvedOn(formatDate(r.resolvedAt, lang), r.resolvedBy?.name)
+            : p.pendingReview,
           status,
-          actionLabel: 'Ver',
+          actionLabel: p.view,
         };
       }),
-    [requests.data, extensions.data],
+    [requests.data, extensions.data, lang],
   );
 
   // Abrir la ventana de detalle de la solicitud seleccionada (privacidad o extensión).
@@ -192,7 +195,7 @@ export default function PoliticaRetencion() {
   if (settings.loading && !settings.data) {
     return (
       <Card>
-        <EmptyState icon="refresh" title="Cargando política…" />
+        <EmptyState icon="refresh" title={t.loadingL} />
       </Card>
     );
   }
@@ -206,7 +209,7 @@ export default function PoliticaRetencion() {
         description={t.sub}
         actions={
           <Button icon="check" onClick={openConfirm} disabled={saving || !dirty}>
-            {saving ? 'Guardando…' : 'Solicitar cambio'}
+            {saving ? t.savingL : t.requestChange}
           </Button>
         }
       />
@@ -223,7 +226,11 @@ export default function PoliticaRetencion() {
 
           <Card>
             <CardHeader title={t.termL} />
-            <Segmented options={PRESETS} value={preset} onChange={setPreset} />
+            <Segmented
+              options={PRESETS.map((pr) => ({ value: pr.value, label: t[pr.labelKey] }))}
+              value={preset}
+              onChange={setPreset}
+            />
             {preset === 'custom' && (
               <div className="mt-4 flex items-center gap-3">
                 <input
@@ -234,74 +241,72 @@ export default function PoliticaRetencion() {
                   value={customDays}
                   onChange={(e) => setCustomDays(e.target.value)}
                 />
-                <span className="text-sm text-muted">días</span>
+                <span className="text-sm text-muted">{t.daysL}</span>
               </div>
             )}
             <p className="flex items-start gap-2 text-[13px] text-muted mt-4 leading-relaxed">
               <Icon name="info" size={15} className="mt-0.5 text-faint" />
-              {t.termLeg} Los informes y métricas se conservan; solo se borran los videos.
+              {t.termLeg} {t.reportsKept}
             </p>
             <p className="flex items-start gap-2 text-[13px] text-muted mt-2 leading-relaxed">
               <Icon name="clock" size={15} className="mt-0.5 text-faint" />
-              Los cambios de plan no afectan a las sesiones que ya están bajo el plan vigente: se aplican al
-              terminar el periodo actual.
+              {t.planChangesNote}
             </p>
           </Card>
         </div>
 
         <div className="space-y-6 h-fit">
           <Card>
-            <CardHeader title="Política actual" description="Se aplica a las sesiones que se realizan hoy." />
+            <CardHeader title={t.currentPolicyTitle} description={t.currentPolicyDesc} />
             <div className="space-y-3">
-              <PlanRow label="Qué se conserva" value={MODE_LABELS[currentMode] || currentMode} />
-              <PlanRow label="Plazo de conservación" value={`${currentDays} días`} />
+              <PlanRow label={t.keepsL} value={modeLabel(currentMode)} />
+              <PlanRow label={t.termChangeL} value={t.daysL(currentDays)} />
               <PlanRow
-                label="Próxima eliminación automática"
-                value={plan?.nextPurgeAt ? formatDate(plan.nextPurgeAt) : 'No hay datos dentro del plazo'}
+                label={t.nextPurgeL}
+                value={plan?.nextPurgeAt ? formatDate(plan.nextPurgeAt, lang) : t.noDataInTerm}
               />
               <PlanRow
-                label="Fin del periodo actual"
-                value={plan?.periodEndsAt ? formatDate(plan.periodEndsAt) : 'Sin datos bajo el plan vigente'}
-                hint="Cuando termine este periodo se aplicará el cambio de plan solicitado."
+                label={t.periodEndL}
+                value={plan?.periodEndsAt ? formatDate(plan.periodEndsAt, lang) : t.noDataUnderPlan}
+                hint={t.periodEndHint}
               />
               <PlanRow
-                label="Sesiones registradas"
-                value={`${plan?.sessions ?? 0}${plan?.expiredSessions ? ` · ${plan.expiredSessions} ya vencidas` : ''}`}
+                label={t.sessionsL}
+                value={`${plan?.sessions ?? 0}${plan?.expiredSessions ? ` · ${t.alreadyExpired(plan.expiredSessions)}` : ''}`}
               />
             </div>
 
             {pendingChange && (
               <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3">
-                <div className="text-xs font-medium text-accent-fg">Cambio de plan programado</div>
+                <div className="text-xs font-medium text-accent-fg">{t.scheduledChange}</div>
                 <div className="text-sm text-ink mt-1">
-                  {MODE_LABELS[pendingChange.mode] || pendingChange.mode} · {pendingChange.days} días
+                  {modeLabel(pendingChange.mode)} · {t.daysL(pendingChange.days)}
                 </div>
                 <div className="text-xs text-muted mt-1">
-                  Se aplicará el {pendingChange.effectiveAt ? formatDate(pendingChange.effectiveAt) : '—'}. Hasta
-                  entonces continúa vigente el plan actual.
+                  {t.willApplyOn(pendingChange.effectiveAt ? formatDate(pendingChange.effectiveAt, lang) : '—')}
                 </div>
               </div>
             )}
           </Card>
 
           <Card>
-            <CardHeader title="Grabaciones de tu organización" />
+            <CardHeader title={t.recordingsTitle} />
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-xl bg-subtle/60 px-4 py-3">
-                <div className="text-xs text-muted">Prácticas evaluadas</div>
+                <div className="text-xs text-muted">{t.evaluatedL}</div>
                 <div className="text-2xl font-semibold tabular-nums text-ink mt-1">{list.length}</div>
               </div>
               <div className="rounded-xl bg-subtle/60 px-4 py-3">
-                <div className="text-xs text-muted">Con video guardado</div>
+                <div className="text-xs text-muted">{t.withVideoL}</div>
                 <div className="text-2xl font-semibold tabular-nums text-ink mt-1">{withVideo}</div>
               </div>
             </div>
             <div className="mt-6 rounded-xl bg-subtle/60 p-4 flex gap-3">
               <Icon name="shield" size={18} className="text-muted mt-0.5" />
               <p className="text-xs text-muted leading-relaxed">
-                Se conserva <b className="text-ink font-medium">{MODE_LABELS[currentMode]?.toLowerCase()}</b> durante{' '}
-                <b className="text-ink font-medium">{currentDays} días</b>. El sistema revisa y aplica esta política
-                automáticamente.
+                {t.keepsL} <b className="text-ink font-medium">{modeLabel(currentMode).toLowerCase()}</b>{' '}
+                <b className="text-ink font-medium">{t.daysL(currentDays)}</b>
+                {t.keptSummaryTail}
               </p>
             </div>
           </Card>
@@ -313,11 +318,11 @@ export default function PoliticaRetencion() {
           administrador de la organización las crea y sigue su estado; resolverlas corresponde
           únicamente al administrador del sistema. */}
       <RequestsPanel
-        title="Solicitudes"
-        description="Solicitudes de privacidad (borrado o anonimización de un vocero) y de extensión del plazo de conservación, en una sola lista. Puedes crearlas y seguir su estado; la resolución la realiza el equipo VoxReady."
+        title={t.requestsTitle}
+        description={t.requestsDesc}
         actions={
           <Button icon="plus" onClick={() => setCreating(true)}>
-            Nueva solicitud
+            {t.newRequest}
           </Button>
         }
         items={requestItems}
@@ -326,9 +331,9 @@ export default function PoliticaRetencion() {
         onOpen={openRequestDetail}
         loading={requests.loading || extensions.loading}
         error={requests.error || extensions.error}
-        emptyTitle="Sin solicitudes"
-        emptyDescription="Puedes pedir el borrado o la anonimización de un vocero, o una extensión del plazo de conservación."
-        note="Solo el administrador del sistema (equipo VoxReady) puede aprobar, rechazar o completar estas solicitudes; tú puedes crearlas y consultar su estado."
+        emptyTitle={t.requestsEmptyTitle}
+        emptyDescription={t.requestsEmptyDesc}
+        note={t.requestsNote}
       />
 
 
@@ -336,15 +341,15 @@ export default function PoliticaRetencion() {
       <Modal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
-        title="Confirmar cambio de plan de retención"
-        description="Revisa el cambio antes de solicitarlo."
+        title={t.confirmTitle}
+        description={t.confirmDesc}
         footer={
           <>
             <Button variant="ghost" onClick={() => setConfirmOpen(false)} disabled={saving}>
-              Cancelar
+              {t.cancel}
             </Button>
             <Button icon="check" onClick={applyPlan} disabled={saving}>
-              {saving ? 'Aplicando…' : 'Aplicar'}
+              {saving ? t.applying : t.apply}
             </Button>
           </>
         }
@@ -352,30 +357,29 @@ export default function PoliticaRetencion() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="rounded-xl border border-line p-4">
-              <div className="text-xs text-muted">Plan actual</div>
-              <div className="text-sm font-medium text-ink mt-1">{MODE_LABELS[currentMode] || currentMode}</div>
-              <div className="text-xs text-muted mt-1">{currentDays} días</div>
+              <div className="text-xs text-muted">{t.currentPlanL}</div>
+              <div className="text-sm font-medium text-ink mt-1">{modeLabel(currentMode)}</div>
+              <div className="text-xs text-muted mt-1">{t.daysL(currentDays)}</div>
             </div>
             <div className="rounded-xl border border-accent/40 bg-accent-soft p-4">
-              <div className="text-xs text-muted">Plan nuevo</div>
-              <div className="text-sm font-medium text-ink mt-1">{MODE_LABELS[mode] || mode}</div>
-              <div className="text-xs text-muted mt-1">{days} días</div>
+              <div className="text-xs text-muted">{t.newPlanL}</div>
+              <div className="text-sm font-medium text-ink mt-1">{modeLabel(mode)}</div>
+              <div className="text-xs text-muted mt-1">{t.daysL(days)}</div>
             </div>
           </div>
 
-          <DetailRow label="Plazo de conservación" value={`${currentDays} días → ${days} días`} />
-          <DetailRow label="Fecha efectiva del cambio" value={formatDate(effectiveAt)} />
+          <DetailRow
+            label={t.termChangeL}
+            value={`${t.daysL(currentDays)} → ${t.daysL(days)}`}
+          />
+          <DetailRow label={t.effectiveDateL} value={formatDate(effectiveAt, lang)} />
 
           <p className="text-[13px] text-muted leading-relaxed">
-            Los cambios se aplicarán a partir del <b className="text-ink">{formatDate(effectiveAt)}</b>. Hasta
-            entonces, continuará vigente el plan actual ({MODE_LABELS[currentMode]?.toLowerCase()} · {currentDays}{' '}
-            días).
+            {t.changesApplyFrom}
+            <b className="text-ink">{formatDate(effectiveAt, lang)}</b>
+            {t.changesApplyTail(modeLabel(currentMode).toLowerCase(), currentDays)}
           </p>
-          <p className="text-xs text-faint leading-relaxed">
-            Las sesiones que ya están dentro del plazo actual no se modifican: sus vencimientos siguen calculándose
-            con el plan vigente. Si necesitas conservar los datos que ya existen durante más tiempo, usa una
-            solicitud de extensión.
-          </p>
+          <p className="text-xs text-faint leading-relaxed">{t.confirmNote}</p>
         </div>
       </Modal>
 
@@ -399,42 +403,39 @@ export default function PoliticaRetencion() {
         title={
           openRequest
             ? openRequest.scope === 'ANONYMIZE'
-              ? 'Anonimización completa'
-              : 'Borrado de grabaciones'
-            : 'Solicitud'
+              ? p.scopeAnonymize
+              : p.scopeRecordings
+            : p.requestFallback
         }
-        description={openRequest ? `Estado: ${REQ_STATUS[openRequest.status]?.label || openRequest.status}` : ''}
+        description={openRequest ? p.stateL(reqStatus(openRequest.status).label) : ''}
         footer={
           <Button variant="ghost" onClick={() => setOpenRequest(null)}>
-            Cerrar
+            {p.close}
           </Button>
         }
       >
         {openRequest && (
           <div className="space-y-4">
             <DetailRow
-              label="Vocero"
+              label={d.L.dir.vocero}
               value={
                 openRequest.targetUser
                   ? `${openRequest.targetUser.name} · ${displayEmail(openRequest.targetUser)}`
-                  : 'Organización completa'
+                  : p.wholeOrg
               }
             />
-            <DetailRow label="Solicitada" value={formatDate(openRequest.createdAt)} />
-            <DetailRow label="Motivo" value={openRequest.reason || 'Sin motivo indicado'} />
+            <DetailRow label={p.requestedL} value={formatDate(openRequest.createdAt, lang)} />
+            <DetailRow label={p.reasonL} value={openRequest.reason || p.noReason} />
             <DetailRow
-              label="Resolución"
+              label={p.resolutionL}
               value={
                 openRequest.resolvedAt
-                  ? `${formatDate(openRequest.resolvedAt)}${openRequest.resolvedBy?.name ? ` · ${openRequest.resolvedBy.name}` : ''}`
-                  : 'Pendiente (la realiza el equipo VoxReady)'
+                  ? p.resolvedOn(formatDate(openRequest.resolvedAt, lang), openRequest.resolvedBy?.name)
+                  : p.pendingSystem
               }
             />
-            {openRequest.resolutionNote && <DetailRow label="Nota de resolución" value={openRequest.resolutionNote} />}
-            <p className="text-xs text-faint leading-relaxed">
-              Consultar una solicitud no la modifica. Solo el administrador del sistema puede aprobarla, rechazarla o
-              completarla.
-            </p>
+            {openRequest.resolutionNote && <DetailRow label={p.resolutionNoteL} value={openRequest.resolutionNote} />}
+            <p className="text-xs text-faint leading-relaxed">{t.readOnlyNote}</p>
           </div>
         )}
       </Modal>
@@ -443,36 +444,33 @@ export default function PoliticaRetencion() {
       <Modal
         open={Boolean(openExtension)}
         onClose={() => setOpenExtension(null)}
-        title="Solicitud de extensión del plazo"
-        description={openExtension ? `Estado: ${EXT_STATUS[openExtension.status]?.label || openExtension.status}` : ''}
+        title={t.extTitle}
+        description={openExtension ? p.stateL(extStatus(openExtension.status).label) : ''}
         footer={
           <Button variant="ghost" onClick={() => setOpenExtension(null)}>
-            Cerrar
+            {p.close}
           </Button>
         }
       >
         {openExtension && (
           <div className="space-y-4">
-            <DetailRow label="Plazo vigente al solicitarla" value={`${openExtension.currentDays} días`} />
-            <DetailRow label="Plazo solicitado" value={`${openExtension.requestedDays} días`} />
+            <DetailRow label={t.currentTermAtRequest} value={t.daysL(openExtension.currentDays)} />
+            <DetailRow label={t.requestedTerm} value={t.daysL(openExtension.requestedDays)} />
             {openExtension.appliedDays ? (
-              <DetailRow label="Plazo aplicado" value={`${openExtension.appliedDays} días`} />
+              <DetailRow label={t.appliedTerm} value={t.daysL(openExtension.appliedDays)} />
             ) : null}
-            <DetailRow label="Solicitada" value={formatDate(openExtension.createdAt)} />
-            <DetailRow label="Motivo" value={openExtension.reason || 'Sin motivo indicado'} />
+            <DetailRow label={p.requestedL} value={formatDate(openExtension.createdAt, lang)} />
+            <DetailRow label={p.reasonL} value={openExtension.reason || p.noReason} />
             <DetailRow
-              label="Resolución"
+              label={p.resolutionL}
               value={
                 openExtension.resolvedAt
-                  ? `${formatDate(openExtension.resolvedAt)}${openExtension.resolvedBy?.name ? ` · ${openExtension.resolvedBy.name}` : ''}`
-                  : 'Pendiente (la realiza el equipo VoxReady)'
+                  ? p.resolvedOn(formatDate(openExtension.resolvedAt, lang), openExtension.resolvedBy?.name)
+                  : p.pendingSystem
               }
             />
-            {openExtension.resolutionNote && <DetailRow label="Nota de resolución" value={openExtension.resolutionNote} />}
-            <p className="text-xs text-faint leading-relaxed">
-              Solo el administrador del sistema puede aprobar o rechazar esta solicitud. Mientras esté pendiente, el
-              plan vigente no cambia.
-            </p>
+            {openExtension.resolutionNote && <DetailRow label={p.resolutionNoteL} value={openExtension.resolutionNote} />}
+            <p className="text-xs text-faint leading-relaxed">{t.extNote}</p>
           </div>
         )}
       </Modal>

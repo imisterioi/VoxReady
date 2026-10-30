@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, EmptyState, PageHeader, cx } from '../components/ui';
 import { apiFetch } from '../lib/api';
@@ -9,16 +9,13 @@ import SessionVideo from '../components/SessionVideo';
 import useApiData from '../hooks/useApiData';
 import { formatDate } from '../data/directory';
 
-const AREAS = [
-  { key: 'expression', label: 'Expresión' },
-  { key: 'voice', label: 'Tono' },
-  { key: 'coherence', label: 'Coherencia' },
-  { key: 'empathy', label: 'Empatía' },
-];
+const AREAS = ['expression', 'voice', 'coherence', 'empathy'];
 
 // Cola de etiquetado y segunda opinión (configurador maestro)
 export default function ColaEtiquetado() {
-  const t = I.es.L.m3;
+  const { d, lang } = useI18n();
+  const t = d.L.m3;
+  const areaLabels = t.areaLabels;
   const queue = useApiData('/api/review-queue');
   const items = useMemo(() => queue.data?.items || [], [queue.data]);
   const [selectedId, setSelectedId] = useState(null);
@@ -54,7 +51,7 @@ export default function ColaEtiquetado() {
     try {
       setSaving(true);
       await apiFetch(`/api/sessions/${selected.id}/review`, { method: 'POST', body: { scores, comment } });
-      toast.success(`Revisión guardada: ${selected.user.name}`);
+      toast.success(t.reviewSaved(selected.user.name));
       const next = items.find((i) => !i.review && i.id !== selected.id);
       if (next) setSelectedId(next.id);
       queue.reload();
@@ -73,7 +70,7 @@ export default function ColaEtiquetado() {
   if (queue.loading && !queue.data) {
     return (
       <Card>
-        <EmptyState icon="refresh" title="Cargando cola…" />
+        <EmptyState icon="refresh" title={t.loading} />
       </Card>
     );
   }
@@ -84,7 +81,7 @@ export default function ColaEtiquetado() {
 
       {items.length === 0 ? (
         <Card>
-          <EmptyState icon="tag" title="No hay prácticas evaluadas todavía" description="Cuando los voceros completen entrevistas, aparecerán aquí para revisión." />
+          <EmptyState icon="tag" title={t.empty} description={t.emptyDesc} />
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6">
@@ -92,7 +89,7 @@ export default function ColaEtiquetado() {
           <div>
             <div className="flex items-center justify-between mb-3 px-1">
               <span className="eyebrow">{t.queueL}</span>
-              <Badge>{queue.data.pending} pendiente(s)</Badge>
+              <Badge>{t.pending(queue.data.pending)}</Badge>
             </div>
             <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1">
               {items.map((q) => (
@@ -113,7 +110,7 @@ export default function ColaEtiquetado() {
                     {q.theme?.title} · {q.tenant?.name}
                   </div>
                   <div className="mt-2">
-                    {q.review ? <Badge tone="brand" icon="check">Revisado</Badge> : <Badge tone={q.reason.tone}>{q.reason.label}</Badge>}
+                    {q.review ? <Badge tone="brand" icon="check">{t.reviewed}</Badge> : <Badge tone={q.reason.tone}>{q.reason.label}</Badge>}
                   </div>
                 </button>
               ))}
@@ -123,19 +120,19 @@ export default function ColaEtiquetado() {
           {/* Caso */}
           <Card>
             {!detail ? (
-              <EmptyState icon="refresh" title="Cargando caso…" />
+              <EmptyState icon="refresh" title={t.loadingCase} />
             ) : (
               <>
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
                   <div>
                     <div className="eyebrow">
-                      {t.caseL} · {formatDate(detail.completedAt)}
+                      {t.caseL} · {formatDate(detail.completedAt, lang)}
                     </div>
                     <div className="text-xl font-semibold text-ink mt-1">{detail.user?.name}</div>
                     <div className="text-sm text-muted">{detail.theme?.title}</div>
                   </div>
                   <Button variant="secondary" size="sm" to={`/maestro/informe?sesion=${detail.id}`} iconRight="arrowRight">
-                    Informe completo
+                    {t.fullReport}
                   </Button>
                 </div>
 
@@ -150,7 +147,7 @@ export default function ColaEtiquetado() {
                             <b className="text-ink font-medium">P{i + 1}:</b> {turn.question}
                           </p>
                           <p className="text-ink mt-1.5">
-                            <b className="font-medium">R:</b> {turn.answer || <i className="text-muted">(sin respuesta)</i>}
+                            <b className="font-medium">R:</b> {turn.answer || <i className="text-muted">{t.noAnswer}</i>}
                           </p>
                         </div>
                       ))}
@@ -159,23 +156,23 @@ export default function ColaEtiquetado() {
 
                   <div>
                     <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-3 items-center text-sm">
-                      <span className="text-xs text-muted">Área</span>
+                      <span className="text-xs text-muted">{t.areaL}</span>
                       <span className="text-xs text-muted text-right">{t.proposal}</span>
                       <span className="text-xs text-muted text-right">{t.correction}</span>
-                      {AREAS.map((a) => (
-                        <div key={a.key} className="contents">
-                          <span className="text-ink">{a.label}</span>
-                          <span className="text-right tabular-nums text-muted">{aiScore(a.key) ?? '—'}</span>
+                      {AREAS.map((key) => (
+                        <div key={key} className="contents">
+                          <span className="text-ink">{areaLabels[key]}</span>
+                          <span className="text-right tabular-nums text-muted">{aiScore(key) ?? '—'}</span>
                           <input
                             type="number"
                             min="0"
                             max="100"
-                            value={scores[a.key] ?? ''}
+                            value={scores[key] ?? ''}
                             placeholder="—"
-                            onChange={(e) => setScores((s) => ({ ...s, [a.key]: e.target.value }))}
+                            onChange={(e) => setScores((s) => ({ ...s, [key]: e.target.value }))}
                             className={cx(
                               'input h-9 w-20 text-right tabular-nums',
-                              scores[a.key] !== '' && Number(scores[a.key]) !== aiScore(a.key) && 'border-accent text-accent-fg',
+                              scores[key] !== '' && Number(scores[key]) !== aiScore(key) && 'border-accent text-accent-fg',
                             )}
                           />
                         </div>
@@ -185,7 +182,7 @@ export default function ColaEtiquetado() {
                     {detail.report.lineasRojas?.some((l) => l.cruzada) && (
                       <div className="mt-5 rounded-xl border border-danger/25 bg-danger/[0.04] p-3 text-xs text-ink space-y-1">
                         <div className="font-semibold text-danger flex items-center gap-1.5">
-                          <Icon name="alert" size={13} /> Líneas rojas detectadas por la IA
+                          <Icon name="alert" size={13} /> {t.redLinesDetected}
                         </div>
                         {detail.report.lineasRojas
                           .filter((l) => l.cruzada)
@@ -204,15 +201,15 @@ export default function ColaEtiquetado() {
 
                     <div className="flex gap-2 mt-5 pt-5 border-t border-line">
                       <Button icon="check" onClick={confirm} disabled={saving}>
-                        {saving ? 'Guardando…' : detail.review ? 'Actualizar revisión' : t.confirm}
+                        {saving ? t.saving : detail.review ? t.update : t.confirm}
                       </Button>
                       <Button variant="ghost" onClick={skip} iconRight="arrowRight">
                         {t.skip}
                       </Button>
                     </div>
                     <p className="text-xs text-faint mt-3">
-                      La corrección queda visible en el informe del vocero y alimenta la métrica de acuerdo IA-humano.{' '}
-                      <Link to="/maestro/rubrica" className="underline">Ajustar patrón</Link>
+                      {t.footer}{' '}
+                      <Link to="/maestro/rubrica" className="underline">{t.adjustPattern}</Link>
                     </p>
                   </div>
                 </div>

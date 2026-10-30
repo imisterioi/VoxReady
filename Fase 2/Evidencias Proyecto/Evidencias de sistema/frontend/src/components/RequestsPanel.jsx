@@ -1,6 +1,7 @@
+import { useI18n } from '../lib/i18n';
 import Icon from './Icon';
 import { Badge, Card, CardHeader, EmptyState, Segmented } from './ui';
-import { REQUEST_KINDS, countRequestsByKind, feedFilterOptions, filterRequestsFeed } from '../lib/requestsFeed';
+import { countRequestsByKind, feedFilterOptions, filterRequestsFeed, requestKinds } from '../lib/requestsFeed';
 
 // Panel ÚNICO de solicitudes.
 //
@@ -9,7 +10,7 @@ import { REQUEST_KINDS, countRequestsByKind, feedFilterOptions, filterRequestsFe
 // en contenedores separados. Cada pantalla decide qué solicitudes entrega (ya acotadas por
 // organización) y qué acciones ofrece; este componente no cambia ningún permiso.
 export default function RequestsPanel({
-  title = 'Solicitudes',
+  title,
   description,
   actions,
   items = [],
@@ -18,11 +19,14 @@ export default function RequestsPanel({
   onOpen,
   loading = false,
   error = '',
-  emptyTitle = 'Sin solicitudes',
+  emptyTitle,
   emptyDescription,
   note,
 }) {
-  const options = feedFilterOptions(items);
+  const { d } = useI18n();
+  const tp = d.L.req.panel;
+  const options = feedFilterOptions(items, d);
+  const kinds = requestKinds(d);
   const visible = filterRequestsFeed(items, filter);
   // El filtro por tipo solo aporta cuando hay de los dos tipos.
   const counts = countRequestsByKind(items);
@@ -30,14 +34,14 @@ export default function RequestsPanel({
 
   return (
     <Card className="mb-6">
-      <CardHeader title={title} description={description} action={actions} />
+      <CardHeader title={title || tp.title} description={description} action={actions} />
 
       {error ? (
-        <EmptyState tone="danger" icon="server" title="No se pudieron cargar las solicitudes" description={error} />
+        <EmptyState tone="danger" icon="server" title={tp.error} description={error} />
       ) : loading ? (
-        <EmptyState icon="refresh" title="Cargando solicitudes…" />
+        <EmptyState icon="refresh" title={tp.loading} />
       ) : items.length === 0 ? (
-        <EmptyState icon="shield" title={emptyTitle} description={emptyDescription} />
+        <EmptyState icon="shield" title={emptyTitle || tp.emptyTitle} description={emptyDescription} />
       ) : (
         <>
           {showFilter && (
@@ -48,7 +52,7 @@ export default function RequestsPanel({
 
           <ul className="divide-y divide-line">
             {visible.map((item) => {
-              const kind = REQUEST_KINDS[item.kind] || { label: item.kind, tone: 'neutral' };
+              const kind = kinds[item.kind] || { label: item.kind, tone: 'neutral' };
               return (
                 <li key={item.key}>
                   {/* Toda la fila abre el detalle de la solicitud (botón real: teclado y lector de pantalla) */}
@@ -66,7 +70,7 @@ export default function RequestsPanel({
                       {item.meta && <span className="block text-[11px] text-faint truncate mt-0.5">{item.meta}</span>}
                     </span>
                     {item.status && <Badge tone={item.status.tone}>{item.status.label}</Badge>}
-                    <span className="hidden sm:inline text-xs text-muted whitespace-nowrap">{item.actionLabel || 'Revisar'}</span>
+                    <span className="hidden sm:inline text-xs text-muted whitespace-nowrap">{item.actionLabel || tp.review}</span>
                     <Icon name="chevronRight" size={16} className="text-faint" />
                   </button>
                 </li>
@@ -75,7 +79,7 @@ export default function RequestsPanel({
           </ul>
 
           {visible.length === 0 && (
-            <p className="text-sm text-muted px-3 py-6 text-center">No hay solicitudes de este tipo.</p>
+            <p className="text-sm text-muted px-3 py-6 text-center">{tp.emptyKind}</p>
           )}
         </>
       )}

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useI18n } from '../lib/i18n';
 import Icon from './Icon';
 
 const cx = (...c) => c.filter(Boolean).join(' ');
@@ -145,7 +146,9 @@ export function Segmented({ options, value, onChange, className }) {
   );
 }
 
-export function ChoiceChips({ options, value, onChange, multiple = false }) {
+export function ChoiceChips({ options, value, onChange, multiple = false, labels = null }) {
+  // `options` son los VALORES (nunca se traducen); `labels` es el texto visible de cada valor.
+  const textOf = (o) => (labels && labels[o]) || o;
   const isActive = (o) => (multiple ? value.includes(o) : value === o);
   const toggle = (o) => {
     if (!multiple) return onChange(o);
@@ -166,7 +169,7 @@ export function ChoiceChips({ options, value, onChange, multiple = false }) {
           )}
         >
           {isActive(o) && <Icon name="check" size={13} strokeWidth={2.5} />}
-          {o}
+          {textOf(o)}
         </button>
       ))}
     </div>
@@ -332,6 +335,7 @@ export function Table({ columns, children }) {
 /* --------------------------------------------------------------- Modal */
 
 export function Modal({ open, onClose, title, description, children, footer, width = 'max-w-lg' }) {
+  const { d } = useI18n();
   useEffect(() => {
     if (!open) return;
     const onKey = (e) => e.key === 'Escape' && onClose();
@@ -373,7 +377,7 @@ export function Modal({ open, onClose, title, description, children, footer, wid
               <button
                 onClick={onClose}
                 className="h-8 w-8 -mr-2 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-subtle transition-colors"
-                aria-label="Cerrar"
+                aria-label={d.L.common.close}
               >
                 <Icon name="x" size={16} />
               </button>

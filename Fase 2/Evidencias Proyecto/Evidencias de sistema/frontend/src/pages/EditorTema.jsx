@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { apiFetch } from '../lib/api';
 import { displayEmail } from '../lib/displayEmail';
-import I from '../data/dictionary';
+import { LANGUAGES, LANGUAGE_LABELS, useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import { Avatar, Badge, Button, Card, ChoiceChips, EmptyState, Field, PageHeader, Segmented, cx } from '../components/ui';
 import { ScenarioBriefModal } from '../components/ScenarioBrief';
@@ -13,7 +13,7 @@ import useApiData from '../hooks/useApiData';
 import { initialsOf } from '../data/directory';
 
 
-function EditableList({ items, setItems, placeholder, addLabel, danger }) {
+function EditableList({ items, setItems, placeholder, addLabel, removeLabel, danger }) {
   const [draft, setDraft] = useState('');
 
   const add = () => {
@@ -38,7 +38,7 @@ function EditableList({ items, setItems, placeholder, addLabel, danger }) {
             <button
               onClick={() => setItems(items.filter((_, j) => j !== i))}
               className="opacity-0 group-hover:opacity-100 text-faint hover:text-danger transition-all"
-              aria-label="Eliminar"
+              aria-label={removeLabel}
             >
               <Icon name="trash" size={15} />
             </button>
@@ -77,17 +77,23 @@ function StepTitle({ n, title, description, danger }) {
   );
 }
 
-const CATEGORIES = [
-  { value: 'CRISIS', label: 'Crisis' },
-  { value: 'MEDIOS', label: 'Medios' },
-  { value: 'INSTITUCIONAL', label: 'Institucional' },
-];
+const CATEGORY_VALUES = ['CRISIS', 'MEDIOS', 'INSTITUCIONAL'];
 
 export default function EditorTema() {
-  const t = I.es.L.a2;
+  const { d, lang } = useI18n();
+  const t = d.L.a2;
+  const tb = d.L.a2b;
+  const categories = CATEGORY_VALUES.map((value) => ({ value, label: tb.categories[value] }));
+  const issueText = (issue) => {
+    const message = d.L.cfg.issues[`${issue.field}:${issue.code}`];
+    return typeof message === 'function' ? message(issue) : message || issue.mensaje;
+  };
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const editingId = params.get('id');
+
+  // Idioma del contenido del escenario personalizado (nunca se traduce automáticamente).
+  const [language, setLanguage] = useState(lang);
 
   const [name, setName] = useState('');
   const [context, setContext] = useState('');
@@ -117,6 +123,7 @@ export default function EditorTema() {
         setContext(theme.context);
         setCategory(theme.category || 'CRISIS');
         if (theme.optic) setOptic(theme.optic);
+        if (theme.language) setLanguage(theme.language);
         setPublics(theme.publics.length ? theme.publics : [t.pubs[0]]);
         setMessages(theme.keyMessages);
         setRedLines(theme.redLines);
@@ -132,18 +139,18 @@ export default function EditorTema() {
 
   const handleSave = async () => {
     try {
-      if (!name.trim()) return toast.error('Debes ingresar un nombre para el escenario.');
-      if (!context.trim()) return toast.error('Debes ingresar un contexto.');
-      if (messages.length === 0) return toast.error('Debes agregar al menos un mensaje clave.');
+      if (!name.trim()) return toast.error(tb.nameRequired);
+      if (!context.trim()) return toast.error(tb.contextRequired);
+      if (messages.length === 0) return toast.error(tb.messagesRequired);
       if (!availableToAllVoceros && voceroIds.length === 0) {
-        return toast.error('Elige "Disponible para todos los voceros" o selecciona al menos un vocero.');
+        return toast.error(tb.accessRequired);
       }
-      if (!(Number(interview.questionCount) >= 1)) return toast.error('La entrevista debe tener al menos una pregunta.');
-      if (totalTurns(interview) > 30) return toast.error('La entrevista no puede superar los 30 turnos entre preguntas y repreguntas.');
+      if (!(Number(interview.questionCount) >= 1)) return toast.error(tb.questionRequired);
+      if (totalTurns(interview) > 30) return toast.error(tb.turnsExceeded);
       // La duración máxima es obligatoria: un campo vacío, nulo o fuera de rango no puede
       // desactivar el límite de tiempo. Se avisa con el motivo exacto y no se guarda nada.
       const configIssues = interviewConfigIssues(interview);
-      if (configIssues.length) return toast.error(configIssues[0].mensaje);
+      if (configIssues.length) return toast.error(issueText(configIssues[0]));
 
       setSaving(true);
       const payload = {
@@ -152,6 +159,8 @@ export default function EditorTema() {
         keyMessages: messages,
         category,
         optic,
+        // Idioma del contenido: lo decide el administrador; el backend lo conserva si no se envía.
+        language,
         publics,
         redLines,
         interview: toInterviewPayload(interview),
@@ -161,16 +170,16 @@ export default function EditorTema() {
 
       if (editingId) {
         await apiFetch(`/api/themes/${editingId}`, { method: 'PUT', body: payload });
-        toast.success('Escenario actualizado');
+        toast.success(tb.updated);
       } else {
         // POST /api/themes: el backend usa el tenant del administrador autenticado
         await apiFetch('/api/themes', { method: 'POST', body: payload });
-        toast.success('¡Escenario creado con éxito!');
+        toast.success(tb.created);
       }
       navigate('/admin/temas');
     } catch (error) {
       console.error('Error guardando escenario:', error);
-      toast.error(error.message || 'No se pudo guardar el escenario.');
+      toast.error(error.message || tb.saveFailed);
     } finally {
       setSaving(false);
     }
@@ -179,7 +188,7 @@ export default function EditorTema() {
   if (loadingTheme) {
     return (
       <Card>
-        <EmptyState icon="refresh" title="Cargando escenario…" />
+        <EmptyState icon="refresh" title={tb.loading} />
       </Card>
     );
   }
@@ -188,15 +197,15 @@ export default function EditorTema() {
     <>
       <PageHeader
         eyebrow={t.eyebrow}
-        title={editingId ? 'Editar escenario' : 'Nuevo escenario'}
+        title={editingId ? tb.editTitle : tb.newTitle}
         description={t.sub}
         actions={
           <>
             <Button variant="secondary" icon="eye" onClick={() => setPreviewOpen(true)}>
-              Vista previa
+              {tb.preview}
             </Button>
             <Button onClick={handleSave} icon="check" disabled={saving || interviewConfigIssues(interview).length > 0}>
-              {saving ? 'Guardando…' : editingId ? 'Guardar cambios' : t.save}
+              {saving ? tb.saving : editingId ? tb.saveChanges : t.save}
             </Button>
           </>
         }
@@ -206,20 +215,27 @@ export default function EditorTema() {
         {/* Fila 1: datos del escenario + quiénes lo practican */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="space-y-6">
-            <StepTitle n={1} title="Datos del escenario" />
+            <StepTitle n={1} title={tb.dataTitle} />
             <Field label={t.nameL}>
-              <input className="input" value={name} placeholder="Ej. Retiro de producto defectuoso" onChange={(e) => setName(e.target.value)} />
+              <input className="input" value={name} placeholder={tb.namePh} onChange={(e) => setName(e.target.value)} />
             </Field>
-            <Field label="Tipo de escenario">
-              <Segmented options={CATEGORIES} value={category} onChange={setCategory} />
+            <Field label={tb.typeL}>
+              <Segmented options={categories} value={category} onChange={setCategory} />
             </Field>
-            <Field label={t.ctxL} hint="Lo leerá el vocero antes de practicar y lo usará la IA para entrevistarlo.">
+            <Field label={t.langL} hint={t.langHelp}>
+              <Segmented
+                options={LANGUAGES.map((code) => ({ value: code, label: LANGUAGE_LABELS[code] }))}
+                value={language}
+                onChange={setLanguage}
+              />
+            </Field>
+            <Field label={t.ctxL} hint={tb.ctxHint}>
               <textarea className="textarea min-h-[150px]" placeholder={t.ctxPh} value={context} onChange={(e) => setContext(e.target.value)} />
             </Field>
           </Card>
 
           <Card className="flex flex-col">
-            <StepTitle n={2} title="¿Quiénes pueden practicarlo?" description="Hazlo visible para toda la organización o asígnalo a voceros específicos." />
+            <StepTitle n={2} title={tb.whoTitle} description={tb.whoDesc} />
 
             <div className="rounded-xl border border-line bg-surface p-4">
               <label className="flex items-start gap-3 cursor-pointer">
@@ -230,22 +246,22 @@ export default function EditorTema() {
                   className="mt-1"
                 />
                 <div>
-                  <p className="text-sm font-medium text-ink">Disponible para todos los voceros</p>
-                  <p className="text-xs text-muted mt-1">Todos los voceros de esta organización podrán ver y utilizar este escenario.</p>
+                  <p className="text-sm font-medium text-ink">{tb.availableAll}</p>
+                  <p className="text-xs text-muted mt-1">{tb.availableAllDesc}</p>
                 </div>
               </label>
             </div>
 
             <div className={cx('mt-4 flex-1 flex flex-col transition-opacity', availableToAllVoceros && 'opacity-40 pointer-events-none')}>
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-ink">O asígnalo a voceros específicos</span>
+                <span className="text-sm font-medium text-ink">{tb.assignSpecific}</span>
                 {voceros.length > 0 && (
                   <button
                     type="button"
                     className="text-xs font-medium text-muted hover:text-ink"
                     onClick={() => setVoceroIds(voceroIds.length === voceros.length ? [] : voceros.map((v) => v.id))}
                   >
-                    {voceroIds.length === voceros.length ? 'Quitar todos' : 'Seleccionar todos'}
+                    {voceroIds.length === voceros.length ? tb.removeAll : tb.selectAll}
                   </button>
                 )}
               </div>
@@ -263,11 +279,11 @@ export default function EditorTema() {
                 ))}
                 {voceros.length === 0 && (
                   <p className="px-4 py-3 text-sm text-muted">
-                    Aún no hay voceros activos. Créalos en <Link to="/admin/voceros" className="underline">Voceros</Link>.
+                    {tb.noVocerosBefore}<Link to="/admin/voceros" className="underline">{tb.vocerosLink}</Link>{tb.noVocerosAfter}
                   </p>
                 )}
               </div>
-              {!availableToAllVoceros && <p className="text-xs text-faint mt-2">{voceroIds.length} vocero(s) seleccionado(s)</p>}
+              {!availableToAllVoceros && <p className="text-xs text-faint mt-2">{tb.selectedCount(voceroIds.length)}</p>}
             </div>
           </Card>
         </div>
@@ -276,23 +292,23 @@ export default function EditorTema() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <StepTitle n={3} title={t.keyL} description={t.keyHelp} />
-            <EditableList items={messages} setItems={setMessages} placeholder="Escribe un mensaje clave…" addLabel="Añadir" />
+            <EditableList items={messages} setItems={setMessages} placeholder={tb.msgPh} addLabel={tb.add} removeLabel={tb.deleteItem} />
           </Card>
 
           <Card>
             <StepTitle n={4} title={t.redL} description={t.redHelp} danger />
-            <EditableList items={redLines} setItems={setRedLines} placeholder="Escribe una línea roja…" addLabel="Añadir" danger />
+            <EditableList items={redLines} setItems={setRedLines} placeholder={tb.redPh} addLabel={tb.add} removeLabel={tb.deleteItem} danger />
           </Card>
         </div>
 
         {/* Fila 3: enfoque */}
         <Card>
-          <StepTitle n={5} title="Enfoque de la entrevista" description="Cómo debe comunicar el vocero y a qué público interno está dirigido." />
+          <StepTitle n={5} title={tb.focusTitle} description={tb.focusDesc} />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Field label={t.opticL}>
               <ChoiceChips options={t.optics} value={optic} onChange={setOptic} />
             </Field>
-            <Field label={t.pubL} hint="Puedes seleccionar más de uno.">
+            <Field label={t.pubL} hint={tb.pubHint}>
               <ChoiceChips options={t.pubs} value={publics} onChange={setPublics} multiple />
             </Field>
           </div>
@@ -302,8 +318,8 @@ export default function EditorTema() {
         <Card>
           <StepTitle
             n={6}
-            title="Configuración de la entrevista"
-            description="Qué tan agresivo es el entrevistador, cuántas preguntas y repreguntas hace y cuánto dura."
+            title={tb.interviewTitle}
+            description={tb.interviewDesc}
           />
           <InterviewConfigFields value={interview} onChange={setInterview} />
         </Card>
@@ -313,8 +329,8 @@ export default function EditorTema() {
         open={previewOpen}
         onClose={() => setPreviewOpen(false)}
         scenario={{
-          title: name || 'Escenario sin nombre',
-          context: context || 'Sin contexto aún.',
+          title: name || tb.unnamed,
+          context: context || tb.noContext,
           category,
           optic,
           keyMessages: messages,

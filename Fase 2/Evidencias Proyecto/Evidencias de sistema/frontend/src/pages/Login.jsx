@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import { TEST_USERS, DEMO_PASSWORD, roleIndex, homeFor } from '../data/mockData';
 import { apiFetch, saveSession } from '../lib/api';
 import useTheme from '../hooks/useTheme';
@@ -16,7 +16,7 @@ export default function Login() {
   const [loading, setLoading] = useState('');
   const navigate = useNavigate();
   const { isDark, toggleTheme } = useTheme();
-  const d = I.es;
+  const { d, lang, languages, labels, setLanguage } = useI18n();
 
   // Sin sesión se usan los colores de VoxReady (no los de una organización)
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function Login() {
 
   const submitLogin = (e) => {
     e.preventDefault();
-    if (!email.trim() || !password) return setError('Ingresa tu correo y contraseña.');
+    if (!email.trim() || !password) return setError(d.login.errRequired);
     login(email.trim(), password);
   };
 
@@ -70,7 +70,7 @@ export default function Login() {
           <p className="text-white/60 text-[15px] leading-relaxed mt-5">{d.login.heroSub}</p>
 
           <div className="mt-8 grid grid-cols-2 gap-3 max-w-sm">
-            {['Expresión', 'Tono de voz', 'Coherencia', 'Empatía'].map((a) => (
+            {d.L.u6.areas.map((a) => (
               <div key={a} className="flex items-center gap-2 text-[13px] text-white/70">
                 <span className="h-1.5 w-1.5 rounded-full bg-accent-bright" />
                 {a}
@@ -86,14 +86,30 @@ export default function Login() {
       <section className="relative flex flex-col h-dvh">
         <div className="flex items-center justify-between px-6 py-4 shrink-0">
           <Logo className="lg:invisible" />
-          <button
-            onClick={toggleTheme}
-            title={d.theme}
-            aria-label={d.theme}
-            className="h-9 w-9 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-subtle transition-colors"
-          >
-            <Icon name={isDark ? 'sun' : 'moon'} size={17} />
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Idioma antes de iniciar sesión: se guarda localmente y se mantiene al entrar. */}
+            <select
+              value={lang}
+              onChange={(e) => setLanguage(e.target.value).catch(() => {})}
+              title={labels[lang]}
+              aria-label="Idioma / Language"
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-xs text-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40"
+            >
+              {languages.map((code) => (
+                <option key={code} value={code}>
+                  {code.toUpperCase()}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={toggleTheme}
+              title={d.theme}
+              aria-label={d.theme}
+              className="h-9 w-9 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-subtle transition-colors"
+            >
+              <Icon name={isDark ? 'sun' : 'moon'} size={17} />
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 min-h-0 flex items-center justify-center px-6 pb-10">

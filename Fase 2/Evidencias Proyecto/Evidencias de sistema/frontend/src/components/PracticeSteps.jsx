@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import Icon from './Icon';
 import { cx } from './ui';
 
@@ -8,11 +8,12 @@ import { cx } from './ui';
 // etapa. Solo refleja en qué etapa está el vocero (marcada con `aria-current="step"`).
 export default function PracticeSteps({ className }) {
   const { pathname } = useLocation();
-  const steps = I.es.flow;
+  const { d } = useI18n();
+  const steps = d.flow;
   const current = steps.findIndex((s) => pathname.startsWith(s.to));
 
   return (
-    <nav aria-label="Pasos de la práctica" className={cx('mb-10 overflow-x-auto', className)}>
+    <nav aria-label={d.practiceSteps} className={cx('mb-10 overflow-x-auto', className)}>
       <ol className="flex items-center gap-2 min-w-max">
         {steps.map((s, i) => {
           const done = i < current;

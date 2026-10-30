@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { checkEndpoint } from '../../lib/api';
-import { ROLE_META, timeAgo } from '../../data/directory';
+import { useI18n } from '../../lib/i18n';
+import { roleMeta, timeAgo } from '../../data/directory';
 import useApiData from '../../hooks/useApiData';
 import MetricsDashboard from '../../components/MetricsDashboard';
 import JobsPanel from '../../components/JobsPanel';
@@ -10,18 +11,22 @@ import { Badge, Button, Card, CardHeader, PageHeader, Stat, cx } from '../../com
 
 const ROLE_COLORS = { user: 'bg-[rgb(var(--c4))]', admin: 'bg-accent', master: 'bg-success', system: 'bg-brand' };
 
+// El estado solo aporta el tono y el punto de color: la etiqueta visible sale del diccionario.
 const SERVICE_STATE = {
-  loading: { label: 'Comprobando…', tone: 'neutral', dot: 'bg-faint animate-pulse' },
-  ok: { label: 'Operativo', tone: 'success', dot: 'bg-success' },
-  error: { label: 'Con errores', tone: 'danger', dot: 'bg-danger' },
-  offline: { label: 'Sin conexión', tone: 'danger', dot: 'bg-danger' },
-  client: { label: 'En navegador', tone: 'success', dot: 'bg-success' },
-  idle: { label: 'Sin actividad aún', tone: 'neutral', dot: 'bg-faint' },
-  running: { label: 'En ejecución', tone: 'success', dot: 'bg-success animate-pulse' },
-  pending: { label: 'No conectado', tone: 'neutral', dot: 'bg-faint' },
+  loading: { key: 'stateLoading', dot: 'bg-faint animate-pulse' },
+  ok: { key: 'stateOk', dot: 'bg-success' },
+  error: { key: 'stateError', dot: 'bg-danger' },
+  offline: { key: 'stateOffline', dot: 'bg-danger' },
+  client: { key: 'stateClient', dot: 'bg-success' },
+  idle: { key: 'stateIdle', dot: 'bg-faint' },
+  running: { key: 'stateRunning', dot: 'bg-success animate-pulse' },
+  pending: { key: 'statePending', dot: 'bg-faint' },
 };
 
 export default function SistemaHome() {
+  const { d } = useI18n();
+  const t = d.L.sys.home;
+  const roles = roleMeta(d);
   // Datos reales: GET /api/system/overview y GET /api/tenants
   const overview = useApiData('/api/system/overview');
   const tenantsData = useApiData('/api/tenants');
@@ -56,24 +61,24 @@ export default function SistemaHome() {
     if (!p) return { state: api.state === 'ok' ? 'loading' : api.state };
     return { state: p.state === 'pending' ? 'idle' : p.state, ms: p.ms ?? p.lastMs, extra: p.detail || describe?.(p) };
   };
-  const aiDetail = (p) => (p.lastModel ? `Último modelo: ${p.lastModel} · ${p.failures} fallo(s) de ${p.calls} consulta(s)` : null);
-  const jobDetail = (p) => (p.lastError ? p.lastError.message : p.lastRunAt ? `Última ejecución ${timeAgo(p.lastRunAt)}` : null);
+  const aiDetail = (p) => (p.lastModel ? t.aiDetail(p.lastModel, p.failures, p.calls) : null);
+  const jobDetail = (p) => (p.lastError ? p.lastError.message : p.lastRunAt ? t.jobDetailLastRun(timeAgo(p.lastRunAt, d)) : null);
 
   const services = [
-    { name: 'API VoxReady', detail: 'Express · /api/health', icon: 'server', ...api },
-    { name: 'Base de datos', detail: 'PostgreSQL · Prisma', icon: 'database', ...db },
+    { name: t.svcApi, detail: t.svcApiDetail, icon: 'server', ...api },
+    { name: t.svcDb, detail: t.svcDbDetail, icon: 'database', ...db },
     {
-      name: 'Almacenamiento de grabaciones',
-      detail: 'backend/uploads',
+      name: t.svcStorage,
+      detail: t.svcStoragePath,
       icon: 'video',
-      ...fromBackend('storage', (p) => `${p.recordings} grabación(es) · ${p.megabytes} MB`),
+      ...fromBackend('storage', (p) => t.svcStorageDetail(p.recordings, p.megabytes)),
     },
-    { name: 'IA entrevistadora', detail: 'API de NVIDIA', icon: 'sparkles', ...fromBackend('interviewer', aiDetail) },
-    { name: 'IA evaluadora', detail: 'API de NVIDIA', icon: 'sparkles', ...fromBackend('evaluator', aiDetail) },
-    { name: 'Retención de datos', detail: 'Borrado automático por vencimiento', icon: 'clock', ...fromBackend('job-retention', jobDetail) },
-    { name: 'Eliminación de organizaciones', detail: 'Proceso reintentable', icon: 'trash', ...fromBackend('job-tenant-deletion', jobDetail) },
-    { name: 'Análisis de pose y rostro', detail: 'MediaPipe · se ejecuta en el navegador', icon: 'person', state: 'client' },
-    { name: 'Transcripción de voz', detail: 'Reconocimiento de voz del navegador (Chrome/Edge)', icon: 'mic', state: 'client' },
+    { name: t.svcInterviewer, detail: t.svcInterviewerDetail, icon: 'mic', ...fromBackend('interviewer', null) },
+    { name: t.svcEvaluator, detail: t.svcEvaluatorDetail, icon: 'sparkles', ...fromBackend('evaluator', aiDetail) },
+    { name: t.svcRetention, detail: t.svcRetentionDetail, icon: 'clock', ...fromBackend('job-retention', jobDetail) },
+    { name: t.svcDeletion, detail: t.svcDeletionDetail, icon: 'trash', ...fromBackend('job-tenant-deletion', jobDetail) },
+    { name: t.svcPose, detail: t.svcPoseDetail, icon: 'person', state: 'client' },
+    { name: t.svcSpeech, detail: t.svcSpeechDetail, icon: 'mic', state: 'client' },
   ];
   // Un proceso sin actividad todavía (por ejemplo, la IA evaluadora antes de la primera práctica) no está caído
   const operational = services.filter((s) => ['ok', 'client', 'idle', 'running'].includes(s.state)).length;
@@ -96,19 +101,19 @@ export default function SistemaHome() {
   return (
     <>
       <PageHeader
-        eyebrow="Administración del sistema"
-        title="Estado del sistema"
-        description="Visión general de la plataforma: servicios, organizaciones, usuarios y uso."
+        eyebrow={t.eyebrow}
+        title={t.title}
+        description={t.sub}
         actions={
           <>
             <Button variant="secondary" icon="book" to="/sistema/biblioteca?nuevo=1">
-              Nuevo escenario general
+              {t.newScenario}
             </Button>
             <Button variant="secondary" icon="layers" to="/sistema/organizaciones?nueva=1">
-              Nueva organización
+              {t.newOrg}
             </Button>
             <Button icon="plus" to="/sistema/usuarios?nuevo=1">
-              Nuevo usuario
+              {t.newUser}
             </Button>
           </>
         }
@@ -132,30 +137,30 @@ export default function SistemaHome() {
         <div className="flex-1">
           <div className="text-sm font-medium text-ink">
             {checking
-              ? 'Comprobando servicios…'
+              ? t.bannerChecking
               : operational === services.length
-                ? 'Todos los servicios conectados funcionan con normalidad'
-                : 'Hay servicios que requieren atención'}
+                ? t.bannerAllOk
+                : t.bannerAttention}
           </div>
           <div className="text-xs text-muted mt-0.5">
-            {operational} de {services.length} servicios operativos
+            {t.bannerCount(operational, services.length)}
           </div>
         </div>
         <Button variant="ghost" size="sm" icon="refresh" onClick={runChecks} disabled={checking}>
-          Volver a comprobar
+          {t.recheck}
         </Button>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <Stat label="Organizaciones activas" value={ov ? ov.tenants.active : '—'} icon="layers" hint={ov ? `${ov.tenants.total} en total` : 'Cargando…'} />
-        <Stat label="Usuarios activos" value={ov ? ov.users.active : '—'} icon="users" hint={ov ? `${suspended} suspendidos` : 'Cargando…'} />
-        <Stat label="Sesiones del mes" value={ov ? sessionsMonth : '—'} icon="activity" hint="Todas las organizaciones" />
+        <Stat label={t.stActiveOrgs} value={ov ? ov.tenants.active : '—'} icon="layers" hint={ov ? t.stTotalOrgs(ov.tenants.total) : t.loading} />
+        <Stat label={t.stActiveUsers} value={ov ? ov.users.active : '—'} icon="users" hint={ov ? t.stSuspended(suspended) : t.loading} />
+        <Stat label={t.stSessionsMonth} value={ov ? sessionsMonth : '—'} icon="activity" hint={t.stAllOrgs} />
         <Stat
-          label="Sesiones esta semana"
+          label={t.stSessionsWeek}
           value={ov ? weekTotal : '—'}
           icon="chart"
           trend={weekDelta != null ? `${weekDelta >= 0 ? '+' : ''}${weekDelta}%` : undefined}
-          hint="vs. semana anterior"
+          hint={t.stVsPrevWeek}
         />
       </div>
 
@@ -164,11 +169,11 @@ export default function SistemaHome() {
         <Card padded={false}>
           <div className="p-6 pb-0">
             <CardHeader
-              title="Servicios"
-              description="Consultados en vivo contra el backend"
+              title={t.svcTitle}
+              description={t.svcSub}
               action={
                 <Link to="/laboratorio" className="text-[13px] font-medium text-muted hover:text-ink inline-flex items-center gap-1">
-                  Diagnóstico <Icon name="arrowRight" size={14} />
+                  {t.diagnostics} <Icon name="arrowRight" size={14} />
                 </Link>
               }
             />
@@ -191,7 +196,7 @@ export default function SistemaHome() {
                   {s.ms != null && s.state === 'ok' && <span className="hidden sm:inline text-xs text-faint font-mono">{s.ms} ms</span>}
                   <span className="inline-flex items-center gap-1.5 text-xs text-muted whitespace-nowrap">
                     <span className={cx('h-2 w-2 rounded-full', ui.dot)} />
-                    {ui.label}
+                    {t[ui.key]}
                   </span>
                 </li>
               );
@@ -202,11 +207,11 @@ export default function SistemaHome() {
         {/* Usuarios por rol */}
         <Card className="flex flex-col">
           <CardHeader
-            title="Usuarios por rol"
-            description={`${usersTotal} cuentas registradas`}
+            title={t.byRoleTitle}
+            description={t.byRoleSub(usersTotal)}
             action={
               <Link to="/sistema/usuarios" className="text-[13px] font-medium text-muted hover:text-ink inline-flex items-center gap-1">
-                Ver todos <Icon name="arrowRight" size={14} />
+                {t.viewAll} <Icon name="arrowRight" size={14} />
               </Link>
             }
           />
@@ -219,14 +224,14 @@ export default function SistemaHome() {
             {byRole.map((r) => (
               <li key={r.role} className="flex items-center gap-3 text-sm">
                 <span className={cx('h-2.5 w-2.5 rounded-sm', ROLE_COLORS[r.role])} />
-                <span className="flex-1 text-muted">{ROLE_META[r.role].label}</span>
+                <span className="flex-1 text-muted">{roles[r.role].label}</span>
                 <span className="font-semibold text-ink tabular-nums">{r.count}</span>
               </li>
             ))}
           </ul>
           <div className="mt-auto pt-6">
             <div className="flex items-center justify-between rounded-xl bg-subtle/60 px-4 py-3 text-[13px]">
-              <span className="text-muted">Cuentas suspendidas</span>
+              <span className="text-muted">{t.suspendedAccounts}</span>
               <Badge tone={suspended ? 'danger' : 'neutral'}>{suspended}</Badge>
             </div>
           </div>
@@ -236,7 +241,7 @@ export default function SistemaHome() {
       <div className="grid grid-cols-1 lg:grid-cols-[1.25fr_1fr] gap-6 mb-6">
         {/* Uso */}
         <Card>
-          <CardHeader title="Sesiones de práctica" description="Últimos 14 días, todas las organizaciones" />
+          <CardHeader title={t.usageTitle} description={t.usageSub} />
           <div className="flex items-end gap-1.5 h-40">
             {DAILY_SESSIONS.map((v, i) => (
               <div key={i} className="group relative flex-1 h-full flex items-end">
@@ -251,19 +256,19 @@ export default function SistemaHome() {
             ))}
           </div>
           <div className="flex justify-between text-[11px] text-faint mt-2 pt-2 border-t border-line">
-            <span>Hace 14 días</span>
+            <span>{t.days14}</span>
             <span className="inline-flex items-center gap-3">
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-line-strong" /> Semana anterior</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-brand/80" /> Esta semana</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-line-strong" /> {t.prevWeek}</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-brand/80" /> {t.thisWeek}</span>
             </span>
-            <span>Hoy</span>
+            <span>{t.today}</span>
           </div>
         </Card>
 
         {/* Actividad */}
         <Card>
-          <CardHeader title="Actividad reciente" />
-          {activity.length === 0 && <p className="text-[13px] text-muted">{overview.loading ? 'Cargando…' : 'Aún no hay actividad.'}</p>}
+          <CardHeader title={t.activityTitle} />
+          {activity.length === 0 && <p className="text-[13px] text-muted">{overview.loading ? t.loading : t.noActivity}</p>}
           <ul className="space-y-4">
             {activity.slice(0, 6).map((a) => (
               <li key={a.id} className="flex gap-3">
@@ -272,7 +277,7 @@ export default function SistemaHome() {
                 </span>
                 <div className="min-w-0">
                   <p className="text-[13px] text-ink leading-snug">{a.text}</p>
-                  <p className="text-xs text-faint mt-0.5">{timeAgo(a.at)}</p>
+                  <p className="text-xs text-faint mt-0.5">{timeAgo(a.at, d)}</p>
                 </div>
               </li>
             ))}
@@ -284,33 +289,33 @@ export default function SistemaHome() {
       <Card padded={false}>
         <div className="p-6 pb-0">
           <CardHeader
-            title="Organizaciones"
-            description="Uso por cliente este mes"
+            title={t.orgsTitle}
+            description={t.orgsSub}
             action={
               <Link to="/sistema/organizaciones" className="text-[13px] font-medium text-muted hover:text-ink inline-flex items-center gap-1">
-                Gestionar <Icon name="arrowRight" size={14} />
+                {t.manage} <Icon name="arrowRight" size={14} />
               </Link>
             }
           />
         </div>
         <ul className="divide-y divide-line border-t border-line">
-          {tenants.map((t) => {
-            const voceros = t.voceros;
+          {tenants.map((tn) => {
+            const voceros = tn.voceros;
             const max = Math.max(...tenants.map((x) => x.sessionsMonth || 0), 1);
             return (
-              <li key={t.id} className="grid grid-cols-[1fr_auto] sm:grid-cols-[1.2fr_80px_1fr_auto] items-center gap-4 px-6 py-3.5">
+              <li key={tn.id} className="grid grid-cols-[1fr_auto] sm:grid-cols-[1.2fr_80px_1fr_auto] items-center gap-4 px-6 py-3.5">
                 <div className="min-w-0">
-                  <div className="text-sm font-medium text-ink truncate">{t.name}</div>
-                  <div className="text-xs text-faint">{t.sector}</div>
+                  <div className="text-sm font-medium text-ink truncate">{tn.name}</div>
+                  <div className="text-xs text-faint">{tn.sector ? d.L.dir.sectorLabels[tn.sector] || tn.sector : ''}</div>
                 </div>
-                <div className="hidden sm:block text-xs text-muted tabular-nums">{voceros} voceros</div>
+                <div className="hidden sm:block text-xs text-muted tabular-nums">{t.vocerosCount(voceros)}</div>
                 <div className="hidden sm:flex items-center gap-3">
                   <div className="flex-1 h-1.5 rounded-full bg-subtle overflow-hidden">
-                    <div className="h-full rounded-full bg-brand/70" style={{ width: `${((t.sessionsMonth || 0) / max) * 100}%` }} />
+                    <div className="h-full rounded-full bg-brand/70" style={{ width: `${((tn.sessionsMonth || 0) / max) * 100}%` }} />
                   </div>
-                  <span className="w-10 text-right text-xs text-ink tabular-nums">{t.sessionsMonth || 0}</span>
+                  <span className="w-10 text-right text-xs text-ink tabular-nums">{tn.sessionsMonth || 0}</span>
                 </div>
-                <Badge tone={t.status === 'ACTIVE' ? 'success' : 'danger'}>{t.status === 'ACTIVE' ? 'Activa' : 'Suspendida'}</Badge>
+                <Badge tone={tn.status === 'ACTIVE' ? 'success' : 'danger'}>{tn.status === 'ACTIVE' ? t.active : t.suspended}</Badge>
               </li>
             );
           })}

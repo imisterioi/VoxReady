@@ -9,6 +9,8 @@ const INTEGRAL_SCENARIO = {
   title: 'Prueba integral: corte masivo de suministro',
   category: 'CRISIS',
   optic: 'Empática',
+  // Idioma EXPLÍCITO del contenido (no se depende del valor por defecto del esquema).
+  language: 'es',
   context:
     'Un corte eléctrico no programado dejó sin suministro a 80.000 hogares durante 14 horas, incluyendo pacientes electrodependientes. ' +
     'La empresa tardó 6 horas en emitir el primer comunicado y en redes sociales circulan denuncias de clientes sin información. ' +
@@ -27,28 +29,48 @@ const INTEGRAL_SCENARIO = {
   publics: ['Dirección', 'Planta', 'Técnicos'],
 };
 
-async function upsertUser(prisma, { email, name, role, tenantId = null, area = null }) {
+// Escenario personalizado EN INGLÉS de la organización demo: permite comprobar el catálogo inglés
+// (escenarios propios) sin cambiar la preferencia del vocero español.
+const ENGLISH_SCENARIO = {
+  title: 'Service outage: live TV interview',
+  category: 'CRISIS',
+  optic: 'Empathetic',
+  language: 'en',
+  context:
+    'An unplanned power outage left 80,000 households without supply for 14 hours. The company took six hours to issue its first statement. ' +
+    'You are the spokesperson facing a live television interview.',
+  keyMessages: [
+    'We deeply regret the impact on the affected families.',
+    'Full supply has already been restored.',
+    'Every affected customer will be compensated automatically.',
+  ],
+  redLines: ['Blaming third parties without evidence.', 'Promising dates or amounts that are not confirmed.'],
+  publics: [],
+};
+
+async function upsertUser(prisma, { email, name, role, tenantId = null, area = null, language = 'es' }) {
   return prisma.user.upsert({
     where: { email },
-    update: { name, role, tenantId, area, status: 'ACTIVE', passwordHash: hashPassword(DEMO_PASSWORD) },
-    create: { email, name, role, tenantId, area, status: 'ACTIVE', passwordHash: hashPassword(DEMO_PASSWORD) },
+    update: { name, role, tenantId, area, status: 'ACTIVE', language, passwordHash: hashPassword(DEMO_PASSWORD) },
+    create: { email, name, role, tenantId, area, status: 'ACTIVE', language, passwordHash: hashPassword(DEMO_PASSWORD) },
   });
 }
 
-async function upsertIntegralScenario(prisma, tenantId) {
+async function upsertIntegralScenario(prisma, tenantId, scenario = INTEGRAL_SCENARIO) {
   const data = {
-    context: INTEGRAL_SCENARIO.context,
-    keyMessages: JSON.stringify(INTEGRAL_SCENARIO.keyMessages),
-    redLines: JSON.stringify(INTEGRAL_SCENARIO.redLines),
-    publics: JSON.stringify(INTEGRAL_SCENARIO.publics),
-    optic: INTEGRAL_SCENARIO.optic,
-    category: INTEGRAL_SCENARIO.category,
-    availableToAllVoceros: true,
+    context: scenario.context,
+    keyMessages: JSON.stringify(scenario.keyMessages),
+    redLines: JSON.stringify(scenario.redLines),
+    publics: JSON.stringify(scenario.publics),
+    optic: scenario.optic,
+    category: scenario.category,
+    language: scenario.language,
+    availableToAllVoceros: scenario.availableToAllVoceros ?? true,
   };
   return prisma.theme.upsert({
-    where: { tenantId_title: { tenantId, title: INTEGRAL_SCENARIO.title } },
+    where: { tenantId_title: { tenantId, title: scenario.title } },
     update: data,
-    create: { ...data, title: INTEGRAL_SCENARIO.title, tenantId },
+    create: { ...data, title: scenario.title, tenantId },
   });
 }
 
@@ -71,33 +93,44 @@ async function seedDemo(prisma, { tenant, scenarios }) {
     create: { id: '00000000-0000-0000-0000-000000000002', name: 'Energía Andes', sector: 'Energía' },
   });
 
-  // Cuentas (contraseña: demo1234)
+  // Cuentas (contraseña: demo1234). El idioma se fija EXPLÍCITAMENTE en todas: los perfiles del
+  // «Acceso rápido» quedan en español y se añade un vocero en inglés para probar el catálogo inglés.
   const accounts = [
-    await upsertUser(prisma, { email: 'sofia@voxready.io', name: 'Sofía Reyes', role: 'SYSTEM' }),
-    await upsertUser(prisma, { email: 'marta@voxready.io', name: 'Marta Vidal', role: 'MASTER' }),
-    await upsertUser(prisma, { email: 'admin@demo.com', name: 'Carlos Ruiz', role: 'ADMIN', tenantId: tenant.id }),
-    await upsertUser(prisma, { email: 'vocero@demo.com', name: 'Ana Torres', role: 'VOCERO', tenantId: tenant.id, area: 'Dirección' }),
-    await upsertUser(prisma, { email: 'diego@demo.com', name: 'Diego Paredes', role: 'VOCERO', tenantId: tenant.id, area: 'Planta' }),
-    await upsertUser(prisma, { email: 'lucia@andes.cl', name: 'Lucía Soto', role: 'ADMIN', tenantId: andes.id }),
-    await upsertUser(prisma, { email: 'tomas@andes.cl', name: 'Tomás Rivas', role: 'VOCERO', tenantId: andes.id, area: 'Técnicos' }),
+    await upsertUser(prisma, { email: 'sofia@voxready.io', name: 'Sofía Reyes', role: 'SYSTEM', language: 'es' }),
+    await upsertUser(prisma, { email: 'marta@voxready.io', name: 'Marta Vidal', role: 'MASTER', language: 'es' }),
+    await upsertUser(prisma, { email: 'admin@demo.com', name: 'Carlos Ruiz', role: 'ADMIN', tenantId: tenant.id, language: 'es' }),
+    await upsertUser(prisma, { email: 'vocero@demo.com', name: 'Ana Torres', role: 'VOCERO', tenantId: tenant.id, area: 'Dirección', language: 'es' }),
+    await upsertUser(prisma, { email: 'diego@demo.com', name: 'Diego Paredes', role: 'VOCERO', tenantId: tenant.id, area: 'Planta', language: 'es' }),
+    await upsertUser(prisma, { email: 'emily@demo.com', name: 'Emily Carter', role: 'VOCERO', tenantId: tenant.id, area: 'Dirección', language: 'en' }),
+    await upsertUser(prisma, { email: 'lucia@andes.cl', name: 'Lucía Soto', role: 'ADMIN', tenantId: andes.id, language: 'es' }),
+    await upsertUser(prisma, { email: 'tomas@andes.cl', name: 'Tomás Rivas', role: 'VOCERO', tenantId: andes.id, area: 'Técnicos', language: 'es' }),
   ];
 
   // Escenario de prueba integral en ambas organizaciones, disponible para todos sus voceros
   const integralDemo = await upsertIntegralScenario(prisma, tenant.id);
   const integralAndes = await upsertIntegralScenario(prisma, andes.id);
 
+  // Escenario personalizado en inglés de la organización demo (catálogo inglés de escenarios propios)
+  const englishDemo = await upsertIntegralScenario(prisma, tenant.id, {
+    ...ENGLISH_SCENARIO,
+    availableToAllVoceros: false,
+  });
+
   const diego = accounts.find((u) => u.email === 'diego@demo.com');
   const ana = accounts.find((u) => u.email === 'vocero@demo.com');
+  const emily = accounts.find((u) => u.email === 'emily@demo.com');
   const tomas = accounts.find((u) => u.email === 'tomas@andes.cl');
 
   for (const scenario of scenarios) await assign(prisma, diego.id, scenario.id);
   await assign(prisma, ana.id, integralDemo.id);
   await assign(prisma, diego.id, integralDemo.id);
+  await assign(prisma, emily.id, englishDemo.id);
   await assign(prisma, tomas.id, integralAndes.id);
 
   console.log('\nCuentas de prueba (contraseña: demo1234):');
-  for (const u of accounts) console.log(`  ${u.role.padEnd(7)} ${u.email}`);
-  console.log(`Escenario integral: "${INTEGRAL_SCENARIO.title}"`);
+  for (const u of accounts) console.log(`  ${u.role.padEnd(7)} ${String(u.language).padEnd(2)} ${u.email}`);
+  console.log(`Escenario integral: "${INTEGRAL_SCENARIO.title}" (es)`);
+  console.log(`Escenario en inglés: "${ENGLISH_SCENARIO.title}" (en)`);
 }
 
 // ========================================
@@ -285,8 +318,8 @@ async function seedMetricsDemo(prisma) {
   // no reemplaza a la cuenta SYSTEM del proyecto.
   await prisma.user.upsert({
     where: { email: 'system.demo@voxready.local' },
-    update: { name: 'Administrador del Sistema (demo)', role: 'SYSTEM', status: 'ACTIVE', tenantId: null, passwordHash: hashPassword(DEMO_PASSWORD) },
-    create: { email: 'system.demo@voxready.local', name: 'Administrador del Sistema (demo)', role: 'SYSTEM', status: 'ACTIVE', tenantId: null, passwordHash: hashPassword(DEMO_PASSWORD) },
+    update: { name: 'Administrador del Sistema (demo)', role: 'SYSTEM', status: 'ACTIVE', tenantId: null, language: 'es', passwordHash: hashPassword(DEMO_PASSWORD) },
+    create: { email: 'system.demo@voxready.local', name: 'Administrador del Sistema (demo)', role: 'SYSTEM', status: 'ACTIVE', tenantId: null, language: 'es', passwordHash: hashPassword(DEMO_PASSWORD) },
   });
 
   for (const org of METRIC_ORGS) {
@@ -300,14 +333,14 @@ async function seedMetricsDemo(prisma) {
 
     // ADMIN de la organización (siempre con tenant)
     const adminEmail = metricEmailFor(org.admin);
-    const adminData = { name: org.admin, role: 'ADMIN', status: 'ACTIVE', tenantId: tenant.id, passwordHash: hashPassword(DEMO_PASSWORD) };
+    const adminData = { name: org.admin, role: 'ADMIN', status: 'ACTIVE', tenantId: tenant.id, language: 'es', passwordHash: hashPassword(DEMO_PASSWORD) };
     await prisma.user.upsert({ where: { email: adminEmail }, update: adminData, create: { email: adminEmail, ...adminData } });
     counts.admins += 1;
 
     // Temas de la organización (6, coherentes con el sector)
     const themes = [];
     for (const t of METRIC_THEMES) {
-      const themeData = { category: t.category, optic: t.optic, context: t.context, keyMessages: JSON.stringify(t.keyMessages), redLines: JSON.stringify(t.redLines), availableToAllVoceros: true, tenantId: tenant.id };
+      const themeData = { category: t.category, optic: t.optic, context: t.context, keyMessages: JSON.stringify(t.keyMessages), redLines: JSON.stringify(t.redLines), availableToAllVoceros: true, tenantId: tenant.id, language: 'es' };
       const theme = await prisma.theme.upsert({
         where: { tenantId_title: { tenantId: tenant.id, title: t.title } },
         update: themeData,
@@ -320,7 +353,7 @@ async function seedMetricsDemo(prisma) {
     // Voceros + sesiones + asignaciones
     for (const v of org.voceros) {
       const email = metricEmailFor(v.name);
-      const userData = { name: v.name, role: 'VOCERO', area: v.area, status: v.status || 'ACTIVE', anonymizedAt: v.anonymized ? new Date() : null, tenantId: tenant.id, passwordHash: v.anonymized ? null : hashPassword(DEMO_PASSWORD) };
+      const userData = { name: v.name, role: 'VOCERO', area: v.area, status: v.status || 'ACTIVE', anonymizedAt: v.anonymized ? new Date() : null, tenantId: tenant.id, language: 'es', passwordHash: v.anonymized ? null : hashPassword(DEMO_PASSWORD) };
       const user = await prisma.user.upsert({ where: { email }, update: userData, create: { email, ...userData } });
       counts.voceros += 1;
 
@@ -343,6 +376,8 @@ async function seedMetricsDemo(prisma) {
           metrics: metricMetrics(seed),
           report: metricReport(theme, score, seed),
           review: i % 3 === 0 ? metricReview(score) : null,
+          // Idioma de la sesión demo: el del escenario con el que se practicó (nunca null).
+          language: theme.language,
         };
         // ID determinista (misma secuencia que antes) → upsert actualiza en sitio.
         await prisma.session.upsert({ where: { id: nextSessionId() }, update: data, create: { ...data, id: uid(700000 + seq - 1) } });

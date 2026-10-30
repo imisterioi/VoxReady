@@ -3,6 +3,7 @@
 // - Token firmado con HMAC-SHA256 (formato similar a un JWT), válido 7 días.
 const crypto = require('crypto');
 const presence = require('./lib/presence');
+const { normalizeLanguage, DEFAULT: DEFAULT_LANGUAGE } = require('./lib/language');
 
 const SECRET = process.env.AUTH_SECRET || 'voxready-dev-secret-cambiar-en-produccion';
 const TOKEN_DAYS = 7;
@@ -76,6 +77,9 @@ function toApiUser(user) {
       user.tenant?.brandColor && user.tenant?.accentColor
         ? { brand: user.tenant.brandColor, accent: user.tenant.accentColor }
         : null,
+    // Idioma: preferencia individual (null = hereda) e idioma por defecto de la organización.
+    language: normalizeLanguage(user.language),
+    defaultLanguage: normalizeLanguage(user.tenant?.defaultLanguage) || DEFAULT_LANGUAGE,
     createdAt: user.createdAt,
     lastLoginAt: user.lastLoginAt,
   };

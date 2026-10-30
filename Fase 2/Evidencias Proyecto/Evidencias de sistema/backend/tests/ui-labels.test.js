@@ -7,6 +7,12 @@ const path = require('path');
 
 const file = path.join(__dirname, '..', '..', 'frontend', 'src', 'components', 'MetricsDashboard.jsx');
 const source = fs.readFileSync(file, 'utf8');
+// Las etiquetas visibles ya no viven en el componente: se resuelven desde el diccionario central
+// del idioma activo. Por eso las etiquetas humanas se comprueban en el diccionario español.
+const dictionary = fs.readFileSync(
+  path.join(__dirname, '..', '..', 'frontend', 'src', 'data', 'dictionary.js'),
+  'utf8',
+);
 
 // Se excluyen comentarios y las líneas que construyen URLs (no son texto visible).
 const visible = source
@@ -48,7 +54,7 @@ for (const token of FORBIDDEN) {
   ok(!visible.includes(token), `No aparece el campo técnico "${token}"`);
 }
 for (const label of REQUIRED) {
-  ok(source.includes(label), `Se usa la etiqueta humana "${label}"`);
+  ok(dictionary.includes(label), `Se usa la etiqueta humana "${label}"`);
 }
 
 console.log(`\nResultado: ${pass} aprobadas, ${fail} fallidas.`);

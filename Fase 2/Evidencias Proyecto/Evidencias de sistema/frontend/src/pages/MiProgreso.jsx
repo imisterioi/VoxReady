@@ -1,24 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import { CHARTCOLORS } from '../data/mockData';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, cx } from '../components/ui';
 import useApiData from '../hooks/useApiData';
-import { formatDate } from '../data/directory';
+import { formatDate, localeFor } from '../data/directory';
 import { lessonsForArea } from '../data/lessons';
 import { evaluatedSessions, historyStatus } from '../lib/practice/sessionHistory';
 import { analyticsPath, progressPath } from '../lib/practice/progressSource';
 import { historyWindow } from '../lib/practice/historyPaging';
 import Pagination from '../components/Pagination';
 
-const AREAS = [
-  { key: 'expression', label: 'Expresión' },
-  { key: 'voice', label: 'Tono de voz' },
-  { key: 'coherence', label: 'Coherencia' },
-  { key: 'empathy', label: 'Empatía' },
-];
+// Claves de las cuatro áreas evaluadas. La etiqueta visible la aporta el diccionario (t.series), en el
+// mismo orden: nunca se traduce la clave interna.
+const AREAS = [{ key: 'expression' }, { key: 'voice' }, { key: 'coherence' }, { key: 'empathy' }];
 
 // Progreso real del vocero a partir de sus prácticas evaluadas (GET /api/sessions).
 //
@@ -28,7 +25,10 @@ const AREAS = [
 //    (`/admin/vocero/:userId`). El backend valida el rol y la organización: el identificador
 //    de la ruta nunca es la autorización.
 export default function MiProgreso({ audience = 'user' }) {
-  const t = I.es.L.u7;
+  const { d, lang } = useI18n();
+  const t = d.L.u7;
+  // Etiquetas visibles de las cuatro áreas (el orden es el de `AREAS`).
+  const areas = AREAS.map((a, i) => ({ ...a, label: t.series[i] }));
   const isAdmin = audience === 'admin';
   const { userId = null } = useParams();
   // Historial paginado en el servidor: 10 filas al entrar, ampliables a 20 dentro de la página.
@@ -88,12 +88,12 @@ export default function MiProgreso({ audience = 'user' }) {
 
   const header = isAdmin ? (
     <PageHeader
-      eyebrow="Administración · Progreso"
-      title={voceroName ? `Progreso de ${voceroName}` : 'Progreso del vocero'}
-      description="Métricas, puntuaciones por área y evolución histórica de las prácticas evaluadas de este vocero."
+      eyebrow={t.adminEyebrow}
+      title={voceroName ? t.adminTitleOf(voceroName) : t.adminTitle}
+      description={t.adminSub}
       actions={
         <Button to="/admin/voceros" variant="secondary" icon="arrowLeft">
-          Volver a voceros
+          {t.backToVoceros}
         </Button>
       }
     />
@@ -109,11 +109,11 @@ export default function MiProgreso({ audience = 'user' }) {
         <Card>
           <EmptyState
             icon="users"
-            title="No se indicó el vocero"
-            description="Abre el progreso desde la lista de voceros de tu organización."
+            title={t.noVoceroTitle}
+            description={t.noVoceroDesc}
             action={
               <Button to="/admin/voceros" variant="secondary">
-                Ver voceros
+                {t.seeVoceros}
               </Button>
             }
           />
@@ -131,11 +131,11 @@ export default function MiProgreso({ audience = 'user' }) {
           <EmptyState
             tone="danger"
             icon="server"
-            title="No se pudo cargar el progreso"
+            title={t.loadFailedTitle}
             description={history.error}
             action={
               <Button variant="secondary" icon="refresh" onClick={history.reload}>
-                Reintentar
+                {t.retry}
               </Button>
             }
           />
@@ -149,7 +149,7 @@ export default function MiProgreso({ audience = 'user' }) {
       <>
         {isAdmin && header}
         <Card>
-          <EmptyState icon="refresh" title={isAdmin ? 'Cargando el progreso…' : 'Cargando tu progreso…'} />
+          <EmptyState icon="refresh" title={isAdmin ? t.loadingAdmin : t.loadingUser} />
         </Card>
       </>
     );
@@ -163,20 +163,20 @@ export default function MiProgreso({ audience = 'user' }) {
         <Card className="mb-6">
           <EmptyState
             icon="chart"
-            title="Aún no hay datos de progreso"
+            title={t.emptyTitle}
             description={
               isAdmin
-                ? 'Este vocero todavía no tiene prácticas registradas.'
-                : 'Completa tu primera práctica para ver tu evolución por área.'
+                ? t.emptyAdmin
+                : t.emptyUser
             }
-            action={isAdmin ? undefined : <Button to="/vocero/escenarios" variant="accent" icon="mic">Practicar ahora</Button>}
+            action={isAdmin ? undefined : <Button to="/vocero/escenarios" variant="accent" icon="mic">{t.practiceNow}</Button>}
           />
         </Card>
       ) : (
         <>
           {/* Resumen por área: última vs primera práctica */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            {AREAS.map((a, i) => {
+            {areas.map((a, i) => {
               const values = series[i].filter((v) => v != null);
               const current = values.at(-1);
               const change = values.length > 1 ? current - values[0] : null;
@@ -194,7 +194,7 @@ export default function MiProgreso({ audience = 'user' }) {
                       </span>
                     )}
                   </div>
-                  {current == null && <div className="text-xs text-faint mt-2">No medido aún</div>}
+                  {current == null && <div className="text-xs text-faint mt-2">{t.notMeasured}</div>}
                 </Card>
               );
             })}
@@ -204,23 +204,23 @@ export default function MiProgreso({ audience = 'user' }) {
           <Card className="mb-6">
             <CardHeader
               title={t.trendL}
-              description={isAdmin ? `Últimas ${chrono.length} práctica(s)` : `Tus últimas ${chrono.length} práctica(s)`}
+              description={isAdmin ? t.trendAdmin(chrono.length) : t.trendUser(chrono.length)}
               action={
                 <div className="hidden sm:flex gap-4 flex-wrap">
-                  {AREAS.map((a, i) => (
+                  {areas.map((a, i) => (
                     <span key={a.key} className="text-xs text-muted flex items-center gap-1.5">
                       <span className="block w-3 h-[3px] rounded-full" style={{ background: CHARTCOLORS[i] }} />
                       {a.label}
                     </span>
                   ))}
                   <span className="text-xs text-muted flex items-center gap-1.5">
-                    <span className="block w-3 border-t-2 border-dashed border-ink/60" /> Global
+                    <span className="block w-3 border-t-2 border-dashed border-ink/60" /> {t.globalL}
                   </span>
                 </div>
               }
             />
             {chrono.length < 2 ? (
-              <p className="text-sm text-muted">Necesitas al menos 2 prácticas para ver la tendencia.</p>
+              <p className="text-sm text-muted">{t.trendNeed}</p>
             ) : (
               <>
                 <div className="w-full overflow-x-auto">
@@ -258,7 +258,7 @@ export default function MiProgreso({ audience = 'user' }) {
                     ))}
                     {chrono.map((s, i) => (
                       <text key={s.id} x={getX(i)} y={H - 8} fontSize="10" fill="rgb(var(--faint))" textAnchor="middle">
-                        {new Date(s.completedAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
+                        {new Date(s.completedAt).toLocaleDateString(localeFor(lang), { day: 'numeric', month: 'short' })}
                       </text>
                     ))}
                   </svg>
@@ -270,7 +270,7 @@ export default function MiProgreso({ audience = 'user' }) {
                       <span>
                         Global: <b className="text-ink font-medium">{globalSeries[hovered]}</b>
                       </span>
-                      {AREAS.map((a, i) => (
+                      {areas.map((a, i) => (
                         <span key={a.key} className="tabular-nums">
                           <span style={{ color: CHARTCOLORS[i] }}>●</span> {a.label}: <b className="text-ink font-medium">{series[i][hovered] ?? '—'}</b>
                         </span>
@@ -286,16 +286,16 @@ export default function MiProgreso({ audience = 'user' }) {
           <Card padded={false} className="overflow-hidden mb-6">
             <div className="p-6 pb-0">
               <CardHeader
-                title={isAdmin ? 'Prácticas del vocero' : 'Tus prácticas'}
+                title={isAdmin ? t.historyAdmin : t.historyUser}
                 description={
                   win.showPagination
-                    ? `${total} práctica(s) · mostrando ${visibleSessions.length} · página ${win.page} de ${win.pages}`
-                    : `${total} práctica(s)`
+                    ? t.historyCountPage(total, visibleSessions.length, win.page, win.pages)
+                    : t.historyCount(total)
                 }
                 action={
                   isAdmin ? undefined : (
                     <Button to="/vocero/escenarios" size="sm" variant="accent" icon="mic">
-                      Practicar
+                      {t.practice}
                     </Button>
                   )
                 }
@@ -303,7 +303,7 @@ export default function MiProgreso({ audience = 'user' }) {
             </div>
             <ul className="divide-y divide-line border-t border-line">
               {visibleSessions.map((s) => {
-                const status = historyStatus(s);
+                const status = historyStatus(s, t.reportStatus);
                 // El administrador abre el informe en su propia ruta (audiencia admin).
                 const reportTo = isAdmin ? `/admin/informe?sesion=${s.id}` : `/vocero/informe?sesion=${s.id}`;
                 return (
@@ -313,8 +313,8 @@ export default function MiProgreso({ audience = 'user' }) {
                       {s.score ?? '—'}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-ink truncate">{s.theme?.title || 'Práctica'}</div>
-                      <div className="text-xs text-muted">{formatDate(s.completedAt || s.createdAt)}</div>
+                      <div className="text-sm font-medium text-ink truncate">{s.theme?.title || t.sessionFallback}</div>
+                      <div className="text-xs text-muted">{formatDate(s.completedAt || s.createdAt, lang)}</div>
                       {/* Estado del informe informado por el backend (nunca inferido ni inventado). */}
                       <div className="mt-1.5">
                         <Badge tone={status.tone}>{status.label}</Badge>
@@ -343,7 +343,7 @@ export default function MiProgreso({ audience = 'user' }) {
                   className="w-full flex items-center justify-center gap-2 py-3 text-[13px] font-medium text-muted hover:text-ink hover:bg-subtle/50 transition-colors"
                 >
                   <Icon name="chevronDown" size={16} className={expanded ? 'rotate-180' : ''} />
-                  {expanded ? 'Ver menos' : `Ver más (${Math.min(win.inBlock, 20) - win.visible} más)`}
+                  {expanded ? t.seeLess : t.seeMore(Math.min(win.inBlock, 20) - win.visible)}
                 </button>
               </div>
             )}
@@ -373,11 +373,11 @@ export default function MiProgreso({ audience = 'user' }) {
             description={
               weakest
                 ? isAdmin
-                  ? `Área más débil: ${weakest.label.toLowerCase()}`
-                  : `Tu área más débil: ${weakest.label.toLowerCase()}`
+                  ? t.weakAdmin(weakest.label.toLowerCase())
+                  : t.weakUser(weakest.label.toLowerCase())
                 : isAdmin
-                  ? 'Basadas en la última práctica del vocero'
-                  : 'Basadas en tu última práctica'
+                  ? t.recoBasedAdmin
+                  : t.recoBasedUser
             }
           />
           <div className="space-y-3">
@@ -390,8 +390,8 @@ export default function MiProgreso({ audience = 'user' }) {
             {!mejoras.length && (
               <p className="text-sm text-muted">
                 {isAdmin
-                  ? 'Este vocero aún no tiene recomendaciones de la IA.'
-                  : 'Tras tu primera práctica verás aquí las recomendaciones de la IA.'}
+                  ? t.noRecoAdmin
+                  : t.noRecoUser}
               </p>
             )}
           </div>
@@ -399,7 +399,7 @@ export default function MiProgreso({ audience = 'user' }) {
               cuando consulta su propio progreso. */}
           {!isAdmin && (
             <div className="mt-5 pt-5 border-t border-line">
-              <div className="text-xs text-muted mb-3">Lecciones sugeridas</div>
+              <div className="text-xs text-muted mb-3">{t.lessonsL}</div>
               <div className="flex flex-wrap gap-2">
                 {lessons.map((l) => (
                   <Button key={l.id} variant="secondary" size="sm" icon="book" to={`/vocero/leccion/${l.id}`}>
@@ -420,10 +420,10 @@ export default function MiProgreso({ audience = 'user' }) {
               {t.months[calMonth]} {calYear}
             </span>
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={handlePrevMonth} aria-label="Mes anterior">
+              <Button variant="ghost" size="icon" onClick={handlePrevMonth} aria-label={t.prevMonth}>
                 <Icon name="chevronLeft" size={16} />
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleNextMonth} aria-label="Mes siguiente">
+              <Button variant="ghost" size="icon" onClick={handleNextMonth} aria-label={t.nextMonth}>
                 <Icon name="chevronRight" size={16} />
               </Button>
             </div>
@@ -462,12 +462,12 @@ export default function MiProgreso({ audience = 'user' }) {
             <div>
               <div className="text-xs text-muted">{t.nextLabel}</div>
               <div className="text-sm font-medium text-ink mt-0.5">
-                {selectedDate ? `${selectedDate.day} de ${t.months[selectedDate.month]}` : t.calNone}
+                {selectedDate ? t.ofDate(selectedDate.day, t.months[selectedDate.month]) : t.calNone}
               </div>
             </div>
             <Button
               disabled={!selectedDate}
-              onClick={() => toast.success(`Recordatorio: práctica el ${selectedDate.day} de ${t.months[selectedDate.month]}`)}
+              onClick={() => toast.success(t.reminder(selectedDate.day, t.months[selectedDate.month]))}
               icon="calendar"
             >
               {t.calBtn}

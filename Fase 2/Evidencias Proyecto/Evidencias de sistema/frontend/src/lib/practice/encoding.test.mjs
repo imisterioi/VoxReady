@@ -59,12 +59,15 @@ test('ningún archivo del frontend contiene mojibake de doble codificación', ()
 
 test('los textos del informe que ve el vocero están correctos', () => {
   const informe = readFileSync(join(FRONTEND, 'src', 'pages', 'InformeCoach.jsx'), 'utf8');
+  // Las etiquetas del informe viven en el diccionario (idioma activo); se comprueba ahí el texto
+  // exacto, con sus acentos, comillas y puntos suspensivos.
+  const diccionario = readFileSync(join(FRONTEND, 'src', 'data', 'dictionary.js'), 'utf8');
   // Etiqueta reportada como rota en una sesión real.
-  assert.ok(informe.includes("'Según tu área más débil'"), 'la etiqueta de lecciones debe llevar “Según tu área más débil”');
+  assert.ok(diccionario.includes("lessonsWeakest: 'Según tu área más débil'"), 'la etiqueta de lecciones debe llevar “Según tu área más débil”');
   // Comillas curvas que envuelven la cita del informe (el texto de la cita viene de la base de datos).
   assert.ok(informe.includes('“{report.cita}”'), 'la cita debe ir entre comillas curvas correctas');
-  assert.ok(informe.includes('Líneas rojas'), 'los títulos con acentos deben conservarse');
-  assert.ok(informe.includes('Cargando tu informe…'), 'los puntos suspensivos deben ser el carácter … correcto');
+  assert.ok(diccionario.includes("redLinesTitle: 'Líneas rojas'"), 'los títulos con acentos deben conservarse');
+  assert.ok(diccionario.includes("loading: 'Cargando tu informe…'"), 'los puntos suspensivos deben ser el carácter … correcto');
 });
 
 test('el cliente HTTP lee el informe como JSON (UTF-8 por especificación)', () => {

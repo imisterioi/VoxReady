@@ -11,58 +11,118 @@ const STATUS = ['sufficient', 'partial', 'evasive', 'contradiction'];
 const RULE_STATUS = ['empty', 'unknown', 'refusal', 'repeat', 'no_transcript'];
 
 const FILLERS = /^(eh+|em+|este+|esto+|bueno|ok|okay|ya|mmm+|ah+|claro|obvio)+$/i;
+// Muletillas en inglés ("um", "well", "you know"…). Solo se aplican a respuestas en inglés.
+const FILLERS_EN = /^(um+|uh+|erm+|hmm+|mm+|well|like|so|yeah|right|okay|ok)+$/i;
 const UNKNOWN =
   /(no lo s[eé]|no s[eé]|no tengo (esa|esta|mayor|otra) informaci[oó]n|no manejo (ese|este) dato|tendr[ií]a que (revisarlo|verlo|confirmarlo)|no puedo confirmarlo|no estoy seguro)/i;
 const REFUSAL =
   /(sin comentarios|no voy a (responder|comentar|referirme)|no puedo (hablar|comentar|referirme)|no me voy a referir|prefiero no (responder|comentar))/i;
+const UNKNOWN_EN =
+  /(i (do ?n[o']t|don't) know|i have no information|i (do ?n[o']t|don't) have that information|i can't confirm (that|it)|i cannot confirm (that|it)|i'?m not sure|i would have to (check|review|confirm) (it|that))/i;
+const REFUSAL_EN =
+  /(no comment|i'?m not going to (answer|comment|respond)|i (can'?t|cannot) (talk|comment|answer) about|i won'?t comment|i'?d rather not (answer|comment))/i;
 
 const normalize = (text) => String(text ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 
 // Respuesta compuesta SOLO por muletillas ("eh, este, bueno"): se evalua palabra por palabra.
-function isFillerOnly(text) {
+// El patrón depende del idioma de la respuesta (español o inglés).
+function isFillerOnly(text, pattern = FILLERS) {
   const tokens = text.replace(/[.,!?;:¡¿"']/g, ' ').split(/\s+/).filter(Boolean);
-  return tokens.length > 0 && tokens.every((token) => FILLERS.test(token));
+  return tokens.length > 0 && tokens.every((token) => pattern.test(token));
 }
 
 // Reglas deterministas: devuelven { status, reason } o null (se delega a la IA).
 // `spoke` (se detectó voz en la respuesta) y `hasTranscript` distinguen un SILENCIO real de una
 // transcripción que no se pudo obtener: sin texto, si el vocero habló, NO es silencio ni
 // respuesta suficiente, y nunca se inventa lo que dijo.
-function ruleDecision({ answer, previousAnswers = [], spoke = false, hasTranscript = null } = {}) {
+// `lang` selecciona los patrones del idioma de la respuesta (los estados son los mismos).
+function ruleDecision({ answer, previousAnswers = [], spoke = false, hasTranscript = null, lang = 'es' } = {}) {
   const text = normalize(answer);
+  const english = lang === 'en';
+  const fillers = english ? FILLERS_EN : FILLERS;
+  const unknown = english ? UNKNOWN_EN : UNKNOWN;
+  const refusal = english ? REFUSAL_EN : REFUSAL;
   if (!text) {
     if (spoke === true && hasTranscript !== true) return { status: 'no_transcript', reason: 'transcripcion_no_disponible' };
     return { status: 'empty', reason: 'respuesta_vacia' };
   }
-  if (isFillerOnly(text)) return { status: 'empty', reason: 'solo_muletillas' };
-  if (text.length <= 200 && UNKNOWN.test(text)) return { status: 'unknown', reason: 'desconocimiento_declarado' };
-  if (text.length <= 200 && REFUSAL.test(text)) return { status: 'refusal', reason: 'negativa_explicita' };
+  if (isFillerOnly(text, fillers)) return { status: 'empty', reason: 'solo_muletillas' };
+  if (text.length <= 200 && unknown.test(text)) return { status: 'unknown', reason: 'desconocimiento_declarado' };
+  if (text.length <= 200 && refusal.test(text)) return { status: 'refusal', reason: 'negativa_explicita' };
   if (previousAnswers.some((prev) => normalize(prev) === text)) return { status: 'repeat', reason: 'respuesta_repetida' };
   return null;
 }
 
-function buildMessages({ mainQuestion, answer, history = [], cfg, followUpsUsed = 0, extraordinaryUsed = 0, budget = {} }) {
+// Instrucciones del clasificador en cada idioma. El contrato JSON (claves y valores de `status`)
+// es EXACTAMENTE el mismo en ambos idiomas: solo cambia el idioma de las instrucciones.
+const ASSESSMENT_TEXTS = {
+  es: {
+    analyst: 'Eres un analista de entrevistas. Decides si la ULTIMA respuesta del vocero contesta de verdad la pregunta principal.',
+    noInvent: 'No inventes hechos, cifras, citas ni contradicciones. Usa solo lo que aparece en la transcripcion.',
+    brief: 'Una respuesta BREVE puede ser suficiente si contesta lo que se pregunto.',
+    noExtra: 'No exijas detalles que la pregunta no pidio y no repitas una cuestion ya resuelta antes en la conversacion.',
+    aggressiveness: (value) => `Agresividad configurada: ${value}.`,
+    followUps: (used, extraordinary, total) =>
+      `Repreguntas habituales usadas en esta pregunta principal: ${used}. Extraordinarias: ${extraordinary} de ${total}.`,
+    jsonOnly: 'Responde SOLO con un objeto JSON valido, sin markdown ni texto adicional, con esta forma exacta:',
+    contradiction:
+      'Usa "contradiction" solo si el vocero se contradice con una declaracion ANTERIOR suya y cita los fragmentos en "evidence".',
+    sufficient: 'Usa "sufficient" si lo solicitado ya esta respondido, aunque falten detalles que nadie pidio.',
+    interviewer: 'ENTREVISTADOR',
+    respondent: 'VOCERO',
+    mainQuestion: (question) => `PREGUNTA PRINCIPAL ACTUAL: ${question}`,
+    transcript: (turns) => `TRANSCRIPCION RECIENTE:\n${turns}`,
+    noTurns: 'TRANSCRIPCION RECIENTE: (sin turnos previos)',
+    lastAnswer: (answer) => `ULTIMA RESPUESTA DEL VOCERO: ${answer}`,
+    evaluate: 'Evalua esa ultima respuesta y devuelve el JSON.',
+  },
+  en: {
+    analyst: 'You are an interview analyst. You decide whether the spokesperson LAST answer truly addresses the main question.',
+    noInvent: 'Do not invent facts, figures, quotes or contradictions. Use only what appears in the transcript.',
+    brief: 'A BRIEF answer can be sufficient if it addresses what was asked.',
+    noExtra: 'Do not demand details the question did not ask for and do not repeat a point already settled earlier in the conversation.',
+    aggressiveness: (value) => `Configured aggressiveness: ${value}.`,
+    followUps: (used, extraordinary, total) =>
+      `Standard follow-ups used on this main question: ${used}. Extraordinary: ${extraordinary} of ${total}.`,
+    jsonOnly: 'Reply ONLY with a valid JSON object, without markdown or additional text, using exactly this shape:',
+    contradiction:
+      'Use "contradiction" only if the spokesperson contradicts an EARLIER statement of their own and quote the fragments in "evidence".',
+    sufficient: 'Use "sufficient" if what was asked is already answered, even if details nobody requested are missing.',
+    interviewer: 'INTERVIEWER',
+    respondent: 'SPOKESPERSON',
+    mainQuestion: (question) => `CURRENT MAIN QUESTION: ${question}`,
+    transcript: (turns) => `RECENT TRANSCRIPT:\n${turns}`,
+    noTurns: 'RECENT TRANSCRIPT: (no previous turns)',
+    lastAnswer: (answer) => `SPOKESPERSON LAST ANSWER: ${answer}`,
+    evaluate: 'Assess that last answer and return the JSON.',
+  },
+};
+
+const assessmentTexts = (lang) => ASSESSMENT_TEXTS[lang] || ASSESSMENT_TEXTS.es;
+
+function buildMessages({ mainQuestion, answer, history = [], cfg, followUpsUsed = 0, extraordinaryUsed = 0, budget = {}, lang = 'es' }) {
+  const T = assessmentTexts(lang);
   const turns = history
     .slice(-12)
-    .map((turn) => `${turn.role === 'interviewer' ? 'ENTREVISTADOR' : 'VOCERO'}: ${String(turn.text || '').slice(0, 600)}`)
+    .map((turn) => `${turn.role === 'interviewer' ? T.interviewer : T.respondent}: ${String(turn.text || '').slice(0, 600)}`)
     .join('\n');
   const system = [
-    'Eres un analista de entrevistas. Decides si la ULTIMA respuesta del vocero contesta de verdad la pregunta principal.',
-    'No inventes hechos, cifras, citas ni contradicciones. Usa solo lo que aparece en la transcripcion.',
-    'Una respuesta BREVE puede ser suficiente si contesta lo que se pregunto.',
-    'No exijas detalles que la pregunta no pidio y no repitas una cuestion ya resuelta antes en la conversacion.',
-    `Agresividad configurada: ${cfg?.aggressiveness || 'MEDIA'}.`,
-    `Repreguntas habituales usadas en esta pregunta principal: ${followUpsUsed}. Extraordinarias: ${extraordinaryUsed} de ${budget.extraordinary ?? 0}.`,
-    'Responde SOLO con un objeto JSON valido, sin markdown ni texto adicional, con esta forma exacta:',
+    T.analyst,
+    T.noInvent,
+    T.brief,
+    T.noExtra,
+    T.aggressiveness(cfg?.aggressiveness || 'MEDIA'),
+    T.followUps(followUpsUsed, extraordinaryUsed, budget.extraordinary ?? 0),
+    T.jsonOnly,
     '{"status":"sufficient|partial|evasive|contradiction","focus":"informacion pendiente (vacio si sufficient)","evidence":["fragmento literal del vocero"],"justify_extraordinary":false,"reason":"motivo breve"}',
-    'Usa "contradiction" solo si el vocero se contradice con una declaracion ANTERIOR suya y cita los fragmentos en "evidence".',
-    'Usa "sufficient" si lo solicitado ya esta respondido, aunque falten detalles que nadie pidio.',
+    T.contradiction,
+    T.sufficient,
   ].join('\n');
   const user = [
-    `PREGUNTA PRINCIPAL ACTUAL: ${String(mainQuestion || '').slice(0, 600)}`,
-    turns ? `TRANSCRIPCION RECIENTE:\n${turns}` : 'TRANSCRIPCION RECIENTE: (sin turnos previos)',
-    `ULTIMA RESPUESTA DEL VOCERO: ${String(answer || '').slice(0, 1200)}`,
-    'Evalua esa ultima respuesta y devuelve el JSON.',
+    T.mainQuestion(String(mainQuestion || '').slice(0, 600)),
+    turns ? T.transcript(turns) : T.noTurns,
+    T.lastAnswer(String(answer || '').slice(0, 1200)),
+    T.evaluate,
   ].join('\n\n');
   return [
     { role: 'system', content: system },
@@ -122,20 +182,21 @@ async function assessAnswer({
   followUpsUsed = 0,
   extraordinaryUsed = 0,
   budget = {},
+  lang = 'es',
   models = [],
   askModel = null,
   timeoutMs = 15000,
   now = () => Date.now(),
 } = {}) {
   const startedAt = now();
-  const rule = ruleDecision({ answer, previousAnswers, spoke, hasTranscript });
+  const rule = ruleDecision({ answer, previousAnswers, spoke, hasTranscript, lang });
   if (rule) return { ...rule, source: `rule:${rule.status}`, ms: now() - startedAt, evidence: [], focus: '' };
 
   if (typeof askModel !== 'function' || !models.length) {
     return { status: 'unevaluable', source: 'no-models', reason: 'sin_modelos_de_evaluacion', ms: now() - startedAt, evidence: [], focus: '' };
   }
 
-  const messages = buildMessages({ mainQuestion, answer, history, cfg, followUpsUsed, extraordinaryUsed, budget });
+  const messages = buildMessages({ mainQuestion, answer, history, cfg, followUpsUsed, extraordinaryUsed, budget, lang });
   let lastFailure = 'sin_respuesta';
   try {
     // Se consultan todos en paralelo; gana el PRIMER resultado VALIDO segun el orden de la cadena

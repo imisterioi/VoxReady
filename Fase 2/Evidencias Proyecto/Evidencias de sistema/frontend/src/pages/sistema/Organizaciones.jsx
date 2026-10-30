@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { useI18n } from '../../lib/i18n';
 import { SECTORS, formatDate, initialsOf } from '../../data/directory';
 import { apiFetch } from '../../lib/api';
 import { displayEmail } from '../../lib/displayEmail';
@@ -9,9 +10,13 @@ import Icon from '../../components/Icon';
 import UserFormModal from '../../components/UserFormModal';
 import { Avatar, Badge, Button, Card, EmptyState, Field, Modal, PageHeader, cx } from '../../components/ui';
 
+// Los sectores se guardan con su VALOR canónico (no se traduce al almacenar): el diccionario solo
+// aporta la etiqueta visible de cada valor.
 const EMPTY = { name: '', sector: SECTORS[0], adminName: '', adminEmail: '', adminPassword: '' };
 
 function NewTenantModal({ open, onClose, onCreated }) {
+  const { d } = useI18n();
+  const t = d.L.sys.organizaciones;
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -32,7 +37,7 @@ function NewTenantModal({ open, onClose, onCreated }) {
     try {
       setSaving(true);
       const { tenant, admin } = await apiFetch('/api/tenants', { method: 'POST', body: form });
-      toast.success(`${tenant.name} creada · administrador: ${admin.email}`);
+      toast.success(t.createdToast(tenant.name, admin.email));
       onCreated?.();
       close();
     } catch (err) {
@@ -46,30 +51,32 @@ function NewTenantModal({ open, onClose, onCreated }) {
     <Modal
       open={open}
       onClose={close}
-      title="Nueva organización"
-      description="Crea un cliente y su primer administrador. Luego él podrá crear a sus voceros."
+      title={t.newOrgTitle}
+      description={t.newOrgDesc}
       footer={
         <>
           <Button variant="ghost" onClick={close}>
-            Cancelar
+            {t.cancel}
           </Button>
           <Button onClick={submit} icon="check" disabled={saving}>
-            {saving ? 'Creando…' : 'Crear organización'}
+            {saving ? t.creating : t.createOrg}
           </Button>
         </>
       }
     >
       <form onSubmit={submit} className="space-y-6">
         <div className="space-y-4">
-          <div className="eyebrow">Organización</div>
+          <div className="eyebrow">{t.orgEyebrow}</div>
           <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_1fr] gap-4">
-            <Field label="Nombre">
-              <input className="input" value={form.name} onChange={set('name')} placeholder="Ej. Minera del Sur" autoFocus />
+            <Field label={t.nameL}>
+              <input className="input" value={form.name} onChange={set('name')} placeholder={t.namePh} autoFocus />
             </Field>
-            <Field label="Sector">
+            <Field label={t.sectorL}>
               <select className="input" value={form.sector} onChange={set('sector')}>
                 {SECTORS.map((s) => (
-                  <option key={s}>{s}</option>
+                  <option key={s} value={s}>
+                    {d.L.dir.sectorLabels[s] || s}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -77,16 +84,16 @@ function NewTenantModal({ open, onClose, onCreated }) {
         </div>
 
         <div className="space-y-4 pt-5 border-t border-line">
-          <div className="eyebrow">Primer administrador</div>
+          <div className="eyebrow">{t.adminEyebrow}</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Nombre completo">
-              <input className="input" value={form.adminName} onChange={set('adminName')} placeholder="Ej. Benjamín Vásquez" />
+            <Field label={t.adminNameL}>
+              <input className="input" value={form.adminName} onChange={set('adminName')} placeholder={t.adminNamePh} />
             </Field>
-            <Field label="Correo">
+            <Field label={t.emailL}>
               <input className="input" type="email" value={form.adminEmail} onChange={set('adminEmail')} placeholder="nombre@empresa.com" />
             </Field>
           </div>
-          <Field label="Contraseña inicial" hint="Mínimo 6 caracteres. Compártela con el administrador para que ingrese.">
+          <Field label={t.passL} hint={t.passHint}>
             <input className="input" type="password" value={form.adminPassword} onChange={set('adminPassword')} placeholder="••••••••" autoComplete="new-password" />
           </Field>
         </div>
@@ -104,6 +111,9 @@ function NewTenantModal({ open, onClose, onCreated }) {
 }
 
 export default function Organizaciones() {
+  const { d, lang } = useI18n();
+  const t = d.L.sys.organizaciones;
+  const sectorLabels = d.L.dir.sectorLabels;
   const { data, loading, error, reload } = useApiData('/api/tenants');
   const tenants = useMemo(() => data?.tenants || [], [data]);
   const [params, setParams] = useSearchParams();
@@ -127,10 +137,10 @@ export default function Organizaciones() {
   );
 
   // Reactivar (acción directa, sin modal).
-  const reactivate = async (t) => {
+  const reactivate = async (tn) => {
     try {
-      await apiFetch(`/api/tenants/${t.id}`, { method: 'PATCH', body: { status: 'ACTIVE' } });
-      toast.success(`${t.name} reactivada`);
+      await apiFetch(`/api/tenants/${tn.id}`, { method: 'PATCH', body: { status: 'ACTIVE' } });
+      toast.success(t.reactivated(tn.name));
       reload();
     } catch (err) {
       toast.error(err.message);
@@ -139,11 +149,11 @@ export default function Organizaciones() {
 
   // Suspender requiere confirmación: solo aquí se envía la solicitud.
   const confirmSuspend = async () => {
-    const t = suspendingTenant;
+    const tn = suspendingTenant;
     try {
       setSuspending(true);
-      await apiFetch(`/api/tenants/${t.id}`, { method: 'PATCH', body: { status: 'SUSPENDED' } });
-      toast.success(`${t.name} suspendida`);
+      await apiFetch(`/api/tenants/${tn.id}`, { method: 'PATCH', body: { status: 'SUSPENDED' } });
+      toast.success(t.suspendedToast(tn.name));
       setSuspendingTenant(null);
       reload();
     } catch (err) {
@@ -155,12 +165,12 @@ export default function Organizaciones() {
 
   // Eliminación manual (irreversible): procesa los datos del tenant de inmediato o lo deja en DELETING.
   const remove = async () => {
-    const t = deletingTenant;
+    const tn = deletingTenant;
     try {
       setDeleting(true);
-      const res = await apiFetch(`/api/tenants/${t.id}`, { method: 'DELETE' });
-      if (res?.deletion === 'pending') toast.success(`${t.name}: eliminación en proceso`);
-      else toast.success(`${t.name} eliminada`);
+      const res = await apiFetch(`/api/tenants/${tn.id}`, { method: 'DELETE' });
+      if (res?.deletion === 'pending') toast.success(t.deletionPending(tn.name));
+      else toast.success(t.deletedToast(tn.name));
       setDeletingTenant(null);
       reload();
     } catch (err) {
@@ -188,43 +198,43 @@ export default function Organizaciones() {
   return (
     <>
       <PageHeader
-        eyebrow="Administración del sistema"
-        title="Organizaciones"
-        description="Clientes que usan VoxReady. Cada organización tiene sus propios administradores, voceros y escenarios."
+        eyebrow={t.eyebrow}
+        title={t.title}
+        description={t.sub}
         actions={
           <Button icon="plus" onClick={() => setCreating(true)}>
-            Nueva organización
+            {t.newOrg}
           </Button>
         }
       />
 
       <div className="relative sm:w-72 mb-6">
         <Icon name="search" size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-        <input className="input pl-9" placeholder="Buscar organización…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <input className="input pl-9" placeholder={t.search} value={query} onChange={(e) => setQuery(e.target.value)} />
       </div>
 
       {loading && !data ? (
         <Card>
-          <EmptyState icon="refresh" title="Cargando organizaciones…" />
+          <EmptyState icon="refresh" title={t.loading} />
         </Card>
       ) : error ? (
         <Card>
-          <EmptyState tone="danger" icon="server" title="No se pudieron cargar" description={error} action={<Button variant="secondary" icon="refresh" onClick={reload}>Reintentar</Button>} />
+          <EmptyState tone="danger" icon="server" title={t.loadFailed} description={error} action={<Button variant="secondary" icon="refresh" onClick={reload}>{t.retry}</Button>} />
         </Card>
       ) : rows.length === 0 ? (
         <Card>
-          <EmptyState icon="search" title="Sin resultados" description="No hay organizaciones que coincidan con la búsqueda." />
+          <EmptyState icon="search" title={t.empty} description={t.emptyDesc} />
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {rows.map((t) => (
+          {rows.map((tn) => (
             <Card
-              key={t.id}
+              key={tn.id}
               role="link"
               tabIndex={0}
-              aria-label={`Ver el detalle de ${t.name}`}
-              onClick={(event) => openDetail(event, t)}
-              onKeyDown={(event) => onCardKeyDown(event, t)}
+              aria-label={t.viewDetail(tn.name)}
+              onClick={(event) => openDetail(event, tn)}
+              onKeyDown={(event) => onCardKeyDown(event, tn)}
               className={cx(
                 // Interactiva: al pasar el cursor el borde pasa a un color claro y GANA 1px de
                 // grosor. El grosor se dibuja con un borde INTERIOR reservado (::after), así la
@@ -233,31 +243,31 @@ export default function Organizaciones() {
                 "after:pointer-events-none after:absolute after:inset-0 after:rounded-2xl after:border after:border-line-strong after:opacity-0 after:transition-opacity after:duration-200 after:content-[''] hover:after:opacity-100",
                 // Indicador de teclado: anillo suave alrededor de la tarjeta (solo con el foco).
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-canvas',
-                t.status === 'SUSPENDED' && 'opacity-70',
+                tn.status === 'SUSPENDED' && 'opacity-70',
               )}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="h-11 w-11 rounded-xl bg-subtle text-ink font-display font-semibold flex items-center justify-center">
-                    {initialsOf(t.name)}
+                    {initialsOf(tn.name)}
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-[15px] font-semibold text-ink truncate">{t.name}</h3>
+                    <h3 className="text-[15px] font-semibold text-ink truncate">{tn.name}</h3>
                     <p className="text-xs text-muted">
-                      {t.sector || 'Sin sector'} · desde {formatDate(t.createdAt)}
+                      {tn.sector ? sectorLabels[tn.sector] || tn.sector : t.noSector} · {t.since} {formatDate(tn.createdAt, lang)}
                     </p>
                   </div>
                 </div>
-                <Badge tone={t.status === 'ACTIVE' ? 'success' : t.status === 'DELETING' ? 'neutral' : 'danger'}>
-                  {t.status === 'ACTIVE' ? 'Activa' : t.status === 'DELETING' ? 'Eliminando…' : 'Suspendida'}
+                <Badge tone={tn.status === 'ACTIVE' ? 'success' : tn.status === 'DELETING' ? 'neutral' : 'danger'}>
+                  {tn.status === 'ACTIVE' ? t.statusActive : tn.status === 'DELETING' ? t.statusDeleting : t.statusSuspended}
                 </Badge>
               </div>
 
               <div className="grid grid-cols-3 gap-3 mt-6">
                 {[
-                  ['Administradores', t.admins.length],
-                  ['Voceros', t.voceros],
-                  ['Sesiones (mes)', t.sessionsMonth || 0],
+                  [t.adminsL, tn.admins.length],
+                  [t.vocerosL, tn.voceros],
+                  [t.sessionsMonthL, tn.sessionsMonth || 0],
                 ].map(([label, value]) => (
                   <div key={label} className="rounded-xl bg-subtle/60 px-3 py-2.5">
                     <div className="text-[11px] text-muted">{label}</div>
@@ -268,22 +278,22 @@ export default function Organizaciones() {
 
               <div className="flex items-center justify-between gap-3 mt-5 pt-5 border-t border-line">
                 <div className="flex -space-x-2">
-                  {t.admins.slice(0, 4).map((a) => (
+                  {tn.admins.slice(0, 4).map((a) => (
                     <span key={a.id} title={`${a.name} · ${displayEmail(a)}`} className="ring-2 ring-surface rounded-full">
                       <Avatar initials={initialsOf(a.name)} size="sm" />
                     </span>
                   ))}
-                  {t.admins.length === 0 && <span className="text-xs text-faint">Sin administradores</span>}
+                  {tn.admins.length === 0 && <span className="text-xs text-faint">{t.noAdmins}</span>}
                 </div>
                 <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" icon="plus" onClick={() => setAdminFor(t.id)} disabled={t.status !== 'ACTIVE'}>
-                    Admin
+                  <Button variant="ghost" size="sm" icon="plus" onClick={() => setAdminFor(tn.id)} disabled={tn.status !== 'ACTIVE'}>
+                    {t.adminBtn}
                   </Button>
-                  <Button variant="ghost" size="sm" icon={t.status === 'ACTIVE' ? 'lock' : 'refresh'} onClick={() => (t.status === 'ACTIVE' ? setSuspendingTenant(t) : reactivate(t))} disabled={t.status === 'DELETING'}>
-                    {t.status === 'ACTIVE' ? 'Suspender' : 'Reactivar'}
+                  <Button variant="ghost" size="sm" icon={tn.status === 'ACTIVE' ? 'lock' : 'refresh'} onClick={() => (tn.status === 'ACTIVE' ? setSuspendingTenant(tn) : reactivate(tn))} disabled={tn.status === 'DELETING'}>
+                    {tn.status === 'ACTIVE' ? t.suspend : t.reactivate}
                   </Button>
-                  <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setDeletingTenant(t)} disabled={t.status === 'DELETING'}>
-                    Eliminar
+                  <Button variant="ghost" size="sm" className="text-danger hover:bg-danger/10" onClick={() => setDeletingTenant(tn)} disabled={tn.status === 'DELETING'}>
+                    {t.delete}
                   </Button>
                 </div>
               </div>
@@ -298,23 +308,23 @@ export default function Organizaciones() {
         <Modal
           open
           onClose={() => (deleting ? null : setDeletingTenant(null))}
-          title="¿Eliminar este cliente?"
+          title={t.deleteTitle}
           description={deletingTenant.name}
           footer={
             <>
               <Button variant="ghost" onClick={() => setDeletingTenant(null)} disabled={deleting}>
-                Cancelar
+                {t.cancel}
               </Button>
               <Button variant="danger" icon="trash" onClick={remove} disabled={deleting}>
-                {deleting ? 'Eliminando…' : 'Eliminar'}
+                {deleting ? t.deleting : t.delete}
               </Button>
             </>
           }
         >
           <p className="text-sm text-muted leading-relaxed">
-            Esta acción procesará inmediatamente los datos asociados al tenant y sus usuarios (usuarios, sesiones, grabaciones,
-            transcripciones, reports, reviews, temas y configuración) y <b className="text-ink">no esperará al período de retención</b>.
-            Es irreversible. Los escenarios generales no se modifican.
+            {t.deleteBody1}
+            <b className="text-ink">{t.deleteBodyStrong}</b>
+            {t.deleteBody2}
           </p>
         </Modal>
       )}
@@ -323,27 +333,24 @@ export default function Organizaciones() {
         <Modal
           open
           onClose={() => (suspending ? null : setSuspendingTenant(null))}
-          title="¿Suspender esta organización?"
+          title={t.suspendTitle}
           description={suspendingTenant.name}
           footer={
             <>
               <Button variant="ghost" onClick={() => setSuspendingTenant(null)} disabled={suspending}>
-                Cancelar
+                {t.cancel}
               </Button>
               <Button onClick={confirmSuspend} disabled={suspending}>
-                {suspending ? 'Suspendiendo…' : 'Confirmar suspensión'}
+                {suspending ? t.suspending : t.confirmSuspend}
               </Button>
             </>
           }
         >
-          <p className="text-sm text-muted">Al suspender esta organización:</p>
+          <p className="text-sm text-muted">{t.suspendLead}</p>
           <ul className="mt-3 space-y-2 text-sm text-muted list-disc pl-5 leading-relaxed">
-            <li>Todos los usuarios de este tenant perderán el acceso a VoxReady mientras permanezca suspendido.</li>
-            <li>Los datos, sesiones, videos, transcripciones e informes de sus voceros se conservarán.</li>
-            <li>El plazo de retención de los datos de todos sus voceros quedará pausado durante la suspensión.</li>
-            <li>Cuando se reactive la organización, el plazo de retención continuará desde el tiempo restante para los voceros que también estén activos.</li>
-            <li>Si un vocero permanece suspendido, su plazo de retención continuará pausado hasta que se reactive su cuenta.</li>
-            <li>Esta acción no elimina la organización ni sus datos.</li>
+            {t.suspendItems.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
           </ul>
         </Modal>
       )}
@@ -356,7 +363,7 @@ export default function Organizaciones() {
           allowedRoles={['admin']}
           fixedTenantId={adminFor}
           tenants={tenants}
-          title={`Nuevo administrador · ${tenants.find((t) => t.id === adminFor)?.name}`}
+          title={t.newAdminTitle(tenants.find((tn) => tn.id === adminFor)?.name)}
         />
       )}
     </>

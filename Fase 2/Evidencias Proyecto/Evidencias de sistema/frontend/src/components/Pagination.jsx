@@ -1,18 +1,20 @@
 import Icon from './Icon';
 import { cx } from './ui';
+import { useI18n } from '../lib/i18n';
 import { pageNumbers } from '../lib/practice/historyPaging';
 
 // Paginación del historial: números (1 2 3 4 5 …) con la página activa marcada.
 // Los huecos que devuelve `pageNumbers` se pintan como «…». Sin más de una página no se muestra nada.
 export default function Pagination({ page, pages, onChange, className }) {
+  const { d } = useI18n();
   if (pages <= 1) return null;
   const items = pageNumbers(pages, page);
 
   const arrow = 'h-9 w-9 rounded-lg flex items-center justify-center text-muted hover:bg-subtle disabled:opacity-40 disabled:pointer-events-none transition-colors';
 
   return (
-    <nav className={cx('flex items-center justify-center gap-1 flex-wrap', className)} aria-label="Paginación del historial">
-      <button type="button" className={arrow} onClick={() => onChange(page - 1)} disabled={page <= 1} aria-label="Página anterior">
+    <nav className={cx('flex items-center justify-center gap-1 flex-wrap', className)} aria-label={d.ui.pagination.label}>
+      <button type="button" className={arrow} onClick={() => onChange(page - 1)} disabled={page <= 1} aria-label={d.ui.pagination.prev}>
         <Icon name="chevronLeft" size={16} />
       </button>
 
@@ -37,7 +39,7 @@ export default function Pagination({ page, pages, onChange, className }) {
         ),
       )}
 
-      <button type="button" className={arrow} onClick={() => onChange(page + 1)} disabled={page >= pages} aria-label="Página siguiente">
+      <button type="button" className={arrow} onClick={() => onChange(page + 1)} disabled={page >= pages} aria-label={d.ui.pagination.next}>
         <Icon name="chevronRight" size={16} />
       </button>
     </nav>

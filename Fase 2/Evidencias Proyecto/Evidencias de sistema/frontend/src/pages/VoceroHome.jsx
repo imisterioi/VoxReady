@@ -1,22 +1,23 @@
 import { Link, useNavigate } from 'react-router-dom';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import { getCurrentUser } from '../lib/api';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, CardHeader, EmptyState, PageHeader, Stat } from '../components/ui';
 import useApiData from '../hooks/useApiData';
-import { lessonsForArea } from '../data/lessons';
+import { lessonsForArea, localizedLesson } from '../data/lessons';
 import { formatDate } from '../data/directory';
 
 const CATEGORY = {
-  CRISIS: { label: 'Crisis', tone: 'danger', icon: 'alert' },
-  MEDIOS: { label: 'Medios', tone: 'accent', icon: 'mic' },
-  INSTITUCIONAL: { label: 'Institucional', tone: 'neutral', icon: 'flag' },
+  CRISIS: { tone: 'danger', icon: 'alert' },
+  MEDIOS: { tone: 'accent', icon: 'mic' },
+  INSTITUCIONAL: { tone: 'neutral', icon: 'flag' },
 };
 
 // Inicio del vocero con sus datos reales
 export default function VoceroHome() {
-  const d = I.es;
+  const { d, lang } = useI18n();
   const t = d.L.u1;
+  const categories = d.L.u2.categories;
   const navigate = useNavigate();
   const user = getCurrentUser() || {};
   const firstName = user.name?.split(' ')[0];
@@ -35,7 +36,7 @@ export default function VoceroHome() {
   // Recomendados: primero los escenarios que aún no ha practicado
   const practiced = new Set(sessions.map((s) => s.theme?.id));
   const suggested = [...scenarios].sort((a, b) => Number(practiced.has(a.id)) - Number(practiced.has(b.id))).slice(0, 2);
-  const lessons = lessonsForArea(weakest?.key, 3);
+  const lessons = lessonsForArea(weakest?.key, 3).map((l) => localizedLesson(l, lang));
 
   const start = (scenario) => {
     sessionStorage.setItem('voxready_escenario_seleccionado', JSON.stringify(scenario));
@@ -51,7 +52,7 @@ export default function VoceroHome() {
         actions={
           <>
             <Button to="/vocero/progreso" variant="secondary" icon="chart">
-              Ver progreso
+              {t.progress}
             </Button>
             <Button to="/vocero/escenarios" variant="accent" icon="mic">
               {d.practice}
@@ -61,19 +62,19 @@ export default function VoceroHome() {
       />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-        <Stat label={t.s1} value={history.data ? sessions.length : '—'} icon="check" hint="Prácticas evaluadas" />
+        <Stat label={t.s1} value={history.data ? sessions.length : '—'} icon="check" hint={t.statEvaluated} />
         <Stat
           label={t.s2}
           value={latest?.score ?? '—'}
           icon="target"
           trend={trend != null ? `${trend >= 0 ? '+' : ''}${trend}` : undefined}
-          hint={latest ? latest.theme?.title : 'Aún sin prácticas'}
+          hint={latest ? latest.theme?.title : t.statNoPractices}
         />
         <Stat
           label={t.s3}
           value={<span className="text-2xl">{weakest?.label || '—'}</span>}
           icon="alert"
-          hint={weakest ? `${weakest.score} / 100 en la última práctica` : 'Se calcula tras tu primera práctica'}
+          hint={weakest ? t.statWeakest(weakest.score) : t.statWeakestPending}
         />
       </div>
 
@@ -82,11 +83,11 @@ export default function VoceroHome() {
         <div className="lg:col-span-2">
           <div className="flex items-end justify-between mb-4">
             <div>
-              <h2 className="text-[15px] font-semibold text-ink">Tus escenarios</h2>
-              <p className="text-[13px] text-muted mt-0.5">{scenarios.length ? `${scenarios.length} asignados · primero los que aún no practicas` : 'Asignados por tu organización'}</p>
+              <h2 className="text-[15px] font-semibold text-ink">{t.scenariosL}</h2>
+              <p className="text-[13px] text-muted mt-0.5">{scenarios.length ? t.scenariosCount(scenarios.length) : t.scenariosDefault}</p>
             </div>
             <Link to="/vocero/escenarios" className="text-[13px] font-medium text-muted hover:text-ink inline-flex items-center gap-1">
-              Ver todos <Icon name="arrowRight" size={14} />
+              {t.viewAll} <Icon name="arrowRight" size={14} />
             </Link>
           </div>
 
@@ -94,14 +95,15 @@ export default function VoceroHome() {
             <Card>
               <EmptyState
                 icon="layers"
-                title={scenariosData.loading ? 'Cargando escenarios…' : 'Aún no tienes escenarios asignados'}
-                description={scenariosData.error || 'Tu administrador te asignará escenarios para practicar.'}
+                title={scenariosData.loading ? t.loadingScenarios : t.noAssigned}
+                description={scenariosData.error || t.noAssignedDesc}
               />
             </Card>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {suggested.map((s) => {
-                const cat = CATEGORY[s.category] || { label: s.category, tone: 'neutral', icon: 'layers' };
+                const cat = CATEGORY[s.category] || { tone: 'neutral', icon: 'layers' };
+                const catLabel = categories[s.category] || s.category;
                 return (
                   <Card key={s.id} className="group flex flex-col hover:shadow-lift hover:border-line-strong transition-all">
                     <div className="flex items-center justify-between mb-6">
@@ -109,8 +111,8 @@ export default function VoceroHome() {
                         <Icon name={cat.icon} size={18} />
                       </span>
                       <div className="flex gap-1.5">
-                        {practiced.has(s.id) && <Badge tone="success" icon="check">Practicado</Badge>}
-                        <Badge tone={cat.tone}>{cat.label}</Badge>
+                        {practiced.has(s.id) && <Badge tone="success" icon="check">{t.practiced}</Badge>}
+                        <Badge tone={cat.tone}>{catLabel}</Badge>
                       </div>
                     </div>
                     <h3 className="text-[17px] font-semibold tracking-tight text-ink">{s.title}</h3>
@@ -131,7 +133,7 @@ export default function VoceroHome() {
         <div>
           <div className="mb-4">
             <h2 className="text-[15px] font-semibold text-ink">{t.microT}</h2>
-            <p className="text-[13px] text-muted mt-0.5">{weakest ? `Para reforzar ${weakest.label.toLowerCase()}` : 'Teoría breve + video'}</p>
+            <p className="text-[13px] text-muted mt-0.5">{weakest ? t.microSub(weakest.label.toLowerCase()) : t.microFallback}</p>
           </div>
           <Card padded={false} className="divide-y divide-line overflow-hidden">
             {lessons.map((m) => (
@@ -141,7 +143,7 @@ export default function VoceroHome() {
                 </span>
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm font-medium text-ink">{m.title}</span>
-                  <span className="block text-xs text-muted mt-0.5">{m.minutes} min · video</span>
+                  <span className="block text-xs text-muted mt-0.5">{m.minutes} min · {t.video}</span>
                 </span>
                 <Icon name="chevronRight" size={16} className="text-faint group-hover:text-ink transition-colors" />
               </Link>
@@ -151,8 +153,8 @@ export default function VoceroHome() {
           <Card className="mt-4 bg-subtle/50 border-dashed">
             <CardHeader
               className="mb-3"
-              title="Último informe"
-              description={latest ? `${latest.theme?.title} · ${latest.score}/100 · ${formatDate(latest.completedAt)}` : 'Aún no tienes informes'}
+              title={t.lastReport}
+              description={latest ? `${latest.theme?.title} · ${latest.score}/100 · ${formatDate(latest.completedAt, lang)}` : t.noReports}
             />
             <Button
               to={latest ? `/vocero/informe?sesion=${latest.id}` : '/vocero/escenarios'}
@@ -161,7 +163,7 @@ export default function VoceroHome() {
               iconRight="arrowRight"
               className="w-full"
             >
-              {latest ? 'Abrir informe' : 'Hacer mi primera práctica'}
+              {latest ? t.openReport : t.firstPractice}
             </Button>
           </Card>
         </div>

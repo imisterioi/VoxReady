@@ -81,6 +81,7 @@ async function transcribeWindowLocal({
   startMs,
   endMs,
   modelKey = process.env.EVAL_WHISPER_MODEL || 'small',
+  language = '',
   timeoutMs = Number(process.env.ASR_LOCAL_TIMEOUT_MS) || 30000,
   signal = null,
   sliceImpl = sliceWindow,
@@ -96,7 +97,7 @@ async function transcribeWindowLocal({
 
     // `timeoutMs` cubre la petición HTTP completa y la aborta (AbortSignal.timeout), no sólo
     // la espera: el limitador del servicio local se libera al abortar.
-    const result = await transcribeImpl(outPath, { model: modelKey, timeoutMs });
+    const result = await transcribeImpl(outPath, { model: modelKey, timeoutMs, language });
     if (!result?.ok) return { ok: false, code: result?.code || 'LOCAL_ASR_ERROR', message: result?.message };
     const text = String(result.text ?? '').trim();
     if (!text) return { ok: false, code: 'EMPTY_TRANSCRIPT', message: 'Whisper local devolvió texto vacío.' };

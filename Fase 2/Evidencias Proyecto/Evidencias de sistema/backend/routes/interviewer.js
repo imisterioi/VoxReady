@@ -22,6 +22,7 @@ const { generateQuestion, askModelFromContext, interviewModels, interviewTimeout
 const { assessAnswer } = require('../ai/answerAssessment');
 const { preflight: preflightEvaluators, shouldProbe } = require('../lib/evaluatorHealth');
 const { createInterviewSession, START_WAIT_MS } = require('../lib/interviewSession');
+const { resolveLanguage, sessionLanguage } = require('../lib/language');
 const defaultRegistry = require('../lib/interviewRegistry');
 
 // La conversación la envía el navegador: se acota antes de pasarla a la IA. En los turnos del
@@ -133,8 +134,10 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
 
       let theme = null;
       let plan = null;
+      // Sesión de la práctica: se conserva para resolver el idioma con el que fue iniciada.
+      let session = null;
       if (sessionId) {
-        const session = await prisma.session.findUnique({
+        session = await prisma.session.findUnique({
           where: { id: String(sessionId) },
           include: { theme: true },
         });
@@ -167,6 +170,9 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
       const timeoutMs = timeoutFor();
       const voceroTurns = history.filter((turn) => turn.role === 'vocero');
       const startedAt = Date.now();
+      // Idioma de la práctica: el que se congeló al crear la sesión; si la sesión es histórica (o no
+      // hay sesión), el del vocero o el de su organización.
+      const lang = sessionLanguage(session, req.user, req.user.tenant);
       let result;
       let meta = null;
       // Snapshot de la sesión conservado desde la rama donde `entry` existe: la rama de error
@@ -228,6 +234,8 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           history,
           cfg,
           plan,
+          // Idioma efectivo del vocero: el entrevistador pregunta y repregunta en ese idioma.
+          lang,
           timing: { targetMs: resolved.estimatedMinutes * 60000, marginMs: INTERVIEW_TIMING.extraMarginMs },
         };
         // Última respuesta del vocero. `spoke` y `hasTranscript` distinguen el silencio real de un
@@ -289,7 +297,7 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
             extraordinaryUsed: before.usedByBudget.extraordinary,
             budget,
             models: models(),
-            askModel: (model, messages, options = {}) => askModel(model, messages, { ...options, raw: true, timeoutMs: assessTimeoutMs() }),
+            askModel: (model, messages, options = {}) => askModel(model, messages, { ...options, raw: true, timeoutMs: assessTimeoutMs(), lang }),
             timeoutMs: assessTimeoutMs(),
           });
           decision = decideTurn({

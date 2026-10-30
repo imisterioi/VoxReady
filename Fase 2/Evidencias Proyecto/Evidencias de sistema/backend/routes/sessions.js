@@ -20,6 +20,7 @@ const { effectivePlan } = require('../lib/retentionPlan');
 const { syncDuePlans } = require('../lib/retentionSchedule');
 const { registerJob, runJob } = require('../lib/runtimeStatus');
 const { resolveSessionOwner, resolvePaging } = require('../lib/sessionScope');
+const { resolveLanguage, normalizeLanguage, asrLanguage, sessionLanguage } = require('../lib/language');
 
 const RETENTION_JOB = 'retention';
 const RETENTION_EVERY_MS = 6 * 60 * 60 * 1000;
@@ -315,9 +316,24 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     return { state: 'idle' };
   }
 
+  // Idioma efectivo del vocero dueño de la sesión (preferencia propia o el de su organización).
+  // Se resuelve desde la base porque los reintentos en segundo plano no tienen al navegador.
+  async function languageFor(session) {
+    // El idioma con el que se inició la sesión manda (queda congelado). Solo en las sesiones
+    // históricas (sin idioma guardado) se resuelve con el vocero y su organización, sin tocar el
+    // registro. Así un informe antiguo conserva el idioma con el que se generó.
+    const frozen = normalizeLanguage(session?.language);
+    if (frozen) return frozen;
+    const owner = await prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { language: true, tenant: { select: { defaultLanguage: true } } },
+    });
+    return resolveLanguage(owner, owner?.tenant);
+  }
+
   // Transcripción del audio de la sesión + cálculo de la evidencia. NUNCA lanza: cualquier
   // problema se traduce en `unverified` con motivo, y la evaluación sigue sin el criterio.
-  async function verifySpeech(sessionId, input) {
+  async function verifySpeech(sessionId, input, lang = 'es') {
     const disabled = {
       status: 'unverified',
       reason: 'DISABLED',
@@ -331,7 +347,13 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     };
     if (!WHISPER_ON) return disabled;
 
-    const result = await transcribeFile(audioPath(sessionId));
+    // El motor local solo se usa si ADMITE el idioma de la sesión: nunca se transcribe en otro
+    // idioma. Si no lo admite, el criterio queda sin verificar (motivo explícito) y la evaluación
+    // continúa sin él, en lugar de aportar una transcripción en un idioma equivocado.
+    const asr = asrLanguage(lang, 'iso');
+    if (!asr) return { ...disabled, reason: 'LANGUAGE_UNSUPPORTED' };
+
+    const result = await transcribeFile(audioPath(sessionId), { language: asr });
     if (!result.ok) {
       return { ...disabled, reason: result.code, model: process.env.EVAL_WHISPER_MODEL || 'small' };
     }
@@ -357,7 +379,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
 
   // Evalúa y guarda. `input` viene YA normalizado y validado por normalizeEvaluateInput:
   // el cliente no puede definir los números que puntúan.
-  async function runEvaluation(session, input, { leaseUntil = null } = {}) {
+  async function runEvaluation(session, input, { leaseUntil = null, lang = 'es' } = {}) {
     const { pattern, source } = await patternFor(session.themeId, session.userId);
     const report = await evaluateSession({
       theme: session.theme,
@@ -365,6 +387,8 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       metrics: input.metrics,
       pattern,
       patternSource: source,
+      // Idioma efectivo del vocero: el informe y su retroalimentación se generan en ese idioma.
+      lang,
       // Procedencia, advertencias y evidencia del audio: quedan en report.audit.
       inputAudit: {
         sources: input.sources,
@@ -454,8 +478,10 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
   function startJob(session, input, { skipSpeech = false, reason = 'evaluate', leaseUntil = null } = {}) {
     const promise = (async () => {
       try {
+        // Idioma efectivo del vocero: gobierna la transcripción y el informe.
+        const lang = await languageFor(session);
         if (!skipSpeech) {
-          const evidence = await verifySpeech(session.id, input);
+          const evidence = await verifySpeech(session.id, input, lang);
           applySpeechEvidence(input, evidence);
         }
 
@@ -468,7 +494,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
           data: { metrics: input.metrics, transcript: input.transcript },
         });
 
-        await runEvaluation(session, input, { leaseUntil });
+        await runEvaluation(session, input, { leaseUntil, lang });
         try {
           runPurge();
         } catch {
@@ -556,7 +582,8 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       // Cadena oficial de transcripción: Whisper Large v3 → Canary 1B → Whisper Small local.
       // `enginesForEnv()` centraliza el interruptor operativo `EVAL_NVIDIA_ASR_ENABLED` (misma
       // definición que usa la transcripción por respuesta del entrevistador).
-      const engines = enginesForEnv({ language: 'multi' });
+      const lang = sessionLanguage(session, req.user, req.user.tenant);
+      const engines = enginesForEnv({ language: lang });
       {
         const turns = Array.isArray(rawTranscript) ? rawTranscript : [];
         // REUTILIZACIÓN: las respuestas que el entrevistador ya transcribió (auditoría `ok`) NO
@@ -603,13 +630,16 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
           );
         }
         if (!transcribed.ok) {
-          const configuration = transcribed.code === 'NO_WINDOWS';
+          const unsupported = transcribed.code === 'LANGUAGE_UNSUPPORTED';
+          const configuration = transcribed.code === 'NO_WINDOWS' || unsupported;
           return res.status(configuration ? 422 : 502).json({
             status: 'error',
             code: `TRANSCRIPTION_${transcribed.code}`,
-            mensaje: configuration
-              ? 'La sesión no tiene tiempos de respuesta utilizables; no se puede evaluar.'
-              : 'No se pudo transcribir alguna respuesta con NVIDIA. La grabación se conserva; puedes reintentar el análisis.',
+            mensaje: unsupported
+              ? 'Ningún motor de transcripción configurado admite el idioma de esta sesión. Avisa al administrador.'
+              : configuration
+                ? 'La sesión no tiene tiempos de respuesta utilizables; no se puede evaluar.'
+                : 'No se pudo transcribir alguna respuesta con NVIDIA. La grabación se conserva; puedes reintentar el análisis.',
             transcription: transcriptionDiagnostics,
           });
         }
@@ -716,10 +746,12 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       }
 
       // Una sola ventana (la respuesta actual) con presupuesto acotado: nunca bloquea indefinidamente.
+      const lang = sessionLanguage(session, req.user, req.user.tenant);
       const transcribed = await transcribe({
         filePath: audioPath(session.id),
         turns: [{ startMs, endMs }],
-        engines: enginesForEnv({ language: 'multi' }),
+        language: lang,
+        engines: enginesForEnv({ language: lang }),
         budgetMs: LIVE_TRANSCRIBE_BUDGET_MS,
       });
 

@@ -10,21 +10,29 @@ const read = (relative) => readFileSync(new URL(relative, import.meta.url), 'utf
 const TECNICO = ['HTTP', '404', '410', 'kimi', 'nemotron', 'glm', 'gemma', 'deepseek', 'nvidia', 'proveedor', 'timeout', 'API_KEY', 'AI_UNAVAILABLE'];
 
 test('los mensajes de fallo de la pantalla de análisis son genéricos', () => {
-  const source = read('../../pages/Analizando.jsx');
-  const start = source.indexOf('const FAIL_REASONS');
-  assert.ok(start > -1, 'debe existir el mapa de mensajes');
-  const block = source.slice(start, source.indexOf('};', start));
-  // Solo se revisan los TEXTOS que verá el vocero (no las claves internas del mapa).
-  const messages = block.match(/'[^']*'/g) || [];
-  assert.ok(messages.length >= 3, 'debe haber mensajes definidos');
-  for (const value of messages) {
-    for (const token of TECNICO) {
-      assert.ok(!value.includes(token), `el mensaje al vocero no debe contener "${token}": ${value}`);
+  // Los textos viven en el diccionario (analysis.fail) para poder traducirlos; la pantalla los
+  // resuelve por clave, sin escribir mensajes propios.
+  const component = read('../../pages/Analizando.jsx');
+  assert.ok(component.includes('an.fail[result.reason]'), 'la pantalla debe resolver el mensaje por clave');
+
+  for (const file of ['../../data/dictionary.js', '../../data/dictionary.en.js']) {
+    const source = read(file);
+    const start = source.indexOf('fail: {');
+    assert.ok(start > -1, `debe existir el mapa de mensajes en ${file}`);
+    const block = source.slice(start, source.indexOf('},', start));
+    // Solo se revisan los TEXTOS que verá el vocero (no las claves internas del mapa).
+    const messages = block.match(/'[^']*'/g) || [];
+    assert.ok(messages.length >= 3, `debe haber mensajes definidos en ${file}`);
+    for (const value of messages) {
+      for (const token of TECNICO) {
+        assert.ok(!value.includes(token), `el mensaje al vocero no debe contener "${token}": ${value}`);
+      }
     }
+    // El motivo interno se mapea a un texto genérico (no se muestra tal cual).
+    assert.ok(block.includes('AI_UNAVAILABLE'));
   }
-  // El motivo interno se mapea a un texto genérico (no se muestra tal cual).
-  assert.ok(block.includes('AI_UNAVAILABLE'));
-  assert.match(block, /inténtalo de nuevo en unos minutos/i);
+  assert.match(read('../../data/dictionary.js'), /inténtalo de nuevo en unos minutos/i);
+  assert.match(read('../../data/dictionary.en.js'), /try again in a few minutes/i);
 });
 
 test('los textos de acceso al informe no exponen detalles internos', () => {

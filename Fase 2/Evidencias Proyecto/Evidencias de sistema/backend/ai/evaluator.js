@@ -17,6 +17,30 @@ const { recordAi } = require('../lib/runtimeStatus');
 const { evaluatorModels } = require('../lib/evaluatorModels');
 const { orderByHealth, healthSnapshot } = require('../lib/evaluatorHealth');
 
+// Textos del evaluador que dependen del idioma del vocero. Las claves del JSON y los criterios del
+// patrón no cambian: solo el idioma de las instrucciones y de las etiquetas visibles del informe.
+const EVAL_TEXTS = {
+  es: {
+    systemIntro:
+      'Eres un coach experto en vocería y comunicación de crisis. Evalúas entrevistas simuladas de voceros corporativos en español de Chile. ',
+    tone: 'Háblale directamente al vocero en segunda persona (tú): "mostraste", "dijiste", nunca "el vocero mostró". ',
+    outputLanguage: 'textos en español',
+    areas: { expression: 'Expresión', voice: 'Tono de voz', coherence: 'Coherencia', empathy: 'Empatía' },
+    sources: { camera: 'Cámara (MediaPipe)', mic: 'Micrófono', ai: 'IA evaluadora' },
+  },
+  en: {
+    systemIntro:
+      'You are an expert coach in spokesperson training and crisis communication. You evaluate simulated interviews of corporate spokespeople in English. ',
+    tone: 'Address the spokesperson directly in the second person ("you"): "you showed", "you said", never "the spokesperson showed". ',
+    outputLanguage: 'texts in English',
+    areas: { expression: 'Expression', voice: 'Voice tone', coherence: 'Coherence', empathy: 'Empathy' },
+    sources: { camera: 'Camera (MediaPipe)', mic: 'Microphone', ai: 'AI evaluator' },
+  },
+};
+
+const evalTexts = (lang) => EVAL_TEXTS[lang] || EVAL_TEXTS.es;
+
+
 const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
 // Versión del evaluador y del prompt: se guardan en el informe para rastrear cómo se produjo
@@ -212,6 +236,16 @@ const STRICTNESS = {
   exigente: 'Sé muy exigente, como un editor de noticias en una crisis real: cualquier evasiva o imprecisión baja el puntaje.',
 };
 
+// Mismo estándar de exigencia, redactado en inglés (los criterios y pesos no cambian).
+const STRICTNESS_EN = {
+  flexible: 'Be understanding: value attempts and progress, penalize only serious mistakes.',
+  normal: 'Be demanding but constructive.',
+  exigente: 'Be very demanding, like a news editor in a real crisis: any evasion or imprecision lowers the score.',
+};
+
+const strictnessText = (lang, strictness) =>
+  ((lang === 'en' ? STRICTNESS_EN : STRICTNESS)[strictness]) || (lang === 'en' ? STRICTNESS_EN : STRICTNESS).normal;
+
 function criteriaText(area) {
   return Object.entries(area.criteria)
     .filter(([, c]) => num(c.weight, 0) > 0)
@@ -331,7 +365,7 @@ function validateJudgement(judgement, cfg) {
   };
 }
 
-function buildPrompt({ theme, transcript, voice, body, lighting, cfg }) {
+function buildPrompt({ theme, transcript, voice, body, lighting, cfg, lang = 'es' }) {
   const keyMessages = parseList(theme.keyMessages);
   const redLines = parseList(theme.redLines);
 
@@ -365,10 +399,11 @@ function buildPrompt({ theme, transcript, voice, body, lighting, cfg }) {
     .filter(Boolean)
     .join('\n');
 
+  const T = evalTexts(lang);
   const system =
-    'Eres un coach experto en vocería y comunicación de crisis. Evalúas entrevistas simuladas de voceros corporativos en español de Chile. ' +
-    `${STRICTNESS[cfg.strictness] || STRICTNESS.normal} ` +
-    'Háblale directamente al vocero en segunda persona (tú): "mostraste", "dijiste", nunca "el vocero mostró". ' +
+    T.systemIntro +
+    `${strictnessText(lang, cfg.strictness)} ` +
+    T.tone +
     'Responde ÚNICAMENTE con un objeto JSON válido, sin texto antes ni después, sin bloques de código.';
 
   const user = `Escenario: ${theme.title}
@@ -390,7 +425,7 @@ Estándar de evaluación (patrón maestro):
 - Coherencia: ${cfg.coherence.descriptor}
 - Empatía: ${cfg.empathy.descriptor}
 
-Devuelve este JSON (puntajes enteros 0-100, textos en español, tuteando al vocero;
+Devuelve este JSON (puntajes enteros 0-100, ${T.outputLanguage}, tuteando al vocero;
 dentro de los textos usa comillas simples ' en vez de comillas dobles):
 {
   "coherencia": {
@@ -608,7 +643,7 @@ async function judgeContent(input, { call = callEvaluator, models: modelsOption 
 
 // ------------------------------------------------------ Informe completo
 
-async function evaluateSession({ theme, transcript, metrics, pattern, patternSource = 'active', inputAudit = null, judge = judgeContent }) {
+async function evaluateSession({ theme, transcript, metrics, pattern, patternSource = 'active', inputAudit = null, judge = judgeContent, lang = 'es' }) {
   if (!process.env.NVIDIA_API_KEY) {
     const error = new Error('Falta NVIDIA_API_KEY en backend/.env.local');
     error.code = 'NO_API_KEY';
@@ -627,6 +662,7 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
     body: metrics?.body,
     lighting: metrics?.lighting,
     cfg,
+    lang,
   });
   const { model, ms, failed } = winner;
 
@@ -654,18 +690,19 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
     empathy: num(cfg.areas.empathy, 20),
   };
 
+  const LT = evalTexts(lang);
   const areas = [
-    { key: 'expression', label: 'Expresión', score: body.score, weight: weights.expression, details: body.details, coverage: body.coverage, source: 'Cámara (MediaPipe)' },
-    { key: 'voice', label: 'Tono de voz', score: voice.score, weight: weights.voice, details: voice.details, coverage: voice.coverage, source: 'Micrófono' },
-    { key: 'coherence', label: 'Coherencia', score: round(coherence.score), weight: weights.coherence, details: coherence.details, coverage: 1, source: 'IA evaluadora' },
+    { key: 'expression', label: LT.areas.expression, score: body.score, weight: weights.expression, details: body.details, coverage: body.coverage, source: LT.sources.camera },
+    { key: 'voice', label: LT.areas.voice, score: voice.score, weight: weights.voice, details: voice.details, coverage: voice.coverage, source: LT.sources.mic },
+    { key: 'coherence', label: LT.areas.coherence, score: round(coherence.score), weight: weights.coherence, details: coherence.details, coverage: 1, source: LT.sources.ai },
     {
       key: 'empathy',
-      label: 'Empatía',
+      label: LT.areas.empathy,
       score: round(empathy),
       weight: weights.empathy,
       details: empathyContent.details,
       coverage: 1,
-      source: facing == null ? 'IA evaluadora' : `IA evaluadora + mirada (${Math.round(visualShare * 100)}%)`,
+      source: facing == null ? LT.sources.ai : `${LT.sources.ai} + mirada (${Math.round(visualShare * 100)}%)`,
     },
   ];
 

@@ -5,6 +5,7 @@ const { requireAuth } = require('../auth');
 const { parseList } = require('../ai/interviewer');
 const { normalizeInterviewConfig, resolveInterviewConfig, invalidInterviewConfigPayload } = require('../ai/interviewConfig');
 const { buildPlanState, schedulePlanChange, TENANT_PLAN_FIELDS } = require('../lib/retentionSchedule');
+const { SUPPORTED, DEFAULT: DEFAULT_LANGUAGE, normalizeLanguage } = require('../lib/language');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
 
@@ -19,6 +20,8 @@ const toApiTheme = (t) => ({
   publics: parseList(t.publics),
   availableToAllVoceros: t.availableToAllVoceros,
   interview: resolveInterviewConfig(t),
+  // Idioma en el que está escrito el contenido del escenario (nunca se traduce automáticamente).
+  language: normalizeLanguage(t.language) || DEFAULT_LANGUAGE,
   voceroIds: (t.assignments || []).map((a) => a.userId),
   sessions: t._count?.sessions ?? 0,
 });
@@ -109,6 +112,8 @@ module.exports = function registerThemeRoutes(app, prisma) {
           optic: optic || null,
           category: category || theme.category,
           availableToAllVoceros: Boolean(availableToAllVoceros),
+          // Idioma del contenido: solo se cambia si el editor lo envía con un valor válido.
+          ...(normalizeLanguage(req.body.language) ? { language: normalizeLanguage(req.body.language) } : {}),
           // Si no se envía, se conserva la configuración de entrevista actual
           ...(req.body.interview !== undefined ? { interviewConfig: normalizeInterviewConfig(req.body.interview) } : {}),
         },
@@ -199,6 +204,34 @@ module.exports = function registerThemeRoutes(app, prisma) {
     } catch (error) {
       console.error('Error guardando estilo:', error);
       fail(res, 500, 'No se pudo guardar el estilo.');
+    }
+  });
+
+  // ------------------------------------------------ Idioma de la organización
+
+  // Idioma por defecto de la organización (lo define el admin del cliente). Se aplica a los
+  // voceros que no hayan fijado su propia preferencia (User.language = null); cambiarlo no altera
+  // a quien ya eligió su idioma.
+  app.get('/api/tenant/language', auth('admin'), async (req, res) => {
+    try {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.user.tenantId }, select: { defaultLanguage: true } });
+      if (!tenant) return fail(res, 404, 'Organización no encontrada.');
+      res.json({ status: 'ok', language: normalizeLanguage(tenant.defaultLanguage) || DEFAULT_LANGUAGE, options: SUPPORTED });
+    } catch (error) {
+      console.error('Error leyendo el idioma:', error);
+      fail(res, 500, 'No se pudo leer el idioma.');
+    }
+  });
+
+  app.put('/api/tenant/language', auth('admin'), async (req, res) => {
+    try {
+      const language = normalizeLanguage(req.body?.language);
+      if (!language) return fail(res, 400, `Idioma no válido. Opciones: ${SUPPORTED.join(', ')}.`);
+      const tenant = await prisma.tenant.update({ where: { id: req.user.tenantId }, data: { defaultLanguage: language } });
+      res.json({ status: 'ok', language: normalizeLanguage(tenant.defaultLanguage) || DEFAULT_LANGUAGE, options: SUPPORTED });
+    } catch (error) {
+      console.error('Error guardando el idioma:', error);
+      fail(res, 500, 'No se pudo guardar el idioma.');
     }
   });
 

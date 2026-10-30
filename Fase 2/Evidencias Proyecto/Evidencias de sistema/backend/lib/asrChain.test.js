@@ -203,9 +203,16 @@ test('los metadatos quedan asociados al turno correcto', async () => {
   assert.equal(result.diagnostics[1].status, 'ok');
 });
 
-test('la cadena por defecto usa los tres motores en orden', () => {
-  const ids = defaultEngines({}).map((engineDef) => engineDef.id);
+test('con un idioma conocido la cadena por defecto usa los tres motores en orden', () => {
+  const ids = defaultEngines({ language: 'es' }).map((engineDef) => engineDef.id);
   assert.deepEqual(ids, ['nvidia-whisper-large-v3', 'nvidia-canary-1b', 'local-whisper-small']);
+  assert.deepEqual(defaultEngines({ language: 'en' }).map((engineDef) => engineDef.id), ids);
+});
+
+test('sin idioma conocido se descartan los motores que no autodetectan', () => {
+  const ids = defaultEngines({}).map((engineDef) => engineDef.id);
+  assert.deepEqual(ids, ['nvidia-whisper-large-v3', 'local-whisper-small']);
+  assert.ok(!ids.includes('nvidia-canary-1b'), 'Canary necesita un locale: no se usa sin idioma');
 });
 
 test('las respuestas se procesan en serie (no hay concurrencia)', async () => {
@@ -339,7 +346,7 @@ test('un resultado tardío no reemplaza la transcripción ya seleccionada', asyn
 test('la cadena real respeta el orden Whisper Large v3 -> Canary 1B -> local', async () => {
   const calls = [];
   const engines = defaultEngines({
-    language: 'multi',
+    language: 'es',
     runAsrImpl: async ({ modelKey, language }) => {
       calls.push(`${modelKey}:${language}`);
       return modelKey === 'whisper-large-v3' ? { ok: true, text: 'principal' } : { ok: false, code: 'RIVA_ERROR' };
@@ -350,12 +357,53 @@ test('la cadena real respeta el orden Whisper Large v3 -> Canary 1B -> local', a
   const result = await transcribeWindow({ window, engines });
   assert.equal(result.engine, 'nvidia-whisper-large-v3');
   assert.equal(result.text, 'principal');
-  assert.equal(calls[0], 'whisper-large-v3:multi');
-  assert.ok(calls.includes('canary-1b-asr:es-US'), 'Canary se intenta en paralelo');
+  assert.equal(calls[0], 'whisper-large-v3:es');
+  assert.ok(calls.includes('canary-1b-asr:es-US'), 'Canary se intenta en paralelo con su locale');
+});
+
+test('cada motor recibe el código de SU idioma y nunca el de otro', async () => {
+  const seen = [];
+  const engines = defaultEngines({
+    language: 'en',
+    runAsrImpl: async ({ modelKey, language }) => {
+      seen.push([modelKey, language]);
+      return { ok: false, code: 'RIVA_ERROR' };
+    },
+    localImpl: async ({ language }) => {
+      seen.push(['local', language]);
+      return { ok: true, text: 'ok' };
+    },
+  });
+  await transcribeWindow({ window, engines });
+  assert.deepEqual(seen, [
+    ['whisper-large-v3', 'en'],
+    ['canary-1b-asr', 'en-US'],
+    ['local', 'en'],
+  ]);
+  assert.ok(!seen.some(([, code]) => String(code).startsWith('es')), 'ningún motor debe recibir español');
+});
+
+test('sin ningún motor compatible no se transcribe y se informa del motivo', async () => {
+  const result = await transcribeWindow({ window, engines: [] });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'LANGUAGE_UNSUPPORTED');
+  assert.deepEqual(result.attempts, []);
+});
+
+test('la cadena vacía se propaga como LANGUAGE_UNSUPPORTED (no como fallo puntual)', async () => {
+  const result = await transcribeAnswers({
+    filePath: 'x.webm',
+    turns: [{ startMs: 0, endMs: 2000 }],
+    engines: [],
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'LANGUAGE_UNSUPPORTED');
+  assert.deepEqual(result.answers, ['']);
 });
 
 test('si fallan los dos NVIDIA, el local resuelve la respuesta', async () => {
   const engines = defaultEngines({
+    language: 'es',
     runAsrImpl: async ({ modelKey, language }) => {
       assert.ok(modelKey === 'whisper-large-v3' || (modelKey === 'canary-1b-asr' && language === 'es-US'));
       return { ok: false, code: 'TIMEOUT' };

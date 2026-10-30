@@ -1,34 +1,37 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import { apiGet } from '../lib/api';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { InterviewSummary } from '../components/InterviewConfig';
 import { Badge, Button, Card, EmptyState, PageHeader, Segmented, cx } from '../components/ui';
 
-const CATEGORY = {
-  CRISIS: { label: 'Crisis', tone: 'danger', icon: 'alert' },
-  MEDIOS: { label: 'Medios', tone: 'accent', icon: 'mic' },
-  INSTITUCIONAL: { label: 'Institucional', tone: 'neutral', icon: 'flag' },
+// Presentación por categoría: la etiqueta visible viene del diccionario activo.
+const CATEGORY_META = {
+  CRISIS: { tone: 'danger', icon: 'alert' },
+  MEDIOS: { tone: 'accent', icon: 'mic' },
+  INSTITUCIONAL: { tone: 'neutral', icon: 'flag' },
 };
-
-// Pestañas: escenarios de la organización del vocero y biblioteca general de VoxReady
-const TABS = [
-  { value: 'org', label: 'Mi organización' },
-  { value: 'general', label: 'Generales' },
-];
 const isGeneral = (escenario) => escenario.scope === 'general';
 
 export default function ElegirEscenario() {
-  const t = I.es.L.u2;
+  const { d, lang, langVersion } = useI18n();
+  const t = d.L.u2;
   const navigate = useNavigate();
+  // Pestañas: escenarios de la organización del vocero y catálogo general del idioma activo.
+  const tabs = [
+    { value: 'org', label: t.tabs.org },
+    { value: 'general', label: t.tabs.general },
+  ];
+  // Locale únicamente para formatear fechas.
+  const locale = lang === 'en' ? 'en-US' : 'es-CL';
 
   const [escenarios, setEscenarios] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [filtro, setFiltro] = useState('TODOS');
   const [cargando, setCargando] = useState(true);
-  const [error, setError] = useState('');
+  const [error, setError] = useState(false);
   const [intento, setIntento] = useState(0);
   const [pestanaElegida, setPestana] = useState(null);
 
@@ -38,23 +41,40 @@ export default function ElegirEscenario() {
   const pestana = pestanaElegida || (propios.length || !generales.length ? 'org' : 'general');
   const enPestana = pestana === 'general' ? generales : propios;
 
+  // Al cambiar el idioma activo, el catálogo anterior deja de ser válido: se descarta de inmediato
+  // para no mostrar escenarios del idioma anterior como si fueran del nuevo (mientras llega el
+  // catálogo nuevo se ve el estado de carga).
   useEffect(() => {
+    setEscenarios([]);
+    setCargando(true);
+  }, [lang]);
+
+  // El catálogo lo FILTRA EL BACKEND según el idioma del usuario. Se vuelve a pedir cuando cambia el
+  // idioma efectivo ya aplicado (`langVersion`), así el catálogo abierto se actualiza sin navegar
+  // fuera de la pantalla ni recargar el navegador. `langVersion` solo cambia cuando el idioma cambia
+  // de verdad, por lo que no se generan peticiones duplicadas ni ciclos.
+  useEffect(() => {
+    let cancelled = false;
     const cargarEscenarios = async () => {
       try {
         setCargando(true);
-        setError('');
+        setError(false);
         const data = await apiGet('/api/scenarios/my');
-        setEscenarios(data.scenarios || []);
-      } catch (error) {
-        console.error('Error cargando escenarios:', error);
-        setError('No se pudieron cargar los escenarios.');
+        if (!cancelled) setEscenarios(data.scenarios || []);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Error cargando escenarios:', err);
+        setError(true);
       } finally {
-        setCargando(false);
+        if (!cancelled) setCargando(false);
       }
     };
 
     cargarEscenarios();
-  }, [intento]);
+    return () => {
+      cancelled = true;
+    };
+  }, [intento, langVersion]);
 
   const escenariosFiltrados = useMemo(() => {
     return enPestana.filter((escenario) => {
@@ -76,8 +96,8 @@ export default function ElegirEscenario() {
       <PracticeSteps />
       <PageHeader eyebrow={t.eyebrow} title={t.title} description={t.sub} />
 
-      <div className="flex items-end gap-6 border-b border-line mb-6" role="tablist" aria-label="Tipo de escenarios">
-        {TABS.map((tab) => {
+      <div className="flex items-end gap-6 border-b border-line mb-6" role="tablist" aria-label={t.tabsLabel}>
+        {tabs.map((tab) => {
           const activa = pestana === tab.value;
           const total = tab.value === 'general' ? generales.length : propios.length;
           return (
@@ -99,9 +119,7 @@ export default function ElegirEscenario() {
         })}
       </div>
       {pestana === 'general' && (
-        <p className="-mt-2 mb-6 text-[13px] text-muted">
-          Escenarios de práctica preparados por VoxReady, disponibles para todos los voceros. Sirven para entrenar mientras tu organización prepara los suyos.
-        </p>
+        <p className="-mt-2 mb-6 text-[13px] text-muted">{t.generalNote}</p>
       )}
 
       <div className="flex flex-col md:flex-row md:items-center gap-3 mb-8">
@@ -136,15 +154,15 @@ export default function ElegirEscenario() {
           <EmptyState
             tone="danger"
             icon="server"
-            title={error}
-            description="Verifica que el backend esté corriendo en el puerto 3000 y que la base de datos tenga datos de prueba."
+            title={t.loadFailed}
+            description={t.loadError}
             action={
               <div className="flex gap-2 justify-center">
                 <Button variant="secondary" icon="refresh" onClick={() => setIntento((n) => n + 1)}>
-                  Reintentar
+                  {t.retry}
                 </Button>
                 <Button variant="ghost" to="/laboratorio" icon="flask">
-                  Diagnóstico
+                  {t.diagnostic}
                 </Button>
               </div>
             }
@@ -154,11 +172,7 @@ export default function ElegirEscenario() {
 
       {!cargando && !error && escenarios.length === 0 && (
         <Card>
-          <EmptyState
-            icon="layers"
-            title="No tienes escenarios asignados"
-            description="Tu organización aún no te ha asignado escenarios. Debes esperar nuevas instrucciones."
-          />
+          <EmptyState icon="layers" title={t.noScenarios.title} description={t.noScenarios.description} />
         </Card>
       )}
 
@@ -167,30 +181,34 @@ export default function ElegirEscenario() {
           {pestana === 'org' ? (
             <EmptyState
               icon="layers"
-              title="Tu organización aún no tiene escenarios para ti"
-              description="Mientras tanto, puedes practicar con los escenarios generales de VoxReady."
+              title={t.orgEmpty.title}
+              description={t.orgEmpty.description}
               action={
                 <Button iconRight="arrowRight" onClick={() => setPestana('general')}>
-                  Ver escenarios generales
+                  {t.orgEmpty.cta}
                 </Button>
               }
             />
           ) : (
-            <EmptyState icon="layers" title="Aún no hay escenarios generales" description="El equipo de VoxReady los irá agregando." />
+            <EmptyState icon="layers" title={t.generalEmpty.title} description={t.generalEmpty.description} />
           )}
         </Card>
       )}
 
       {!cargando && !error && enPestana.length > 0 && escenariosFiltrados.length === 0 && (
         <Card>
-          <EmptyState icon="search" title="Sin resultados" description="No se encontraron escenarios con los criterios seleccionados." />
+          <EmptyState icon="search" title={t.noResults.title} description={t.noResults.description} />
         </Card>
       )}
 
       {!cargando && !error && escenariosFiltrados.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {escenariosFiltrados.map((escenario) => {
-            const cat = CATEGORY[escenario.category] || { label: escenario.category, tone: 'neutral', icon: 'layers' };
+            const meta = CATEGORY_META[escenario.category] || { tone: 'neutral', icon: 'layers' };
+            const categoryLabel = t.categories[escenario.category] || escenario.category;
+            // Escenario personalizado escrito en otro idioma: se avisa, nunca se traduce solo.
+            const otherLanguage =
+              escenario.language && escenario.language !== lang ? t.inLanguage(t.languageNames[escenario.language]) : null;
             return (
               <Card
                 key={`${escenario.scope || 'org'}-${escenario.id}`}
@@ -198,18 +216,23 @@ export default function ElegirEscenario() {
               >
                 <div className="flex items-center justify-between mb-6">
                   <span className="h-10 w-10 rounded-xl bg-subtle flex items-center justify-center text-ink">
-                    <Icon name={cat.icon} size={18} />
+                    <Icon name={meta.icon} size={18} />
                   </span>
-                  <Badge tone={cat.tone}>{cat.label}</Badge>
+                  <Badge tone={meta.tone}>{categoryLabel}</Badge>
                 </div>
                 <h3 className="text-[17px] font-semibold tracking-tight text-ink">{escenario.title}</h3>
                 <p className="text-[13px] text-muted mt-2 leading-relaxed flex-1">{escenario.context}</p>
+                {otherLanguage && (
+                  <p className="mt-3">
+                    <Badge tone="warning">{otherLanguage}</Badge>
+                  </p>
+                )}
                 <InterviewSummary interview={escenario.interview} className="mt-4 flex flex-wrap items-center gap-2" />
                 <div className="mt-6 pt-5 border-t border-line flex items-center justify-between">
                   <span className="text-xs text-faint">
                     {isGeneral(escenario)
-                      ? 'Escenario general · VoxReady'
-                      : `Asignado ${new Date(escenario.assignedAt).toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}`}
+                      ? t.generalFooter
+                      : `${t.assignedAt} ${new Date(escenario.assignedAt).toLocaleDateString(locale, { day: 'numeric', month: 'short' })}`}
                   </span>
                   <Button size="sm" iconRight="arrowRight" onClick={() => seleccionarEscenario(escenario)}>
                     {t.start}

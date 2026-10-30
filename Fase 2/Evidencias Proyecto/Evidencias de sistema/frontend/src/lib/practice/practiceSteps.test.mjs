@@ -17,7 +17,7 @@ test('los indicadores de etapas no son enlaces ni botones', () => {
 });
 
 test('conserva apariencia, orden de etapas y etapa actual', () => {
-  assert.match(source, /I\.es\.flow/, 'usa la misma lista y orden de etapas');
+  assert.match(source, /d\.flow/, 'usa la misma lista y orden de etapas (sistema de traducciones)');
   assert.match(source, /aria-current=\{active \? 'step' : undefined\}/, 'marca la etapa actual');
   assert.match(source, /rounded-full/, 'conserva la apariencia de las píldoras');
   assert.match(source, /select-none/, 'el texto no es seleccionable como control');

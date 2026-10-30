@@ -1,25 +1,21 @@
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import { useI18n } from '../lib/i18n';
 import { apiFetch } from '../lib/api';
-import { AREAS, ROLE_META } from '../data/directory';
+import { AREAS, roleMeta } from '../data/directory';
 import Icon from './Icon';
 import { Button, ChoiceChips, Field, Modal, Radio } from './ui';
-
-const ROLE_HELP = {
-  admin: 'Gestiona temas, voceros y la política de retención de una organización.',
-  master: 'Staff de VoxReady. Define el patrón de evaluación y revisa casos.',
-  system: 'Staff de VoxReady con acceso total a organizaciones y usuarios.',
-  user: 'Practica entrevistas en los escenarios asignados por su organización.',
-};
-
-const EMPTY = { name: '', email: '', password: '', tenantId: '', area: AREAS[0] };
 
 // Formulario para crear usuarios (POST /api/users).
 // - allowedRoles: roles que quien crea puede asignar.
 // - fixedTenantId: si se indica, el usuario queda en esa organización.
 // - onCreated: se llama tras crear el usuario (para recargar la lista).
 export default function UserFormModal({ open, onClose, onCreated, allowedRoles, defaultRole, tenants = [], fixedTenantId, title, description }) {
-  const initial = () => ({ ...EMPTY, role: defaultRole || allowedRoles[0], tenantId: fixedTenantId || '' });
+  const { d } = useI18n();
+  const t = d.L.userForm;
+  const roles = roleMeta(d);
+  const areaOptions = AREAS;
+  const initial = () => ({ name: '', email: '', password: '', tenantId: fixedTenantId || '', area: areaOptions[0], role: defaultRole || allowedRoles[0] });
   const [form, setForm] = useState(initial);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -55,7 +51,7 @@ export default function UserFormModal({ open, onClose, onCreated, allowedRoles, 
           area: form.role === 'user' ? form.area : undefined,
         },
       });
-      toast.success(`Cuenta creada: ${user.email}`);
+      toast.success(t.createdToast(user.email));
       onCreated?.(user);
       close();
     } catch (err) {
@@ -69,30 +65,30 @@ export default function UserFormModal({ open, onClose, onCreated, allowedRoles, 
     <Modal
       open={open}
       onClose={close}
-      title={title || 'Nuevo usuario'}
-      description={description || 'Comparte el correo y la contraseña inicial con la persona para que pueda ingresar.'}
+      title={title || t.defaultTitle}
+      description={description || t.defaultDesc}
       footer={
         <>
           <Button variant="ghost" onClick={close}>
-            Cancelar
+            {t.cancel}
           </Button>
           <Button onClick={submit} icon="check" disabled={saving}>
-            {saving ? 'Creando…' : 'Crear usuario'}
+            {saving ? t.creating : t.create}
           </Button>
         </>
       }
     >
       <form onSubmit={submit} className="space-y-5">
         {allowedRoles.length > 1 && (
-          <Field label="Rol">
+          <Field label={t.roleL}>
             <div className="space-y-2">
               {allowedRoles.map((role) => (
                 <Radio
                   key={role}
                   checked={form.role === role}
                   onChange={() => set('role')(role)}
-                  title={ROLE_META[role].label}
-                  description={ROLE_HELP[role]}
+                  title={roles[role].label}
+                  description={t.roleHelp[role]}
                 />
               ))}
             </div>
@@ -100,12 +96,12 @@ export default function UserFormModal({ open, onClose, onCreated, allowedRoles, 
         )}
 
         {needsTenant && (
-          <Field label="Organización">
+          <Field label={t.orgL}>
             <select className="input" value={form.tenantId} onChange={(e) => set('tenantId')(e.target.value)}>
-              <option value="">Selecciona una organización…</option>
-              {activeTenants.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
+              <option value="">{t.selectOrg}</option>
+              {activeTenants.map((tn) => (
+                <option key={tn.id} value={tn.id}>
+                  {tn.name}
                 </option>
               ))}
             </select>
@@ -113,15 +109,15 @@ export default function UserFormModal({ open, onClose, onCreated, allowedRoles, 
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Field label="Nombre completo">
-            <input className="input" value={form.name} onChange={(e) => set('name')(e.target.value)} placeholder="Ej. Javiera Mateluna" autoFocus />
+          <Field label={t.nameL}>
+            <input className="input" value={form.name} onChange={(e) => set('name')(e.target.value)} placeholder={t.namePh} autoFocus />
           </Field>
-          <Field label="Correo">
-            <input className="input" type="email" value={form.email} onChange={(e) => set('email')(e.target.value)} placeholder="nombre@empresa.com" />
+          <Field label={t.emailL}>
+            <input className="input" type="email" value={form.email} onChange={(e) => set('email')(e.target.value)} placeholder={t.emailPh} />
           </Field>
         </div>
 
-        <Field label="Contraseña inicial" hint="Mínimo 6 caracteres.">
+        <Field label={t.passL} hint={t.passHint}>
           <div className="relative">
             <input
               className="input pr-10"
@@ -135,7 +131,7 @@ export default function UserFormModal({ open, onClose, onCreated, allowedRoles, 
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               className="absolute right-2 top-1/2 -translate-y-1/2 h-7 w-7 rounded-md flex items-center justify-center text-faint hover:text-ink"
-              aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+              aria-label={showPassword ? t.hidePass : t.showPass}
             >
               <Icon name="eye" size={15} />
             </button>
@@ -143,15 +139,15 @@ export default function UserFormModal({ open, onClose, onCreated, allowedRoles, 
         </Field>
 
         {form.role === 'user' && (
-          <Field label="Público interno" hint="Define qué escenarios verá el vocero.">
-            <ChoiceChips options={AREAS} value={form.area} onChange={set('area')} />
+          <Field label={t.areaL} hint={t.areaHint}>
+            <ChoiceChips options={areaOptions} labels={d.L.dir.areaLabels} value={form.area} onChange={set('area')} />
           </Field>
         )}
 
         {allowedRoles.includes('admin') && !allowedRoles.includes('user') && (
           <p className="flex items-start gap-2 text-xs text-muted leading-relaxed rounded-xl bg-subtle/70 p-3">
             <Icon name="info" size={14} className="mt-0.5 text-faint" />
-            Los voceros los crea el administrador de cada organización desde su panel.
+            {t.adminNote}
           </p>
         )}
 

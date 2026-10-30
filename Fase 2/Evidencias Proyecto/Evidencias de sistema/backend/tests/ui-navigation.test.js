@@ -17,6 +17,8 @@ const detalleSistema = read(path.join('pages', 'sistema', 'DetalleOrganizacion.j
 const retencionCliente = read(path.join('pages', 'PoliticaRetencion.jsx'));
 const formulario = read(path.join('components', 'RequestFormModal.jsx'));
 const reglasFormulario = read(path.join('lib', 'requestForm.js'));
+// Las etiquetas visibles del formulario viven en el diccionario central (idioma activo).
+const diccionario = read(path.join('data', 'dictionary.js'));
 const app = read('App.jsx');
 
 let pass = 0;
@@ -35,12 +37,21 @@ const count = (source, token) => source.split(token).length - 1;
 console.log('\n1) Tarjetas de organizaciones: navegación');
 ok(/role="link"/.test(organizaciones), 'la tarjeta se anuncia como enlace');
 ok(/tabIndex=\{0\}/.test(organizaciones), 'la tarjeta recibe foco con el teclado');
-ok(/aria-label=\{`Ver el detalle de/.test(organizaciones), 'la tarjeta tiene una etiqueta accesible');
+ok(/aria-label=\{t\.viewDetail\(tn\.name\)\}/.test(organizaciones) && /viewDetail: \(name\) => `Ver el detalle de \$\{name\}`/.test(diccionario), 'la tarjeta tiene una etiqueta accesible');
 ok(/onKeyDown=/.test(organizaciones), 'la tarjeta responde a Enter/Espacio');
 ok(/navigate\(`\/sistema\/organizaciones\/\$\{tenant\.id\}`\)/.test(organizaciones), 'navega a la ruta de detalle existente');
 ok(/sistema\/organizaciones\/:id/.test(app), 'la ruta del detalle no cambió');
 ok(!/>\s*Detalle\s*</.test(organizaciones), 'no existe el botón «Detalle»');
-ok(/>\s*Admin\s*</.test(organizaciones) && /Suspender/.test(organizaciones) && /Eliminar/.test(organizaciones), 'las acciones internas de la tarjeta se conservan');
+ok(
+  /\{t\.adminBtn\}/.test(organizaciones) &&
+    /t\.suspend : t\.reactivate/.test(organizaciones) &&
+    /\{t\.delete\}/.test(organizaciones) &&
+    /adminBtn: 'Admin'/.test(diccionario) &&
+    /suspend: 'Suspender'/.test(diccionario) &&
+    /reactivate: 'Reactivar'/.test(diccionario) &&
+    /delete: 'Eliminar'/.test(diccionario),
+  'las acciones internas de la tarjeta se conservan',
+);
 ok(/closest\('a, button'\)/.test(organizaciones), 'los botones internos no disparan la navegación');
 
 console.log('\n2) Tarjetas de organizaciones: borde claro un poco más grueso, sin brillos');
@@ -63,7 +74,7 @@ ok(!/>\s*Progreso\s*</.test(voceros), 'no existe el botón «Progreso»');
 ok(/admin\/vocero\/:userId/.test(app), 'la ruta del progreso no cambió');
 
 console.log('\n4) Solicitudes del administrador del cliente: un solo botón y formulario dinámico');
-ok(count(retencionCliente, 'Nueva solicitud') === 1, 'hay un único botón principal «Nueva solicitud»');
+ok(count(retencionCliente, '{t.newRequest}') === 1 && /newRequest: 'Nueva solicitud'/.test(diccionario), 'hay un único botón principal «Nueva solicitud»');
 ok(!retencionCliente.includes('Solicitar extensión<'), 'ya no hay un botón aparte para la extensión');
 ok(!retencionCliente.includes('title="Nueva solicitud de borrado"'), 'ya no hay un formulario fijo de privacidad');
 ok(!retencionCliente.includes('Solicitud de extensión del plazo de conservación'), 'ya no hay un formulario fijo de extensión');
@@ -73,9 +84,9 @@ ok(/type\.kind === 'privacy' \?/.test(formulario), 'los campos cambian según el
 ok(/switchRequestType/.test(formulario), 'al cambiar de tipo se descartan los campos del tipo anterior');
 ok(/validateRequestForm/.test(formulario) && /buildRequestPayload/.test(formulario), 'valida y construye el cuerpo con las reglas del backend');
 ok(/voceros\.map/.test(formulario), 'el tipo de privacidad pide el vocero');
-ok(/Plazo solicitado/.test(formulario), 'el tipo de extensión pide el plazo solicitado');
-ok(/Motivo/.test(formulario), 'el motivo está disponible donde corresponde');
-ok(/Cancelar/.test(formulario), 'hay botón para cancelar sin crear nada');
+ok(/t\.requestedDaysL/.test(formulario) && diccionario.includes('Plazo solicitado (días)'), 'el tipo de extensión pide el plazo solicitado');
+ok(/t\.reasonL/.test(formulario) && diccionario.includes("reasonL: 'Motivo'"), 'el motivo está disponible donde corresponde');
+ok(/t\.cancel/.test(formulario) && diccionario.includes("cancel: 'Cancelar'"), 'hay botón para cancelar sin crear nada');
 
 console.log('\n5) Tipos de solicitud reales y permisos');
 ok(/RECORDINGS/.test(reglasFormulario) && /ANONYMIZE/.test(reglasFormulario), 'se usan los alcances de privacidad que admite el backend');

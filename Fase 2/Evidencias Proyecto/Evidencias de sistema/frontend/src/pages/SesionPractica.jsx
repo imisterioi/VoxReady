@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button, cx } from '../components/ui';
@@ -44,7 +44,9 @@ function formatTime(totalSeconds) {
 }
 
 export default function SesionPractica() {
-  const t = I.es.L.u4;
+  const { d } = useI18n();
+  const t = d.L.u4;
+  const tb = d.L.u4b;
   const navigate = useNavigate();
   const [scenario] = useState(getSelectedScenario);
   const { voice } = useInterviewerVoice();
@@ -190,14 +192,14 @@ export default function SesionPractica() {
 
   // Crear sesión en PostgreSQL (endpoint de tu compañero)
   async function createSession() {
-    if (!scenario?.id) throw new Error('Primero elige un escenario.');
+    if (!scenario?.id) throw new Error(tb.noScenarioChosen);
     const response = await fetch(`${API_URL}/api/sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken() || ''}` },
       body: JSON.stringify({ themeId: scenario.id }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.mensaje || 'No se pudo crear la sesión.');
+    if (!response.ok) throw new Error(data.mensaje || tb.createFailed);
     sessionIdRef.current = data.sessionId;
   }
 
@@ -214,7 +216,7 @@ export default function SesionPractica() {
     } catch (err) {
       // Sin cámara/micrófono: la entrevista sigue por escrito (sin medir voz ni cuerpo)
       console.warn('Sin acceso a cámara/micrófono:', err);
-      setMediaWarning('No se pudo acceder a la cámara o al micrófono. Puedes continuar respondiendo por escrito; no se medirán voz ni cuerpo.');
+      setMediaWarning(tb.mediaWarning);
       setTextMode(true);
       setBodyStatus('off');
       return false;
@@ -363,7 +365,7 @@ export default function SesionPractica() {
       onError: (reason) => {
         // Se informa y se permite continuar; no se finge que el vocero escuchó la pregunta.
         setError(
-          `No se pudo reproducir la pregunta en voz alta (${reason}). Está escrita en pantalla: pulsa «Repetir pregunta» o continúa respondiendo.`,
+          tb.speakFailed(reason),
         );
         if (phaseRef.current === 'speaking') startListening();
       },
@@ -532,7 +534,7 @@ export default function SesionPractica() {
       }
       askQuestion(nextQuestion);
     } catch (err) {
-      setError(`${err.message} Puedes finalizar la entrevista y analizar lo respondido.`);
+      setError(tb.answerFailed(err.message));
     }
   }
 
@@ -544,7 +546,7 @@ export default function SesionPractica() {
       fallbackMs: fallbackDelayFor(questionRef.current),
       onEnd: () => audioRef.current?.resume(),
       onError: (reason) => {
-        setError(`No se pudo repetir la pregunta en voz alta (${reason}).`);
+        setError(tb.repeatFailed(reason));
         audioRef.current?.resume();
       },
     });
@@ -696,7 +698,7 @@ export default function SesionPractica() {
           poseFailed: poseFailedRef.current,
         });
         if (!readiness.ready) {
-          throw new Error(`No se pudo iniciar la grabación (falta: ${readiness.missing.join(', ')}).`);
+          throw new Error(tb.recordingFailed(readiness.missing.join(', ')));
         }
         startRecording();
         askQuestion(first);
@@ -707,7 +709,7 @@ export default function SesionPractica() {
         if (audioRecorderRef.current?.state === 'recording') audioRecorderRef.current.stop();
         recorderRef.current = null;
         audioRecorderRef.current = null;
-        if (!cancelled) setError(err.message || 'No se pudo iniciar la sesión.');
+        if (!cancelled) setError(err.message || tb.startFailed);
         // Si la preparación falló antes de empezar, la sesión creada no tiene datos: se
         // descarta para no dejar un registro CREATED vacío. Si ya se estaba grabando, se
         // conserva (puede tener respuesta del vocero).
@@ -728,13 +730,13 @@ export default function SesionPractica() {
   // ------------------------------------------------------ Vista
 
   const status = transcribing
-    ? 'Transcribiendo tu respuesta…'
+    ? tb.transcribing
     : {
-        loading: 'Preparando la entrevista…',
-        speaking: 'El entrevistador está hablando',
-        listening: textMode ? 'Escribe tu respuesta y presiona “Terminé de responder”' : 'Te escucho… responde con naturalidad',
-        thinking: 'El entrevistador está pensando la siguiente pregunta…',
-        finishing: 'Guardando tu entrevista…',
+        loading: tb.preparing,
+        speaking: tb.speaking,
+        listening: textMode ? tb.listeningText : tb.listeningVoice,
+        thinking: tb.thinking,
+        finishing: tb.finishing,
       }[phase];
 
   // El numero de pregunta principal lo informa el backend (`progress.mainsAsked`); no se recalcula.
@@ -754,14 +756,14 @@ export default function SesionPractica() {
           {phase === 'loading' && !error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F]">
               <span className="h-6 w-6 rounded-full border-2 border-white/10 border-t-white/60 animate-spin" />
-              <span className="text-xs text-white/50">Preparando cámara, micrófono y entrevistador…</span>
+              <span className="text-xs text-white/50">{tb.preparingMedia}</span>
             </div>
           )}
 
           {phase !== 'loading' && textMode && mediaWarning && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-gradient-to-br from-[#1C242E] to-[#12181F] text-white/40">
               <Icon name="video" size={32} strokeWidth={1.25} />
-              <span className="text-xs">Sin cámara · modo texto</span>
+              <span className="text-xs">{tb.noCameraText}</span>
             </div>
           )}
 
@@ -789,7 +791,7 @@ export default function SesionPractica() {
                     size={12}
                     className={bodyStatus === 'ok' ? 'text-emerald-400' : bodyStatus === 'none' ? 'text-amber-400' : 'text-white/40'}
                   />
-                  {{ loading: 'Cargando análisis…', ok: 'Cuerpo detectado', none: 'No te veo', off: 'Sin análisis corporal' }[bodyStatus]}
+                  {{ loading: tb.bodyLoading, ok: tb.bodyOk, none: tb.bodyNone, off: tb.bodyOff }[bodyStatus]}
                 </div>
               </div>
             </>
@@ -827,7 +829,7 @@ export default function SesionPractica() {
           {/* Pregunta y respuesta */}
           <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-white/[0.03] px-5 py-4 flex flex-col">
             <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-2">
-              {phase === 'loading' ? 'Preparando' : mainLabel}
+              {phase === 'loading' ? tb.preparingShort : mainLabel}
             </div>
             <p className="font-display font-medium text-[19px] xl:text-[21px] leading-[1.3] tracking-[-0.015em] text-white">
               {question ? `“${question}”` : '…'}
@@ -835,7 +837,7 @@ export default function SesionPractica() {
 
             {phase === 'listening' && !textMode && (
               <p className="mt-3 text-sm text-white/60 leading-relaxed">
-                Habla con naturalidad: tu respuesta se transcribirá al finalizar la sesión.
+                {tb.speakHint}
               </p>
             )}
 
@@ -843,7 +845,7 @@ export default function SesionPractica() {
               <textarea
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
-                placeholder="Escribe aquí tu respuesta."
+                placeholder={tb.answerPlaceholder}
                 className="mt-3 w-full flex-1 min-h-[64px] rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 p-3 text-sm focus:outline-none focus:border-white/30"
               />
             )}
@@ -851,11 +853,11 @@ export default function SesionPractica() {
             <p className="mt-auto pt-3 text-xs text-white/40 flex items-center gap-1.5">
               {phase === 'listening' && !textMode && answerLeft != null && answerLeft <= 10 ? (
                 <>
-                  <Icon name="clock" size={12} /> Te quedan {answerLeft}s para responder
+                  <Icon name="clock" size={12} /> {tb.remainingSeconds(answerLeft)}
                 </>
               ) : phase === 'listening' && silenceIn ? (
                 <>
-                  <Icon name="clock" size={12} /> Silencio detectado · continuamos en {silenceIn}s
+                  <Icon name="clock" size={12} /> {tb.silenceDetected(silenceIn)}
                 </>
               ) : (
                 status
@@ -876,7 +878,7 @@ export default function SesionPractica() {
               <span className="flex-1">{error}</span>
               {!scenario && (
                 <Button variant="secondary" size="sm" to="/vocero/escenarios">
-                  Elegir escenario
+                  {tb.chooseScenario}
                 </Button>
               )}
             </div>
@@ -889,7 +891,7 @@ export default function SesionPractica() {
                 <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${progressPercent(progress)}%` }} />
               </div>
               <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
-                {progress.mainsAsked} de {progress.mainsTotal ?? '—'} principales
+                {tb.mainsOf(progress.mainsAsked, progress.mainsTotal ?? '—')}
               </span>
             </div>
 
@@ -900,7 +902,7 @@ export default function SesionPractica() {
               onClick={() => finishAnswer()}
               disabled={phase !== 'listening' || (textMode && !typed.trim())}
             >
-              {phase === 'finishing' ? 'Guardando…' : 'Terminé de responder'}
+              {phase === 'finishing' ? tb.saving : tb.finishedAnswer}
             </Button>
 
             <div className="flex items-center justify-between gap-1">
@@ -910,7 +912,7 @@ export default function SesionPractica() {
                 disabled={phase === 'finishing'}
                 className="h-9 px-3 rounded-xl hover:bg-red-500/10 text-white/60 hover:text-red-300 text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors disabled:opacity-40"
               >
-                <Icon name="x" size={15} /> Descartar
+                <Icon name="x" size={15} /> {tb.discard}
               </button>
               <button
                 type="button"
@@ -932,7 +934,7 @@ export default function SesionPractica() {
           </div>
 
           <p className="text-[11px] text-white/30 flex items-start gap-1.5 px-1">
-            <Icon name="info" size={12} className="mt-0.5 shrink-0" /> Usa audífonos para que el micrófono no capte la voz del entrevistador.
+            <Icon name="info" size={12} className="mt-0.5 shrink-0" /> {tb.headphones}
           </p>
         </div>
       </div>

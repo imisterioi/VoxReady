@@ -36,6 +36,8 @@ function configFromEnv() {
   return {
     baseUrl,
     model: String(process.env.EVAL_WHISPER_MODEL || DEFAULT_MODEL).trim(),
+    // Idioma para el reconocimiento ('es' | 'en'); vacío = el idioma configurado en el servicio.
+    language: String(process.env.EVAL_WHISPER_LANGUAGE || '').trim(),
     timeoutMs: intFromEnv('EVAL_WHISPER_TIMEOUT_MS', DEFAULT_TIMEOUT_MS),
     maxBytes: intFromEnv('EVAL_WHISPER_MAX_MB', DEFAULT_MAX_MB) * 1024 * 1024,
     maxConcurrency: intFromEnv('EVAL_WHISPER_CONCURRENCY', DEFAULT_MAX_CONCURRENCY),
@@ -123,7 +125,9 @@ async function transcribeFile(filePath, overrides = {}) {
     const form = new FormData();
     form.append('file', new Blob([buffer], { type: 'audio/webm' }), 'sesion.webm');
 
-    const url = `${config.baseUrl}/transcribe?model=${encodeURIComponent(config.model)}&word_timestamps=true`;
+    const params = new URLSearchParams({ model: config.model, word_timestamps: 'true' });
+    if (config.language) params.set('language', config.language);
+    const url = `${config.baseUrl}/transcribe?${params.toString()}`;
     let response;
     const started = Date.now();
     try {

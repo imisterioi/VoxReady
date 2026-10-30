@@ -22,14 +22,17 @@ const TONES = { ready: 'success', preparing: 'accent', exhausted: 'warning', fai
 // Estados que el backend informa mientras el informe puede llegar más adelante.
 const PENDING_STATES = new Set(['processing', 'retrying', 'stalled']);
 
-export function historyStatus(session = {}) {
-  if (session?.hasReport || session?.report) return { key: 'ready', label: HISTORY_LABELS.ready, tone: TONES.ready };
+// Estado del informe de una sesión. `labels` permite mostrarlo en el idioma del usuario; por defecto
+// se usan las etiquetas en español (compatibilidad con el comportamiento anterior).
+export function historyStatus(session = {}, labels = HISTORY_LABELS) {
+  const text = { ...HISTORY_LABELS, ...(labels || {}) };
+  if (session?.hasReport || session?.report) return { key: 'ready', label: text.ready, tone: TONES.ready };
   const state = session?.evaluation?.state;
-  if (state === 'done') return { key: 'ready', label: HISTORY_LABELS.ready, tone: TONES.ready };
-  if (state === 'exhausted') return { key: 'exhausted', label: HISTORY_LABELS.exhausted, tone: TONES.exhausted };
-  if (state === 'failed') return { key: 'failed', label: HISTORY_LABELS.failed, tone: TONES.failed };
-  if (state && PENDING_STATES.has(state)) return { key: 'preparing', label: HISTORY_LABELS.preparing, tone: TONES.preparing };
-  return { key: 'idle', label: HISTORY_LABELS.idle, tone: TONES.idle };
+  if (state === 'done') return { key: 'ready', label: text.ready, tone: TONES.ready };
+  if (state === 'exhausted') return { key: 'exhausted', label: text.exhausted, tone: TONES.exhausted };
+  if (state === 'failed') return { key: 'failed', label: text.failed, tone: TONES.failed };
+  if (state && PENDING_STATES.has(state)) return { key: 'preparing', label: text.preparing, tone: TONES.preparing };
+  return { key: 'idle', label: text.idle, tone: TONES.idle };
 }
 
 // Sesiones con informe válido: son las únicas que pueden alimentar puntajes y tendencias.

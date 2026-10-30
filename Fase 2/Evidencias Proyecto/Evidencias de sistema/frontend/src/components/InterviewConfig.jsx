@@ -1,15 +1,19 @@
+import { useI18n } from '../lib/i18n';
 import { Badge, Field, Segmented } from './ui';
 import { DEFAULT_MINUTES, MINUTES_RANGE, interviewConfigIssues, maxTurnsPotential, TURN_LIMIT } from '../lib/practice/interviewLimits';
 
 // Configuración de la entrevista de un escenario (misma estructura que backend/ai/interviewConfig.js):
 // nivel de agresividad del entrevistador, preguntas y repreguntas, duración máxima,
 // quién entrevista y tiempo máximo por respuesta.
+//
+// Los niveles solo declaran su valor y su tono visual: la etiqueta y la ayuda visibles vienen del
+// diccionario del idioma activo (`d.L.cfg.levels`).
 
 export const AGGRESSIVENESS = [
-  { value: 'BAJA', label: 'Baja', tone: 'success', help: 'Cordial: da espacio para explicarse y no confronta.' },
-  { value: 'MEDIA', label: 'Media', tone: 'neutral', help: 'Incisivo pero respetuoso: no acepta respuestas genéricas.' },
-  { value: 'ALTA', label: 'Alta', tone: 'warning', help: 'Confrontacional: cuestiona la versión oficial y presiona por responsables y cifras.' },
-  { value: 'EXTREMA', label: 'Extrema', tone: 'danger', help: 'Hostil: toma las palabras del vocero en su peor interpretación. Ej.: “¿Dice entonces que…?”' },
+  { value: 'BAJA', tone: 'success' },
+  { value: 'MEDIA', tone: 'neutral' },
+  { value: 'ALTA', tone: 'warning' },
+  { value: 'EXTREMA', tone: 'danger' },
 ];
 
 export const DEFAULT_INTERVIEW = {
@@ -60,52 +64,56 @@ export function toInterviewPayload(form) {
 }
 
 export function InterviewConfigFields({ value, onChange }) {
+  const { d } = useI18n();
+  const t = d.L.cfg;
   const set = (field) => (input) => onChange({ ...value, [field]: input?.target ? input.target.value : input });
-  const level = AGGRESSIVENESS.find((a) => a.value === value.aggressiveness) || AGGRESSIVENESS[1];
-  const turns = totalTurns(value);
+  const levelValue = AGGRESSIVENESS.find((a) => a.value === value.aggressiveness) || AGGRESSIVENESS[1];
+  const level = t.levels[levelValue.value];
+  const levelOptions = AGGRESSIVENESS.map((a) => ({ value: a.value, label: t.levels[a.value].label }));
   const maxQuestions = Math.min(12, Math.floor(MAX_TURNS / (1 + Number(value.followUps || 0))));
   const issues = interviewConfigIssues(value);
+  const issueText = (issue) => {
+    const message = t.issues[`${issue.field}:${issue.code}`];
+    return typeof message === 'function' ? message(issue) : message || issue.mensaje;
+  };
   const potentialTurns = maxTurnsPotential(value);
 
   return (
     <div className="space-y-6">
-      <Field label="Nivel de agresividad del entrevistador" hint={level.help}>
-        <Segmented options={AGGRESSIVENESS} value={value.aggressiveness} onChange={set('aggressiveness')} />
+      <Field label={t.aggressivenessL} hint={level.help}>
+        <Segmented options={levelOptions} value={value.aggressiveness} onChange={set('aggressiveness')} />
       </Field>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
       {issues.length > 0 && (
         <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300 space-y-1">
-          <p className="font-medium">Esta configuración no se puede guardar ni iniciar:</p>
+          <p className="font-medium">{t.invalidTitle}</p>
           <ul className="list-disc pl-5 space-y-0.5">
             {issues.map((issue) => (
-              <li key={`${issue.field}-${issue.code}`}>{issue.mensaje}</li>
+              <li key={`${issue.field}-${issue.code}`}>{issueText(issue)}</li>
             ))}
           </ul>
         </div>
       )}
 
       <p className="text-[12px] text-muted">
-        Máximo técnico: {TURN_LIMIT} turnos potenciales. Esta configuración puede llegar a{' '}
-        <span className="tabular-nums font-medium">{potentialTurns}</span> turnos
-        (principales + repreguntas habituales + extraordinarias por agresividad + aclaraciones de
-        contingencia). El backend valida el mismo cálculo y rechaza lo que exceda el límite.
+        {t.technicalLimit(TURN_LIMIT, potentialTurns)}
       </p>
 
-      <Field label="Cantidad de preguntas" hint="Preguntas principales, cada una sobre un aspecto distinto.">
+      <Field label={t.questionsL} hint={t.questionsHint}>
           <input className="input" type="number" min={1} max={maxQuestions} value={value.questionCount} onChange={set('questionCount')} />
         </Field>
-        <Field label="Repreguntas por pregunta" hint="Veces que el entrevistador insiste sobre la respuesta del vocero antes de cambiar de tema.">
+        <Field label={t.followUpsL} hint={t.followUpsHint}>
           <select className="input" value={value.followUps} onChange={set('followUps')}>
-            <option value={0}>Sin repreguntas fijas</option>
-            <option value={1}>1 repregunta</option>
-            <option value={2}>2 repreguntas</option>
-            <option value={3}>3 repreguntas</option>
+            <option value={0}>{t.noFollowUps}</option>
+            <option value={1}>{t.followUp(1)}</option>
+            <option value={2}>{t.followUp(2)}</option>
+            <option value={3}>{t.followUp(3)}</option>
           </select>
         </Field>
         <Field
-          label="Duración máxima de la entrevista (minutos)"
-          hint={`Obligatoria (${MINUTES_RANGE[0]} a ${MINUTES_RANGE[1]}). Es el límite REAL de toda la entrevista, compartido por todos sus temas: al alcanzarlo se cierra aunque queden preguntas pendientes. Referencia orientativa para estas preguntas: ~${autoMinutes(value)} min.`}
+          label={t.minutesL}
+          hint={t.minutesHint(MINUTES_RANGE[0], MINUTES_RANGE[1], autoMinutes(value))}
         >
           <input
             className="input"
@@ -117,17 +125,17 @@ export function InterviewConfigFields({ value, onChange }) {
             onChange={set('estimatedMinutes')}
           />
         </Field>
-        <Field label="Tiempo máximo por respuesta (segundos)" hint="Al cumplirse, el entrevistador pasa a la siguiente pregunta. Vacío = sin límite.">
-          <input className="input" type="number" min={15} max={600} placeholder="Sin límite" value={value.maxAnswerSeconds} onChange={set('maxAnswerSeconds')} />
+        <Field label={t.maxAnswerL} hint={t.maxAnswerHint}>
+          <input className="input" type="number" min={15} max={600} placeholder={t.maxAnswerPh} value={value.maxAnswerSeconds} onChange={set('maxAnswerSeconds')} />
         </Field>
       </div>
 
-      <Field label="¿Quién entrevista?" hint="Opcional. Define el rol del entrevistador IA. Por defecto: un periodista chileno.">
+      <Field label={t.interviewerL} hint={t.interviewerHint}>
         <input
           className="input"
           maxLength={120}
           value={value.interviewerRole}
-          placeholder="Ej. una periodista de TV en un despacho en vivo, un dirigente sindical…"
+          placeholder={t.interviewerPh}
           onChange={set('interviewerRole')}
         />
       </Field>
@@ -137,22 +145,25 @@ export function InterviewConfigFields({ value, onChange }) {
 
 // Resumen compacto para las tarjetas y la vista previa del escenario
 export function InterviewSummary({ interview, className }) {
+  const { d } = useI18n();
+  const t = d.L.cfg;
   if (!interview) return null;
-  const level = AGGRESSIVENESS.find((a) => a.value === interview.aggressiveness) || AGGRESSIVENESS[1];
+  const levelValue = AGGRESSIVENESS.find((a) => a.value === interview.aggressiveness) || AGGRESSIVENESS[1];
+  const level = t.levels[levelValue.value];
   const turns = interview.totalTurns ?? totalTurns(interview);
   // Duración MÁXIMA efectiva (no la estimación de referencia).
   const minutes = interview.estimatedMinutes ?? DEFAULT_MINUTES;
   return (
     <div className={className || 'flex flex-wrap items-center gap-2'}>
       <Badge tone="outline" icon="message">
-        {turns} {turns === 1 ? 'pregunta' : 'preguntas'}
-        {Number(interview.followUps) > 0 && ' (con repreguntas)'}
+        {t.summaryQuestions(turns)}
+        {Number(interview.followUps) > 0 && t.summaryWithFollowUps}
       </Badge>
       <Badge tone="outline" icon="clock">
-        máx. {minutes} min{interview.estimatedMinutesAuto ? ' · predeterminado' : ''}
+        {t.summaryMax(minutes)}{interview.estimatedMinutesAuto ? t.summaryAuto : ''}
       </Badge>
-      <Badge tone={level.tone === 'neutral' ? 'outline' : level.tone} icon="zap">
-        Presión {level.label.toLowerCase()}
+      <Badge tone={levelValue.tone === 'neutral' ? 'outline' : levelValue.tone} icon="zap">
+        {t.summaryPressure(level.label.toLowerCase())}
       </Badge>
     </div>
   );

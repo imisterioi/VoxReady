@@ -40,6 +40,12 @@ export const DEFAULT_REQUEST_TYPE = 'RECORDINGS';
 
 export const requestType = (value) => REQUEST_TYPES.find((type) => type.value === value) || null;
 
+// Tipos con las etiquetas/descripciones del idioma activo (si no se pasa diccionario, español).
+export const requestTypes = (d) =>
+  REQUEST_TYPES.map((type) => ({ ...type, ...(d?.L?.req?.types?.[type.value] || {}) }));
+
+export const localizedRequestType = (value, d) => requestTypes(d).find((type) => type.value === value) || null;
+
 // Formulario vacío del tipo indicado: solo los campos que ese tipo necesita.
 export function emptyRequestForm(type = DEFAULT_REQUEST_TYPE) {
   return { type, targetUserId: '', requestedDays: '', reason: '' };
@@ -52,30 +58,31 @@ export function switchRequestType(type) {
 }
 
 // Validación de lo que se va a enviar (las mismas reglas que aplica el backend).
-export function validateRequestForm(form = {}, { currentDays = 0 } = {}) {
+export function validateRequestForm(form = {}, { currentDays = 0, d = null } = {}) {
+  const t = d?.L?.req?.errors;
   const type = requestType(form.type);
-  if (!type) return { ok: false, error: 'Selecciona el tipo de solicitud.' };
+  if (!type) return { ok: false, error: t?.typeRequired || 'Selecciona el tipo de solicitud.' };
 
   if (type.kind === 'privacy') {
-    if (!form.targetUserId) return { ok: false, error: 'Selecciona un vocero.' };
+    if (!form.targetUserId) return { ok: false, error: t?.userRequired || 'Selecciona un vocero.' };
     return { ok: true, error: '' };
   }
 
   const requested = Math.round(Number(form.requestedDays));
   if (!Number.isFinite(requested) || requested < 1 || requested > MAX_DAYS) {
-    return { ok: false, error: `Indica un plazo entre 1 y ${MAX_DAYS} días.` };
+    return { ok: false, error: t ? t.daysRange(MAX_DAYS) : `Indica un plazo entre 1 y ${MAX_DAYS} días.` };
   }
   if (requested <= Number(currentDays || 0)) {
-    return { ok: false, error: `La extensión debe ser mayor que el plazo vigente (${currentDays} días).` };
+    return { ok: false, error: t ? t.daysGreater(currentDays) : `La extensión debe ser mayor que el plazo vigente (${currentDays} días).` };
   }
   return { ok: true, error: '' };
 }
 
 // Cuerpo de la petición: SOLO los campos del tipo seleccionado (nunca los del tipo anterior).
-export function buildRequestPayload(form = {}, { currentDays = 0 } = {}) {
+export function buildRequestPayload(form = {}, { currentDays = 0, d = null } = {}) {
   const type = requestType(form.type);
   if (!type) return null;
-  const validation = validateRequestForm(form, { currentDays });
+  const validation = validateRequestForm(form, { currentDays, d });
   if (!validation.ok) return null;
 
   const reason = typeof form.reason === 'string' ? form.reason.trim() : '';

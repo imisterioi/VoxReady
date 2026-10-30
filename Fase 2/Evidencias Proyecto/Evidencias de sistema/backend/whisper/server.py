@@ -232,6 +232,10 @@ async def health() -> dict[str, Any]:
 async def transcribe(
     file: UploadFile = File(...),
     model: str | None = Query(default=None, description="Clave del modelo; por defecto, el configurado"),
+    language: str | None = Query(
+        default=None,
+        description="Idioma forzado del reconocimiento ('es' | 'en'); vacío = el del modelo",
+    ),
     word_timestamps: bool = Query(
         default=False,
         description="Incluye marcas temporales por palabra (lo usa la evaluación de WPM)",
@@ -264,6 +268,9 @@ async def transcribe(
         if state
         else InferenceOptions(language=LANGUAGE, beam_size=BEAM_SIZE, vad_filter=USE_VAD)
     )
+    # Idioma por petición: permite atender voceros en español o inglés con el mismo modelo.
+    if language:
+        options = replace(options, language=language)
     # Las palabras se piden por petición: el resto del comportamiento del modelo no cambia.
     if word_timestamps and not options.word_timestamps:
         options = replace(options, word_timestamps=True)

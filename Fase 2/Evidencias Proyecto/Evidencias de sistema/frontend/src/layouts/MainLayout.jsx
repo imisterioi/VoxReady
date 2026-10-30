@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useNavigate, useLocation, NavLink, Link, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import { roleIndex, homeFor, ROLE_HOME } from '../data/mockData';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
@@ -20,7 +20,7 @@ export default function MainLayout() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const d = I.es;
+  const { d, lang, languages, labels, setLanguage, syncUser } = useI18n();
 
   // Requiere sesión iniciada; se valida el token con el backend (GET /api/auth/me)
   useEffect(() => {
@@ -33,9 +33,12 @@ export default function MainLayout() {
     }
     setUser(storedUser);
     apiFetch('/api/auth/me')
-      .then(({ user: fresh }) => {
+      .then(async ({ user: fresh }) => {
         saveSession(token, fresh);
-        setUser(fresh);
+        // El idioma activo sigue al usuario; si hay una selección explícita pendiente (hecha en el
+        // login), se guarda como preferencia y prevalece sobre la anterior.
+        const effective = (await syncUser(fresh)) || fresh;
+        setUser(effective);
       })
       .catch(() => {
         /* 401 → apiFetch ya redirige al login; sin conexión se mantiene la sesión local */
@@ -107,7 +110,7 @@ export default function MainLayout() {
       {/* Barra superior */}
       <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto h-16 px-4 md:px-6 flex items-center gap-6">
-          <Link to={homeFor(user.role)} className="shrink-0" aria-label="VoxReady inicio">
+          <Link to={homeFor(user.role)} className="shrink-0" aria-label={d.mainLayout.homeLabel}>
             <Logo />
           </Link>
 
@@ -134,6 +137,21 @@ export default function MainLayout() {
             >
               <Icon name={isDark ? 'sun' : 'moon'} size={17} />
             </button>
+
+            {/* Idioma de la interfaz: preferencia individual del usuario */}
+            <select
+              value={lang}
+              onChange={(e) => setLanguage(e.target.value).catch(() => {})}
+              title={labels[lang]}
+              aria-label="Idioma / Language"
+              className="h-9 rounded-lg border border-line bg-surface px-2 text-xs text-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40"
+            >
+              {languages.map((code) => (
+                <option key={code} value={code}>
+                  {code.toUpperCase()}
+                </option>
+              ))}
+            </select>
 
             {/* Menú de usuario */}
             <div className="relative hidden md:block" ref={menuRef}>
@@ -185,7 +203,7 @@ export default function MainLayout() {
             <button
               onClick={() => setMobileOpen((v) => !v)}
               className="md:hidden h-9 w-9 rounded-lg flex items-center justify-center text-ink hover:bg-subtle"
-              aria-label="Menú"
+              aria-label={d.mainLayout.menu}
             >
               <Icon name={mobileOpen ? 'x' : 'menu'} size={20} />
             </button>
@@ -257,7 +275,7 @@ export default function MainLayout() {
       <footer className={cx('border-t border-line', inSession && 'hidden')}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between text-xs text-faint">
           <span>© 2026 VoxReady</span>
-          <span className="hidden sm:inline">Entrenamiento de voceros con IA</span>
+          <span className="hidden sm:inline">{d.mainLayout.footerTagline}</span>
         </div>
       </footer>
     </div>

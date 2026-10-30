@@ -34,6 +34,10 @@ model Tenant {
   brandColor  String? // Color principal, formato #RRGGBB
   accentColor String? // Color de acento, formato #RRGGBB
 
+  // Idioma por defecto de la organización: lo usa el vocero mientras no fije su propia
+  // preferencia (User.language). Valores soportados: 'es' | 'en'.
+  defaultLanguage String @default("es")
+
   users    User[]
   themes   Theme[]
   sessions Session[]
@@ -61,6 +65,10 @@ model User {
   // Anonimización (Bloque A): si tiene fecha, el vocero fue anonimizado
   // (name/email/area sin PII, sin password) pero el registro y su histórico se conservan
   anonymizedAt DateTime?
+
+  // Preferencia individual de idioma ('es' | 'en'). null = hereda el idioma por defecto de su
+  // organización. Cambiar el idioma del tenant no altera a quien ya eligió el suyo.
+  language String?
 
   // El staff de VoxReady (MASTER y SYSTEM) no pertenece a una organización
   tenantId String?
@@ -108,6 +116,11 @@ model Theme {
   // Escenario general de la biblioteca de VoxReady: no pertenece a ninguna
   // organización (tenantId vacío) y lo ven todos los voceros
   isGlobal Boolean @default(false)
+
+  // Idioma del escenario ('es' | 'en'). En los escenarios generales distingue el catálogo
+  // (español o inglés); en los escenarios de una organización indica en qué idioma está escrito
+  // su contenido. Nunca se traduce automáticamente.
+  language String @default("es")
 
   // Configuración de la entrevista (ver ai/interviewConfig.js): nivel de agresividad,
   // cantidad de preguntas y repreguntas, tiempo estimado, quién entrevista y tiempo por respuesta.
@@ -166,6 +179,11 @@ model Session {
   report      Json? // Informe generado por la IA evaluadora
   score       Int? // Puntaje global 0-100
   review      Json? // Segunda opinión del experto (cola de etiquetado)
+
+  // Idioma con el que se inició la sesión ('es' | 'en'). Congela el idioma de la entrevista y de
+  // su informe: cambiar después la preferencia del vocero no altera las sesiones ya iniciadas.
+  // null en las sesiones históricas (se resuelve con el idioma del vocero o de su organización).
+  language String?
 
   // Auditoría técnica de la transcripción por respuesta (una fila por turno).
   transcriptionAudits TranscriptionAudit[]

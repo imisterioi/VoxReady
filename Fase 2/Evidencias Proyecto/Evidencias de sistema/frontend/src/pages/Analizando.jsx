@@ -1,29 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import I from '../data/dictionary';
+import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button, Card, EmptyState, cx } from '../components/ui';
 import { apiFetch } from '../lib/api';
 import { runAnalysis } from '../lib/practice/analysisRunner';
 import { describeEvaluationError } from '../lib/practice/evaluationErrors';
-import { PENDING_MESSAGE, PENDING_TITLE, describeStage, failureMessage } from '../lib/practice/reportAccess';
+import { describeStage, failureMessage } from '../lib/practice/reportAccess';
 import { RESULT_KEY } from './SesionPractica';
 
-// Motivos que el backend puede devolver en `evaluation.reason`.
-// Mensajes SIEMPRE genéricos: nunca se muestran modelos, proveedores, códigos HTTP ni detalles
-// internos (el detalle técnico queda en la consola del backend).
-const FAIL_REASONS = {
-  NO_API_KEY: 'Falta la clave de la IA en el servidor.',
-  INVALID_AI_RESPONSE: 'La IA devolvió una respuesta no válida. Puedes reintentar.',
-  INTERRUPTED: 'La evaluación se interrumpió. Puedes reintentarla.',
-  AI_UNAVAILABLE: 'No se pudo completar el análisis. Tu grabación se conserva: inténtalo de nuevo en unos minutos.',
-  ERROR: 'Ocurrió un error al evaluar la sesión.',
-};
+// Los motivos que el backend puede devolver en `evaluation.reason` se traducen desde el diccionario
+// (`analysis.fail`). Mensajes SIEMPRE genéricos: nunca se muestran modelos, proveedores, códigos
+// HTTP ni detalles internos (el detalle técnico queda en la consola del backend).
 
 // Envía la entrevista (transcripción + métricas) a la IA evaluadora y abre el informe.
 export default function Analizando() {
-  const t = I.es.L.u5;
+  const { d } = useI18n();
+  const t = d.L.u5;
+  const an = d.analysis;
+  // Textos del aviso de «sigue en segundo plano» y de los errores, en el idioma activo.
+  const { pendingTitle: PENDING_TITLE, pendingMessage: PENDING_MESSAGE } = d.report.pending;
   const navigate = useNavigate();
   const [params] = useSearchParams();
   // El id puede venir del resultado recién guardado o de la URL (?sesion=).
@@ -76,7 +73,7 @@ export default function Analizando() {
 
     setError('');
     setCurrent(0);
-    setProgress('Analizando tu entrevista…');
+    setProgress(an.analyzing);
 
     // Solo se PIDE evaluación si venimos de una práctica recién terminada y no se ha
     // pedido ya en este mismo intento. Con ?sesion= solo se consulta el estado.
@@ -98,13 +95,13 @@ export default function Analizando() {
           }),
         fetchSession: (id) => apiFetch(`/api/sessions/${id}`),
         onStage: (stage) => {
-          if (isCurrent()) setProgress(describeStage({ stage }));
+          if (isCurrent()) setProgress(describeStage({ stage }, d.report));
         },
       });
     } catch (error) {
       // 503 (integración desactivada), 422 (sin ventanas válidas) y 502 (fallo de
       // transcripción) se muestran como mensaje claro; nunca se abre el informe.
-      if (isCurrent()) setError(describeEvaluationError(error) || '');
+      if (isCurrent()) setError(describeEvaluationError(error, d.evalErrors) || '');
       return;
     }
 
@@ -117,12 +114,12 @@ export default function Analizando() {
     if (result.status === 'failed') {
       // Un fallo de evaluación se explica con la clasificación del backend (`errorKind`): temporal
       // (se reintentará solo) o pendiente de revisión técnica. Nunca se muestran códigos internos.
-      const fromEvaluation = result.errorKind ? failureMessage({ errorKind: result.errorKind }) : '';
+      const fromEvaluation = result.errorKind ? failureMessage({ errorKind: result.errorKind }, d.report) : '';
       setError(
         fromEvaluation ||
-          FAIL_REASONS[result.reason] ||
-          (result.httpStatus ? describeEvaluationError({ status: result.httpStatus }) : '') ||
-          'No se pudo completar la evaluación.',
+          an.fail[result.reason] ||
+          (result.httpStatus ? describeEvaluationError({ status: result.httpStatus }, d.evalErrors) : '') ||
+          an.genericError,
       );
       return;
     }
@@ -162,9 +159,9 @@ export default function Analizando() {
         <Card className="max-w-xl mx-auto">
           <EmptyState
             icon="mic"
-            title="No hay una entrevista para analizar"
-            description="Primero realiza una práctica: elige un escenario, prepárate y responde al entrevistador."
-            action={<Button to="/vocero/escenarios" iconRight="arrowRight">Elegir escenario</Button>}
+            title={an.noSessionTitle}
+            description={an.noSessionDesc}
+            action={<Button to="/vocero/escenarios" iconRight="arrowRight">{an.chooseScenario}</Button>}
           />
         </Card>
       </>
@@ -191,7 +188,7 @@ export default function Analizando() {
               {/* El vocero puede salir: el proceso ya reclamado continúa en el backend. */}
               <div className="mt-8 flex justify-center">
                 <Button variant="secondary" to="/vocero/progreso">
-                  Ir a Mi progreso
+                  {an.goProgress}
                 </Button>
               </div>
             </div>
@@ -210,14 +207,14 @@ export default function Analizando() {
           </div>
 
           <h1 className="font-display font-semibold text-[28px] leading-tight tracking-[-0.025em] text-ink">
-            {error ? 'No pudimos analizar tu sesión' : done ? 'Tu informe está listo' : t.head}
+            {error ? an.errorTitle : done ? an.doneTitle : t.head}
           </h1>
           <p className="text-sm text-muted mt-2">
             {error
               ? error
               : done
-                ? 'Abriendo tu informe…'
-                : `${payload?.theme?.title || 'Entrevista'} · ${answered} respuesta${answered === 1 ? '' : 's'} · ${progress || 'la IA evaluadora suele tardar entre 10 y 40 segundos.'}`}
+                ? an.opening
+                : `${payload?.theme?.title || an.interview} · ${an.answers(answered)} · ${progress || an.fallbackProgress}`}
           </p>
 
           <ul className="mt-10 space-y-1 text-left">
@@ -248,10 +245,10 @@ export default function Analizando() {
           {error && (
             <div className="mt-8 flex justify-center gap-2">
               <Button variant="secondary" to="/vocero/escenarios">
-                Volver a escenarios
+                {an.backToScenarios}
               </Button>
               <Button icon="refresh" onClick={() => setAttempt((a) => a + 1)}>
-                Reintentar análisis
+                {an.retry}
               </Button>
             </div>
           )}

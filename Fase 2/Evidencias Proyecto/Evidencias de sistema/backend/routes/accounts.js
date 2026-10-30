@@ -17,6 +17,7 @@ const { anonymizeUser } = require('../lib/anonymize');
 const { syncUserPause } = require('../lib/retentionPause');
 const { startTenantDeletion, processTenantDeletion } = require('../lib/tenantDeletion');
 const presence = require('../lib/presence');
+const { SUPPORTED, DEFAULT: DEFAULT_LANGUAGE, normalizeLanguage } = require('../lib/language');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 6;
@@ -85,6 +86,28 @@ module.exports = function registerAccountRoutes(app, prisma) {
     res.json({ status: 'ok' });
   });
 
+  // Preferencia individual de idioma. Cualquier usuario autenticado cambia la suya (nunca la de
+  // otro). `language: null` (o cadena vacía) borra la preferencia: el usuario vuelve a heredar el
+  // idioma por defecto de su organización.
+  app.patch('/api/auth/language', auth(), async (req, res) => {
+    try {
+      const raw = req.body?.language ?? null;
+      const cleared = raw === null || raw === '';
+      const language = cleared ? null : normalizeLanguage(raw);
+      if (!cleared && !language) return fail(res, 400, `Idioma no válido. Opciones: ${SUPPORTED.join(', ')}.`);
+
+      const updated = await prisma.user.update({
+        where: { id: req.user.id },
+        data: { language },
+        include: { tenant: true },
+      });
+      res.json({ status: 'ok', user: toApiUser(updated) });
+    } catch (error) {
+      console.error('Error guardando el idioma:', error);
+      fail(res, 500, 'No se pudo guardar el idioma.');
+    }
+  });
+
   // ---------------------------------------------------- Organizaciones
 
   app.get('/api/tenants', auth('system'), async (req, res) => {
@@ -120,8 +143,13 @@ module.exports = function registerAccountRoutes(app, prisma) {
   // Crea una organización junto con su primer administrador
   app.post('/api/tenants', auth('system'), async (req, res) => {
     try {
-      const { name, sector, adminName, adminEmail, adminPassword } = req.body || {};
+      const { name, sector, adminName, adminEmail, adminPassword, language } = req.body || {};
       if (!name?.trim()) return fail(res, 400, 'Ingresa el nombre de la organización.');
+
+      // Idioma inicial de la organización: registra el idioma de partida y determina el catálogo
+      // general que verán por defecto sus voceros. NO es una restricción: ambos idiomas quedan
+      // disponibles y cada vocero puede elegir el suyo.
+      const initialLanguage = normalizeLanguage(language) || DEFAULT_LANGUAGE;
 
       const duplicated = await prisma.tenant.findFirst({ where: { name: { equals: name.trim(), mode: 'insensitive' } } });
       if (duplicated) return fail(res, 409, 'Ya existe una organización con ese nombre.');
@@ -130,7 +158,7 @@ module.exports = function registerAccountRoutes(app, prisma) {
       if (invalid) return fail(res, 400, invalid);
 
       const result = await prisma.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({ data: { name: name.trim(), sector: sector || null } });
+        const tenant = await tx.tenant.create({ data: { name: name.trim(), sector: sector || null, defaultLanguage: initialLanguage } });
         const admin = await tx.user.create({
           data: {
             name: adminName.trim(),

@@ -6,7 +6,7 @@
 // presupuesto: cuando ya no queda tiempo suficiente no se inicia otro motor.
 const { runAsr } = require('./nvidiaAsr');
 const { transcribeWindowLocal } = require('./localWhisperWindow');
-
+const { asrLanguage } = require('./language');
 // Códigos que indican que el proveedor no está operativo (no un fallo puntual del audio).
 const SYSTEMIC_CODES = new Set(['NO_KEY', 'PYTHON_MISSING', 'CLIENT_MISSING', 'SPAWN_ERROR', 'TIMEOUT']);
 
@@ -27,27 +27,34 @@ const DEFAULT_TIMEOUTS = {
 // agotan su límite.
 const DEFAULT_BUDGET_MS = envMs('ASR_CHAIN_BUDGET_MS', 45000);
 
+// Motores de la cadena. Cada uno declara con qué clave del registro resuelve su idioma (`asr`) y
+// SOLO se incluye si ese motor ADMITE el idioma de la sesión. Un motor incompatible se descarta:
+// nunca se le envía el código de otro idioma ni se le hace «caer» al idioma predeterminado.
 function defaultEngines({ language = 'multi', runAsrImpl = runAsr, localImpl = transcribeWindowLocal } = {}) {
-  return [
+  const definitions = [
     {
       id: 'nvidia-whisper-large-v3',
+      asr: 'iso',
       timeoutMs: DEFAULT_TIMEOUTS['nvidia-whisper-large-v3'],
       transcribe: (window, { timeoutMs }) =>
-        runAsrImpl({ modelKey: 'whisper-large-v3', language, timeoutMs, ...window }),
+        runAsrImpl({ modelKey: 'whisper-large-v3', language: asrLanguage(language, 'iso'), timeoutMs, ...window }),
     },
     {
       id: 'nvidia-canary-1b',
+      asr: 'canary',
       timeoutMs: DEFAULT_TIMEOUTS['nvidia-canary-1b'],
-      // Canary tiene su propio function-id y usa es-US (ver nvidiaCatalog).
+      // Canary tiene su propio function-id y usa un locale (ver `asr.canary` en lib/language.js).
       transcribe: (window, { timeoutMs }) =>
-        runAsrImpl({ modelKey: 'canary-1b-asr', language: 'es-US', timeoutMs, ...window }),
+        runAsrImpl({ modelKey: 'canary-1b-asr', language: asrLanguage(language, 'canary'), timeoutMs, ...window }),
     },
     {
       id: 'local-whisper-small',
+      asr: 'iso',
       timeoutMs: DEFAULT_TIMEOUTS['local-whisper-small'],
-      transcribe: (window, { timeoutMs }) => localImpl({ ...window, timeoutMs }),
+      transcribe: (window, { timeoutMs }) => localImpl({ ...window, language: asrLanguage(language, 'iso'), timeoutMs }),
     },
   ];
+  return definitions.filter((engine) => asrLanguage(language, engine.asr) !== null).map(({ asr, ...engine }) => engine);
 }
 
 // Devuelve { ok, text, engine, attempts, totalMs } o { ok:false, code, attempts, totalMs }.
@@ -64,6 +71,12 @@ async function transcribeWindow({
   const deadline = startedAt + Math.max(0, budgetMs);
   const attempts = [];
   const controllers = new Map();
+
+  // Ningún motor admite el idioma de la sesión: se informa del motivo en vez de transcribir con
+  // otro idioma (y no se intenta nada más, porque reintentar no cambiaría el resultado).
+  if (!engines.length) {
+    return { ok: false, code: 'LANGUAGE_UNSUPPORTED', attempts: [], totalMs: 0 };
+  }
 
   // Sin presupuesto no se lanza ningún motor (arrancar y abortar sería trabajo inútil).
   if (!(budgetMs > 0)) {
@@ -151,6 +164,8 @@ async function transcribeWindow({
 function enginesForEnv({ language = 'multi' } = {}) {
   const disabled = String(process.env.EVAL_NVIDIA_ASR_ENABLED ?? '').trim().toLowerCase() === 'false';
   if (!disabled) return undefined;
+  // Solo el respaldo local, y solo si ADMITE el idioma de la sesión: si no, la cadena queda vacía y
+  // `transcribeWindow` responde LANGUAGE_UNSUPPORTED en lugar de transcribir en otro idioma.
   return defaultEngines({ language }).filter((engine) => engine.id === 'local-whisper-small');
 }
 

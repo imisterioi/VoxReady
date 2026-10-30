@@ -34,11 +34,23 @@ export function countRequestsByKind(items = []) {
 }
 
 // Opciones del filtro interno, con el recuento de cada tipo.
-export function feedFilterOptions(items = []) {
+// Si se pasa el diccionario activo, las etiquetas salen traducidas; si no, español.
+export function feedFilterOptions(items = [], d = null) {
   const counts = countRequestsByKind(items);
+  const t = d?.L?.req;
   return [
-    { value: 'all', label: `Todas · ${counts.all}` },
-    { value: 'privacy', label: `Privacidad · ${counts.privacy}` },
-    { value: 'retention', label: `Retención · ${counts.retention}` },
+    { value: 'all', label: t ? t.filterAll(counts.all) : `Todas · ${counts.all}` },
+    { value: 'privacy', label: t ? t.filterPrivacy(counts.privacy) : `Privacidad · ${counts.privacy}` },
+    { value: 'retention', label: t ? t.filterRetention(counts.retention) : `Retención · ${counts.retention}` },
   ];
+}
+
+// Tipos de solicitud con la etiqueta del idioma activo (si no se pasa diccionario, español).
+export function requestKinds(d) {
+  const t = d?.L?.req?.kinds;
+  if (!t) return REQUEST_KINDS;
+  return {
+    privacy: { ...REQUEST_KINDS.privacy, label: t.privacy },
+    retention: { ...REQUEST_KINDS.retention, label: t.retention },
+  };
 }
