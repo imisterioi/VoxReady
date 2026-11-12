@@ -33,13 +33,13 @@ import {
 
 // Laboratorio de transcripción (EXPERIMENTAL).
 //
-// Compara, sobre la MISMA intervención hablada:
+// Compara, sobre la misma intervención hablada:
 //   - Web Speech API del navegador (escucha el micrófono en vivo)
 //   - Whisper (faster-whisper) como servicio local, al que se envía la grabación
 //
 // Reglas del experimento:
 //  - No crea ni toca sesiones oficiales: no usa /api/sessions ni la evaluación.
-//  - El audio vive SOLO en memoria mientras dura la prueba (no se guarda por defecto).
+//  - El audio vive solo en memoria mientras dura la prueba (no se guarda por defecto).
 //  - El navegador NO puede transcribir un archivo: Web Speech API solo escucha el
 //    micrófono, así que no se simula lo que la API no permite.
 //  - No se reproduce audio por los altavoces ni se usan dispositivos virtuales.
@@ -306,7 +306,7 @@ export default function TranscriptionLab() {
 
   // ---------------------------------------------------------------- Envío a Whisper
 
-  // Envía el MISMO audio al servicio local. `modelKey` elige el modelo ('base' o 'small');
+  // Envía el mismo audio al servicio local. `modelKey` elige el modelo ('base' o 'small');
   // sin él, el servicio usa su modelo por defecto (comportamiento de Whisper Base).
   const sendToWhisper = useCallback(async (blob, modelKey) => {
     const started = performance.now();
@@ -339,7 +339,7 @@ export default function TranscriptionLab() {
         text: String(data.text || ''),
         modelKey: data.modelKey ?? modelKey ?? null,
         modelName: data.modelName ?? null,
-        // `processingMs` es SOLO inferencia; `loadMs` es lo que tardó el servicio en
+        // `processingMs` es solo inferencia; `loadMs` es lo que tardó el servicio en
         // cargar el modelo (0 si ya estaba cargado en memoria). No se mezclan.
         processingMs: data.processingMs ?? null,
         loadMs: data.modelLoadMs ?? null,
@@ -392,7 +392,7 @@ export default function TranscriptionLab() {
     return { status: 'ok', text: String(text), totalMs };
   }, []);
 
-  // Ejecuta EN SERIE los motores elegidos sobre el MISMO audio. Si uno falla, se registra
+  // Ejecuta EN SERIE los motores elegidos sobre el mismo audio. Si uno falla, se registra
   // su error y los demás continúan; los resultados se muestran a medida que llegan.
   const runSelectedEngines = useCallback(
     async ({ blob, speech }) => {
@@ -497,7 +497,7 @@ export default function TranscriptionLab() {
     }
     recognizerRef.current = null;
 
-    // 2) Grabadora: se cierra y el audio queda SOLO en memoria
+    // 2) Grabadora: se cierra y el audio queda solo en memoria
     const recorder = recorderRef.current;
     const blob = await new Promise((resolve) => {
       const fallback = new Blob(chunksRef.current, { type: 'audio/webm' });
@@ -529,7 +529,7 @@ export default function TranscriptionLab() {
     };
     setAudioInfo(audio);
 
-    // 3) Se ejecutan en serie los motores elegidos sobre el MISMO audio grabado. Speech
+    // 3) Se ejecutan en serie los motores elegidos sobre el mismo audio grabado. Speech
     //    API se arma con el texto que ya se capturó en vivo durante la grabación.
     const results = await runSelectedEngines({
       blob,

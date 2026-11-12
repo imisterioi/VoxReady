@@ -1,4 +1,4 @@
-// Métricas administrativas de VoxReady (SOLO LECTURA).
+// Métricas administrativas de VoxReady (solo lectura).
 //
 // Calcula, reutilizando únicamente datos ya existentes (Session, User, Theme, Tenant):
 //   - Ranking de VOCEROS vigentes por entrenamientos (más / menos).
@@ -8,7 +8,7 @@
 // Reglas fijas:
 //   * VOCEROS vigentes = role VOCERO, status ACTIVE, anonymizedAt IS NULL.
 //   * "Entrenamiento" = sesión con status COMPLETED dentro del período.
-//   * Aislamiento multi-tenant: el tenantId SIEMPRE proviene del token (req.user),
+//   * Aislamiento multi-tenant: el tenantId siempre proviene del token (req.user),
 //     nunca del frontend. Se aplica en scopeFromRequest(req).
 //   * No modifica datos. No toca retención, suspensión, anonimización ni eliminación.
 
@@ -58,7 +58,7 @@ function trainingSessionWhere({ tenantId = null, from = null, to = null, userIdI
 }
 
 // Ranking de voceros vigentes: más y menos entrenamientos del período.
-// Incluye TODOS los voceros vigentes del alcance (con 0 entrenamientos en `bottom`).
+// Incluye todos los voceros vigentes del alcance (con 0 entrenamientos en `bottom`).
 async function voceroRankings(prisma, { tenantId = null, from = null, to = null, limit = 5 } = {}) {
   const voceros = await prisma.user.findMany({
     where: {
@@ -135,7 +135,7 @@ async function tenantMetrics(prisma, { from = null, to = null } = {}) {
 }
 
 // ---------------------------------------------------------------------------
-// Alcance efectivo de los endpoints. Parte SIEMPRE del token y, solo para el
+// Alcance efectivo de los endpoints. Parte siempre del token y, solo para el
 // Administrador del Sistema (SYSTEM), admite un ?tenantId= que se valida contra la BD.
 //   ADMIN  → su propio tenant (cualquier ?tenantId= se IGNORA).
 //   SYSTEM → global; si envían ?tenantId= válido, se acota a ese tenant.

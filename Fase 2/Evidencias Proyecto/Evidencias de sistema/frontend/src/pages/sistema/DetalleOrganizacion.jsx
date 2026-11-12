@@ -10,18 +10,16 @@ import { Avatar, Badge, Button, Card, CardHeader, EmptyState, Field, Modal, Page
 import RequestsPanel from '../../components/RequestsPanel';
 import { buildRequestsFeed } from '../../lib/requestsFeed';
 
-// Tonos de lo que YA gestiona el sistema (no se inventan tipos de solicitud): `DeletionRequest.scope`
-// y su máquina de estados (PENDING → APPROVED|REJECTED → COMPLETED). Las etiquetas visibles las aporta
-// el diccionario: los códigos internos no se traducen.
+// Tonos de las solicitudes que gestiona el sistema: `DeletionRequest.scope` y su máquina de estados
+// (PENDING → APPROVED|REJECTED → COMPLETED). Las etiquetas visibles las aporta el diccionario.
 const REQUEST_STATUS_TONES = { PENDING: 'accent', APPROVED: 'warning', REJECTED: 'neutral', COMPLETED: 'success' };
 const RETENTION_LABEL_KEYS = { FULL: 'retentionFull', METRICS: 'retentionMetrics' };
 
 const numberOr = (value) => (Number.isFinite(value) ? value : '—');
 
-// Detalle de una organización para el Administrador del Sistema: información general, voceros,
-// solicitudes de privacidad y estadísticas. Todo sale de endpoints que ya existen
-// (`/api/tenants`, `/api/system/jobs`, `/api/users`, `/api/deletion-requests`,
-// `/api/metrics/overview`): no se inventan datos ni se añaden modelos.
+// Detalle de una organización para el administrador del sistema: información general, voceros,
+// solicitudes de privacidad y estadísticas, a partir de los endpoints de organizaciones, trabajos del
+// sistema, usuarios, solicitudes de borrado y métricas.
 export default function DetalleOrganizacion() {
   const { d, lang } = useI18n();
   const t = d.L.sys.organizaciones.detalle;
@@ -72,7 +70,7 @@ export default function DetalleOrganizacion() {
   const topVoceros = metrics.data?.voceros?.top || [];
   const preferredThemes = metrics.data?.themes?.preferred || [];
 
-  // Resolver una solicitud de privacidad (SOLO el administrador del sistema; el backend lo exige).
+  // Resolver una solicitud de privacidad (solo el administrador del sistema; el backend lo exige).
   const resolvePrivacy = async (status) => {
     if (!openRequest) return;
     try {

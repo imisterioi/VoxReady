@@ -20,7 +20,7 @@ export const DEFAULT_INTERVIEW = {
   aggressiveness: 'MEDIA',
   questionCount: 5,
   followUps: 0,
-  // Duración MÁXIMA de la entrevista en minutos. Es obligatoria: la entrevista nunca queda sin
+  // Duración máxima de la entrevista en minutos. Es obligatoria: la entrevista nunca queda sin
   // límite de tiempo, así que un escenario antiguo sin duración guardada también usa 5.
   estimatedMinutes: DEFAULT_MINUTES,
   interviewerRole: '',
@@ -40,7 +40,7 @@ export function toInterviewForm(interview) {
     aggressiveness: interview.aggressiveness,
     questionCount: interview.questionCount,
     followUps: interview.followUps,
-    // Duración MÁXIMA efectiva: el backend siempre la informa (5 min por defecto cuando el
+    // Duración máxima efectiva: el backend siempre la informa (5 min por defecto cuando el
     // escenario no tenía duración guardada). El formulario nunca queda vacío.
     estimatedMinutes: interview.estimatedMinutes ?? DEFAULT_MINUTES,
     interviewerRole: interview.interviewerRole || '',
@@ -55,7 +55,7 @@ export function toInterviewPayload(form) {
     aggressiveness: form.aggressiveness,
     questionCount: Number(form.questionCount),
     followUps: Number(form.followUps),
-    // Duración máxima OBLIGATORIA: se envía SIEMPRE un número (nunca null ni vacío). El backend la
+    // Duración máxima obligatoria: se envía siempre un número (nunca null ni vacío). El backend la
     // valida (422 si no es válida) y el formulario bloquea el guardado antes de enviarla.
     estimatedMinutes: Number(form.estimatedMinutes),
     interviewerRole: form.interviewerRole.trim(),
@@ -151,7 +151,7 @@ export function InterviewSummary({ interview, className }) {
   const levelValue = AGGRESSIVENESS.find((a) => a.value === interview.aggressiveness) || AGGRESSIVENESS[1];
   const level = t.levels[levelValue.value];
   const turns = interview.totalTurns ?? totalTurns(interview);
-  // Duración MÁXIMA efectiva (no la estimación de referencia).
+  // Duración máxima efectiva (no la estimación de referencia).
   const minutes = interview.estimatedMinutes ?? DEFAULT_MINUTES;
   return (
     <div className={className || 'flex flex-wrap items-center gap-2'}>

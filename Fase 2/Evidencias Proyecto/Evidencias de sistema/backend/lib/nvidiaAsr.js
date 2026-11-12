@@ -72,7 +72,7 @@ function runAsr({ modelKey, filePath, language, startMs, endMs, timeoutMs = TIME
     let stderr = '';
     let timedOut = false;
 
-    // Cancelación REAL: se mata el proceso hijo (y con él el gRPC en curso). No es un
+    // Cancelación real: se mata el proceso hijo (y con él el gRPC en curso). No es un
     // `Promise.race`: el proceso deja de existir y no sigue consumiendo recursos.
     const onAbort = () => {
       try {

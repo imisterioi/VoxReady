@@ -13,7 +13,7 @@ import { DEFAULT_INTERVIEW, InterviewConfigFields, InterviewSummary, toInterview
 // voceros los ven en la pestaña "Generales". No deben incluir datos de clientes ni de personas.
 //
 // Las etiquetas visibles (categorías, ópticas, textos del formulario) salen del diccionario del
-// idioma activo; el contenido del escenario (título, contexto, mensajes) nunca se traduce.
+// idioma activo; el contenido del escenario (título, contexto, mensajes) no se traduce.
 const CATEGORY_VALUES = ['CRISIS', 'MEDIOS', 'INSTITUCIONAL'];
 const EMPTY = { title: '', category: 'CRISIS', context: '', keyMessages: '', redLines: '', interview: DEFAULT_INTERVIEW };
 
@@ -30,7 +30,7 @@ function ScenarioModal({ open, scenario, onClose, onSaved }) {
   const [loadedFor, setLoadedFor] = useState(null);
 
   // Carga los datos al abrir (nuevo o edición). El idioma del escenario se conserva al editar:
-  // nunca se cambia solo, y en un escenario nuevo parte del idioma activo del administrador.
+  // No se cambia solo, y en un escenario nuevo parte del idioma activo del administrador.
   const key = open ? scenario?.id || 'nuevo' : null;
   if (key !== loadedFor) {
     setLoadedFor(key);

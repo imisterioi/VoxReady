@@ -11,7 +11,7 @@ import { describeStage, failureMessage } from '../lib/practice/reportAccess';
 import { RESULT_KEY } from './SesionPractica';
 
 // Los motivos que el backend puede devolver en `evaluation.reason` se traducen desde el diccionario
-// (`analysis.fail`). Mensajes SIEMPRE genéricos: nunca se muestran modelos, proveedores, códigos
+// (`analysis.fail`). Mensajes siempre genéricos: no se muestran modelos, proveedores, códigos
 // HTTP ni detalles internos (el detalle técnico queda en la consola del backend).
 
 // Envía la entrevista (transcripción + métricas) a la IA evaluadora y abre el informe.
@@ -100,7 +100,7 @@ export default function Analizando() {
       });
     } catch (error) {
       // 503 (integración desactivada), 422 (sin ventanas válidas) y 502 (fallo de
-      // transcripción) se muestran como mensaje claro; nunca se abre el informe.
+      // transcripción) se muestran como mensaje claro; no se abre el informe.
       if (isCurrent()) setError(describeEvaluationError(error, d.evalErrors) || '');
       return;
     }
@@ -113,7 +113,7 @@ export default function Analizando() {
     }
     if (result.status === 'failed') {
       // Un fallo de evaluación se explica con la clasificación del backend (`errorKind`): temporal
-      // (se reintentará solo) o pendiente de revisión técnica. Nunca se muestran códigos internos.
+      // (se reintentará solo) o pendiente de revisión técnica. Sin códigos internos.
       const fromEvaluation = result.errorKind ? failureMessage({ errorKind: result.errorKind }, d.report) : '';
       setError(
         fromEvaluation ||

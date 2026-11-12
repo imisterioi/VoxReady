@@ -8,7 +8,7 @@ process.env.NVIDIA_API_KEY = 'test-key';
 process.env.AI_EVAL_MODEL = 'test/modelo-a';
 process.env.AI_EVAL_FALLBACK_MODEL = 'test/modelo-b';
 
-// IMPORTANTE: se parchea el cliente ANTES de cargar las rutas (que lo desestructuran).
+// Importante: se parchea el cliente antes de cargar las rutas (que lo desestructuran).
 const whisperClient = require('../lib/whisperClient');
 
 function wordsFor(text, startSec, step = 0.5) {

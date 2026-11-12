@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { displayEmail, isAnonymizedEmail } from './displayEmail.js';
 
-// La abreviación es SOLO visual: el valor del correo nunca se altera.
+// La abreviación es solo visual: el valor del correo no se altera.
 test('el correo de un usuario anonimizado se abrevia conservando parte del identificador', () => {
   assert.equal(displayEmail({ email: 'anon+18c4f2a1-9d3e@removed.local' }), 'anon+18c...@removed.local');
   assert.equal(displayEmail('anon+abcdef@removed.local'), 'anon+abc...@removed.local');

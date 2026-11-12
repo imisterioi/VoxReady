@@ -1,11 +1,11 @@
 // Evaluacion adaptativa de la respuesta del vocero: reglas deterministas + IA + validacion.
 //
 // Reglas de oro:
-//  - Las reglas SOLO deciden casos evidentes (vacia, muletillas, desconocimiento, negativa,
+//  - Las reglas solo deciden casos evidentes (vacia, muletillas, desconocimiento, negativa,
 //    repeticion). Nunca declaran "suficiente": la suficiencia la decide la IA (o la contingencia).
-//  - La salida de la IA es estructurada y se VALIDA: JSON estricto, estados cerrados, `focus`
+//  - La salida de la IA es estructurada y se valida: JSON estricto, estados cerrados, `focus`
 //    obligatorio cuando no es suficiente y `evidence` que debe ser texto LITERAL del vocero.
-//  - Si toda la cadena falla, se devuelve `unevaluable`: NUNCA se interpreta como suficiente.
+//  - Si toda la cadena falla, se devuelve `unevaluable`: no se interpreta como suficiente.
 
 const STATUS = ['sufficient', 'partial', 'evasive', 'contradiction'];
 const RULE_STATUS = ['empty', 'unknown', 'refusal', 'repeat', 'no_transcript'];
@@ -24,7 +24,7 @@ const REFUSAL_EN =
 
 const normalize = (text) => String(text ?? '').replace(/\s+/g, ' ').trim().toLowerCase();
 
-// Respuesta compuesta SOLO por muletillas ("eh, este, bueno"): se evalua palabra por palabra.
+// Respuesta compuesta solo por muletillas ("eh, este, bueno"): se evalua palabra por palabra.
 // El patrón depende del idioma de la respuesta (español o inglés).
 function isFillerOnly(text, pattern = FILLERS) {
   const tokens = text.replace(/[.,!?;:¡¿"']/g, ' ').split(/\s+/).filter(Boolean);
@@ -34,7 +34,7 @@ function isFillerOnly(text, pattern = FILLERS) {
 // Reglas deterministas: devuelven { status, reason } o null (se delega a la IA).
 // `spoke` (se detectó voz en la respuesta) y `hasTranscript` distinguen un SILENCIO real de una
 // transcripción que no se pudo obtener: sin texto, si el vocero habló, NO es silencio ni
-// respuesta suficiente, y nunca se inventa lo que dijo.
+// respuesta suficiente, y no se inventa lo que dijo.
 // `lang` selecciona los patrones del idioma de la respuesta (los estados son los mismos).
 function ruleDecision({ answer, previousAnswers = [], spoke = false, hasTranscript = null, lang = 'es' } = {}) {
   const text = normalize(answer);
@@ -199,7 +199,7 @@ async function assessAnswer({
   const messages = buildMessages({ mainQuestion, answer, history, cfg, followUpsUsed, extraordinaryUsed, budget, lang });
   let lastFailure = 'sin_respuesta';
   try {
-    // Se consultan todos en paralelo; gana el PRIMER resultado VALIDO segun el orden de la cadena
+    // Se consultan todos en paralelo; gana el primer resultado valido segun el orden de la cadena
     // (un resultado rapido pero invalido no gana). Los perdedores no se cancelan.
     const attempts = models.map((model) =>
       Promise.resolve()

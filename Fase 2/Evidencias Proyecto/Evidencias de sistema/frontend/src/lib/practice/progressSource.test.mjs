@@ -3,7 +3,7 @@ import test from 'node:test';
 
 import { analyticsPath, progressPath } from './progressSource.js';
 
-// El vocero consulta SIEMPRE lo suyo: la vista nunca añade `?userId=` por su cuenta.
+// El vocero consulta siempre lo suyo: la vista nunca añade `?userId=` por su cuenta.
 test('el vocero consulta su propio historial', () => {
   assert.equal(progressPath({ limit: null }), '/api/sessions');
   assert.equal(progressPath({ audience: 'user', limit: null }), '/api/sessions');

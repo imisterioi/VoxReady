@@ -33,7 +33,7 @@ function readTheme(body = {}) {
   if (!title?.trim() || !context?.trim()) return { error: 'El nombre y el contexto son obligatorios.' };
   const clean = (list) => (Array.isArray(list) ? list.map((x) => String(x).trim()).filter(Boolean) : []);
   if (!clean(keyMessages).length) return { error: 'Agrega al menos un mensaje clave.' };
-  // Validacion de la configuracion ANTES de normalizar/guardar (misma regla y mismo cuerpo que
+  // Validacion de la configuracion antes de normalizar/guardar (misma regla y mismo cuerpo que
   // POST/PUT /api/themes): una configuracion que supera el limite tecnico se rechaza con 422 en
   // lugar de guardarse recortada en silencio. `requireDuration` exige la duracion maxima: al
   // guardar no se admite una entrevista sin limite de tiempo. Si el cliente no envia configuracion,

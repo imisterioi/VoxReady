@@ -3,16 +3,15 @@
 //   cd backend
 //   node --test routes/lab.test.js
 //
-// No necesitan el servicio Whisper, ni la base de datos, ni Prisma: la autenticación se
-// sustituye por un middleware que deja pasar y `fetch` por un doble que devuelve lo que
-// devolvería el servicio. Así se comprueba la compatibilidad de Whisper Base (sin
-// `?model=`), la selección de modelo, el rechazo de claves inválidas y el reenvío de los
-// errores del servicio.
+// No necesitan el servicio Whisper, ni la base de datos, ni Prisma: la autenticación se sustituye
+// por un middleware que deja pasar y `fetch` por un doble que imita la respuesta del servicio. Cubre
+// la compatibilidad con Whisper Base (sin `?model=`), la selección de modelo, el rechazo de claves
+// inválidas y el reenvío de errores del servicio.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
 
-// El middleware real consulta Prisma: se reemplaza SOLO para estas pruebas.
+// El middleware real consulta Prisma: se reemplaza solo para estas pruebas.
 const authPath = require.resolve('../auth');
 require.cache[authPath] = {
   id: authPath,

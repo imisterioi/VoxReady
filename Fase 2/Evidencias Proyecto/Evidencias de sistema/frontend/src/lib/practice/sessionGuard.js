@@ -5,7 +5,7 @@
 // ese registro quedaba huérfano (vacío, sin datos) de forma permanente. La regla es:
 //  - solo se descarta si existe sesión, la entrevista NO ha empezado (sin grabación ni turnos)
 //    y no se está cerrando una práctica real;
-//  - NUNCA se toca una sesión con datos: una sesión usada se conserva íntegra.
+//  - no se toca una sesión con datos: una sesión usada se conserva íntegra.
 export function shouldDiscardSession({ sessionId = null, interviewStarted = false, finishing = false } = {}) {
   if (!sessionId) return false; // no hay nada que descartar
   if (interviewStarted) return false; // la práctica real ya empezó: sus datos son legítimos

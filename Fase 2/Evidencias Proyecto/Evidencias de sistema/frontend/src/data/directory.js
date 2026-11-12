@@ -6,7 +6,7 @@
 // diccionario (`d`) o el idioma (`lang`) para no depender de estado global.
 //
 // Se conservan los mapas en español como RESPALDO: las pantallas todavía no migradas siguen
-// funcionando y el comportamiento por defecto continúa siendo el español (nunca se traduce
+// funcionando y el comportamiento por defecto continúa siendo el español (no se traduce
 // contenido creado por usuarios: solo etiquetas del sistema).
 
 export const ROLE_META = {

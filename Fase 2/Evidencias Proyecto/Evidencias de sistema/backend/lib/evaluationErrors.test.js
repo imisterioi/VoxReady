@@ -1,6 +1,6 @@
-// Pruebas de la clasificación de errores de evaluación: temporal (se reintenta) vs permanente
-// (requiere revisión técnica). No cambian la política de reintentos: solo deciden el registro y el
-// mensaje del vocero. Ningún mensaje puede exponer códigos, modelos ni proveedores.
+// Pruebas de la clasificación de errores de evaluación: temporal (se reintenta) y permanente
+// (requiere revisión técnica). Solo afectan al registro y al mensaje del vocero; ningún mensaje
+// expone códigos, modelos ni proveedores.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 

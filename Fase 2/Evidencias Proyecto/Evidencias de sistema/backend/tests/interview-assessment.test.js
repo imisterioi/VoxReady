@@ -194,7 +194,7 @@ test('E3-2 decideTurn: transcripción no disponible usa UNA aclaración y luego 
   const second = decideTurn({ assessment: { status: 'no_transcript' }, budget, used: { clarity: 1 } });
   assert.equal(second.action, 'advance');
   assert.equal(second.unresolved, true);
-  // Nunca se trata como suficiente.
+  // No se trata como respuesta suficiente.
   assert.notEqual(decideTurn({ assessment: { status: 'no_transcript' }, budget }).action, 'advance');
 });
 

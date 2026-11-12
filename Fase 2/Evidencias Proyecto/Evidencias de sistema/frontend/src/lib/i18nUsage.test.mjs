@@ -1,6 +1,6 @@
-// Guarda de regresión de traducciones: las pantallas que YA están traducidas no deben volver a
-// llevar textos en español escritos a mano. Se comprueba sobre el código real (sin DOM).
-// Para añadir una pantalla a esta lista basta con traducirla y moverla desde PENDING a TRANSLATED.
+// Guarda de regresión de traducciones: las pantallas traducidas no deben contener textos en español
+// escritos a mano. Se comprueba sobre el código real (sin DOM).
+// Para añadir una pantalla, se traduce y se mueve de PENDING a TRANSLATED.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -30,6 +30,7 @@ const TRANSLATED = [
   'components/SessionVideo.jsx',
   'components/MetricsDashboard.jsx',
   'components/InterviewConfig.jsx',
+  'components/ReviewModals.jsx',
   'components/RequestsPanel.jsx',
   'components/RequestFormModal.jsx',
   'components/UserFormModal.jsx',
@@ -43,6 +44,7 @@ const TRANSLATED = [
   'pages/EditorRubrica.jsx',
   'pages/PoliticaRetencion.jsx',
   'pages/sistema/DetalleOrganizacion.jsx',
+  'pages/sistema/Microlecciones.jsx',
   'components/ui.jsx',
 ];
 
@@ -54,6 +56,7 @@ const PENDING = [];
 // (No se listan en TRANSLATED ni PENDING para no exigirles traducción.)
 const LABS = [
   'pages/Laboratorio.jsx',
+  'pages/LaboratorioSesionVocero.jsx',
   'pages/MediaPipeTest.jsx',
   'components/TranscriptionLab.jsx',
   'components/RealtimeLab.jsx',
@@ -150,8 +153,8 @@ const hasSpanishWord = (value) => {
   return tokens.some((token) => SPANISH_WORDS.has(token));
 };
 
-// Valores internos del código (no son texto de interfaz): claves de API/URL, modos y roles
-// internos de la transcripción. Se listan explícitamente para no debilitar la detección.
+// Valores internos del código (no son texto de interfaz): claves de API/URL, modos y roles internos
+// de la transcripción.
 const INTERNAL_LITERALS = new Set(['vocero', 'voz', 'texto', 'nuevo']);
 
 // Propiedades cuyo valor es un identificador interno, no un texto visible.
@@ -160,7 +163,7 @@ const INTERNAL_KEY = /(^|[\s,{[(])(role|type|kind|mode|key|scope|status|category
 const KEY_CALL = /(\bget|\bset|\bhas|\bdelete|\bindexOf|\bincludes|\bstartsWith|\bendsWith|\bcreateElement|\baddEventListener|\bremoveEventListener)\(\s*$/;
 // Comparación contra un valor interno: `x.state === 'error'`, `p.tone !== 'danger'`… El literal que
 // está JUSTO a la derecha de un operador de comparación es un código interno, nunca texto visible.
-// (Un texto de interfaz nunca se escribe comparando contra él; se escribe como valor a mostrar.)
+// (Un texto de interfaz no se escribe comparando contra él; se escribe como valor a mostrar.)
 const ENUM_COMPARE = /[\w.$[\]'"]+\s*(===|!==|==|!=)\s*$/;
 
 // Texto visible de una línea: cadenas entre comillas (simples, dobles y plantillas) y texto entre

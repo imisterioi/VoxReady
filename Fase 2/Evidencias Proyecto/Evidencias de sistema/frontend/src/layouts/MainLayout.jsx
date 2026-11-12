@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useNavigate, useLocation, NavLink, Link, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 import { useI18n } from '../lib/i18n';
+import { isPracticeRoute } from '../lib/practice/practiceLock';
 import { roleIndex, homeFor, ROLE_HOME } from '../data/mockData';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
@@ -15,12 +17,15 @@ export default function MainLayout() {
   const [user, setUser] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [notifications, setNotifications] = useState({ unread: 0, items: [] });
   const { isDark, toggleTheme } = useTheme();
   const menuRef = useRef(null);
+  const bellRef = useRef(null);
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { d, lang, languages, labels, setLanguage, syncUser } = useI18n();
+  const { d, lang, languages, labels, setLanguage, syncUser, languageLocked, releasePracticeLock } = useI18n();
 
   // Requiere sesión iniciada; se valida el token con el backend (GET /api/auth/me)
   useEffect(() => {
@@ -66,14 +71,68 @@ export default function MainLayout() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  // Bloqueo del idioma durante la práctica: al salir del flujo (preparación → entrevista → análisis
+  // → informe) el idioma vuelve a poder cambiarse. Cubre cualquier salida, también el botón «atrás».
+  useEffect(() => {
+    if (languageLocked && !isPracticeRoute(location.pathname)) releasePracticeLock();
+  }, [location.pathname, languageLocked, releasePracticeLock]);
+
   // Cierra el menú de usuario al hacer clic fuera
   useEffect(() => {
     const onClick = (e) => {
       if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+      if (bellRef.current && !bellRef.current.contains(e.target)) setBellOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
+
+  // Consulta las notificaciones del vocero (sin bloquear la interfaz si falla).
+  // IMPORTANTE: se declara ANTES del efecto que la usa. La lista de dependencias de un `useEffect`
+  // se evalúa durante el render, así que un `const` declarado más abajo todavía estaría en la zona
+  // muerta temporal y lanzaría «Cannot access 'loadNotifications' before initialization».
+  const loadNotifications = useCallback(async () => {
+    if (!getToken()) return;
+    try {
+      const data = await apiFetch('/api/notifications');
+      setNotifications({ unread: data.unread || 0, items: data.items || [] });
+    } catch {
+      /* sin conexión se conserva lo último mostrado */
+    }
+  }, []);
+
+  // Notificaciones del vocero: avisos de revisiones humanas PUBLICADAS (la campanita). El backend
+  // las genera al enviar la revisión; aquí solo se consultan y se marcan como leídas.
+  useEffect(() => {
+    if (user?.role !== 'user') return undefined;
+    loadNotifications();
+    const timer = setInterval(loadNotifications, 120000);
+    return () => clearInterval(timer);
+  }, [user?.role, loadNotifications]);
+
+  // Abrir una notificación: se marca como leída y se abre SU informe.
+  const openNotification = async (item) => {
+    setBellOpen(false);
+    try {
+      await apiFetch('/api/notifications/seen', { method: 'POST', body: { sessionId: item.sessionId } });
+    } catch {
+      /* el aviso se abrirá igualmente */
+    }
+    setNotifications((current) => ({
+      unread: Math.max(0, current.unread - (item.unread ? 1 : 0)),
+      items: current.items.map((entry) => (entry.sessionId === item.sessionId ? { ...entry, unread: false } : entry)),
+    }));
+    navigate(`/vocero/informe?sesion=${item.sessionId}`);
+  };
+
+  const markAllRead = async () => {
+    try {
+      await apiFetch('/api/notifications/seen', { method: 'POST', body: { all: true } });
+    } catch {
+      /* best-effort */
+    }
+    setNotifications((current) => ({ unread: 0, items: current.items.map((entry) => ({ ...entry, unread: false })) }));
+  };
 
   const handleLogout = () => {
     // Avisa al backend antes de borrar el token (deja de contarse como conectado)
@@ -138,20 +197,108 @@ export default function MainLayout() {
               <Icon name={isDark ? 'sun' : 'moon'} size={17} />
             </button>
 
-            {/* Idioma de la interfaz: preferencia individual del usuario */}
-            <select
-              value={lang}
-              onChange={(e) => setLanguage(e.target.value).catch(() => {})}
-              title={labels[lang]}
-              aria-label="Idioma / Language"
-              className="h-9 rounded-lg border border-line bg-surface px-2 text-xs text-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40"
-            >
-              {languages.map((code) => (
-                <option key={code} value={code}>
-                  {code.toUpperCase()}
-                </option>
-              ))}
-            </select>
+            {/* Idioma de la interfaz: preferencia individual del usuario.
+                Durante una práctica queda BLOQUEADO (lo fija el idioma de la sesión) y el cambio se
+                rechaza también en el proveedor, no solo aquí. */}
+            <div className="relative flex items-center">
+              <select
+                value={lang}
+                onChange={(e) => {
+                  setLanguage(e.target.value)
+                    .then((result) => {
+                      if (result?.blocked) toast.error(d.mainLayout.languageLockedToast);
+                    })
+                    .catch(() => {});
+                }}
+                disabled={languageLocked}
+                title={languageLocked ? d.mainLayout.languageLockedHint : labels[lang]}
+                aria-label={languageLocked ? d.mainLayout.languageLocked : 'Idioma / Language'}
+                className={cx(
+                  'h-9 rounded-lg border border-line bg-surface px-2 text-xs text-muted hover:text-ink focus:outline-none focus:ring-2 focus:ring-accent/40',
+                  languageLocked && 'pr-7 opacity-70 cursor-not-allowed hover:text-muted',
+                )}
+              >
+                {languages.map((code) => (
+                  <option key={code} value={code}>
+                    {code.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+              {languageLocked && (
+                <Icon name="lock" size={12} className="absolute right-2 text-muted pointer-events-none" />
+              )}
+            </div>
+
+            {/* Campanita: avisos de revisiones humanas PUBLICADAS (solo para el vocero) */}
+            {user.role === 'user' && (
+              <div className="relative" ref={bellRef}>
+                <button
+                  type="button"
+                  onClick={() => setBellOpen((value) => !value)}
+                  title={d.mainLayout.notifications}
+                  aria-label={d.mainLayout.notifications}
+                  aria-haspopup="menu"
+                  aria-expanded={bellOpen}
+                  className="relative h-9 w-9 rounded-lg flex items-center justify-center text-muted hover:text-ink hover:bg-subtle transition-colors"
+                >
+                  <Icon name="bell" size={17} />
+                  {notifications.unread > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-danger text-white text-[10px] font-semibold flex items-center justify-center">
+                      {notifications.unread}
+                    </span>
+                  )}
+                </button>
+                <AnimatePresence>
+                  {bellOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute right-0 mt-2 w-80 rounded-xl border border-line bg-surface shadow-lift p-1.5 origin-top-right"
+                      role="menu"
+                    >
+                      <div className="flex items-center justify-between gap-2 px-3 py-2">
+                        <span className="text-sm font-medium text-ink">{d.mainLayout.notifications}</span>
+                        {notifications.unread > 0 && (
+                          <button type="button" onClick={markAllRead} className="text-xs text-accent-fg hover:underline">
+                            {d.mainLayout.notificationMarkAll}
+                          </button>
+                        )}
+                      </div>
+                      <div className="h-px bg-line my-1" />
+                      {notifications.items.length === 0 ? (
+                        <p className="px-3 py-3 text-sm text-muted">{d.mainLayout.notificationsEmpty}</p>
+                      ) : (
+                        <div className="max-h-80 overflow-y-auto">
+                          {notifications.items.map((item) => (
+                            <button
+                              key={item.sessionId}
+                              type="button"
+                              onClick={() => openNotification(item)}
+                              className="w-full text-left rounded-lg px-3 py-2.5 hover:bg-subtle transition-colors"
+                              role="menuitem"
+                            >
+                              <div className="flex items-start gap-2">
+                                {item.unread && <span className="mt-1.5 h-2 w-2 rounded-full bg-danger shrink-0" />}
+                                <div className="min-w-0">
+                                  <div className={cx('text-[13px]', item.unread ? 'font-medium text-ink' : 'text-muted')}>
+                                    {d.mainLayout.notificationNew}
+                                  </div>
+                                  <div className="text-xs text-muted truncate mt-0.5">
+                                    {[item.theme, d.mainLayout.notificationFrom(item.reviewer)].filter(Boolean).join(' · ')}
+                                  </div>
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
 
             {/* Menú de usuario */}
             <div className="relative hidden md:block" ref={menuRef}>

@@ -1,6 +1,6 @@
 // Registro central de idiomas de la plataforma (frontend).
 //
-// PARA AÑADIR UN IDIOMA NUEVO:
+// Para añadir un idioma nuevo:
 //   1. Agregar aquí su entrada con `enabled: true` (y su etiqueta visible).
 //   2. Crear `data/dictionary.<code>.js` y registrarlo en `data/dictionary.js`.
 //   3. (Backend) habilitarlo en `backend/lib/language.js` y añadir su catálogo de escenarios.

@@ -1,6 +1,6 @@
 // Runner de recuperación de evaluaciones: reanuda trabajos interrumpidos y ejecuta los reintentos
 // programados. Se apoya en el lease persistente (`evaluationRetry.claimAttempt`) para que dos
-// procesos o instancias NUNCA ejecuten la misma sesión a la vez.
+// procesos o instancias nunca ejecuten la misma sesión a la vez.
 //
 // Límites explícitos:
 //  - Solo toca sesiones que YA llegaron a la generación del informe (tienen reintento programado o
@@ -90,7 +90,7 @@ function createEvaluationQueue({
       stats.lastError = null;
     } catch (error) {
       stats.lastError = error?.code || error?.name || 'ERROR';
-      // Detalle técnico SOLO en la consola del backend (nunca al vocero ni con contenido suyo).
+      // Detalle técnico solo en la consola del backend (nunca al vocero ni con contenido suyo).
       // El mensaje de Prisma empieza con salto de línea: se usa la primera línea CON texto.
       const detail = String(error?.message || '')
         .split('\n')

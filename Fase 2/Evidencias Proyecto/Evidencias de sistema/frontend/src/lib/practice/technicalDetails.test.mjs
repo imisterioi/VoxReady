@@ -1,5 +1,5 @@
-// Guarda de privacidad técnica: los mensajes que ve el VOCERO nunca deben contener nombres de
-// modelos o proveedores, códigos HTTP, identificadores internos de error ni motivos técnicos.
+// Guarda de privacidad técnica: los mensajes que ve el vocero no deben contener nombres de modelos o
+// proveedores, códigos HTTP, identificadores internos de error ni motivos técnicos.
 // Se comprueba sobre el código real de las pantallas implicadas (no hay DOM en las pruebas).
 import test from 'node:test';
 import assert from 'node:assert/strict';

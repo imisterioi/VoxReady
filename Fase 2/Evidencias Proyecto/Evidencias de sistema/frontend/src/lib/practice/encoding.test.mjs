@@ -64,8 +64,10 @@ test('los textos del informe que ve el vocero están correctos', () => {
   const diccionario = readFileSync(join(FRONTEND, 'src', 'data', 'dictionary.js'), 'utf8');
   // Etiqueta reportada como rota en una sesión real.
   assert.ok(diccionario.includes("lessonsWeakest: 'Según tu área más débil'"), 'la etiqueta de lecciones debe llevar “Según tu área más débil”');
-  // Comillas curvas que envuelven la cita del informe (el texto de la cita viene de la base de datos).
-  assert.ok(informe.includes('“{report.cita}”'), 'la cita debe ir entre comillas curvas correctas');
+  // Comillas curvas que envuelven la cita del informe (el texto de la cita viene de la base de datos
+  // y pasa por la vista de revisión: `view.texts.cita`).
+  assert.ok(informe.includes('`“${view.texts.cita.value}”`'), 'la cita debe ir entre comillas curvas correctas');
+  assert.ok(informe.includes('view.texts.cita'), 'la cita se toma de la vista del informe');
   assert.ok(diccionario.includes("redLinesTitle: 'Líneas rojas'"), 'los títulos con acentos deben conservarse');
   assert.ok(diccionario.includes("loading: 'Cargando tu informe…'"), 'los puntos suspensivos deben ser el carácter … correcto');
 });

@@ -14,7 +14,7 @@ export function silenceRemainingMs({ spoke, quietForMs }) {
 }
 
 // ¿Corresponde avanzar por silencio? El llamador debe cerrar el temporizador tras usarlo
-// (el intervalo se limpia en finishAnswer), de modo que un mismo episodio no avance dos veces.
+// (el intervalo se limpia en finishAnswer) para que un mismo episodio no avance dos veces.
 export function isSilenceAdvance({ spoke, quietForMs }) {
   return quietForMs >= (spoke ? END_SILENCE_MS : NO_ANSWER_MS);
 }

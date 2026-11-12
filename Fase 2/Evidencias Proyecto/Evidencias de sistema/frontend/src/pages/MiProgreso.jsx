@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { useI18n } from '../lib/i18n';
@@ -14,7 +14,7 @@ import { historyWindow } from '../lib/practice/historyPaging';
 import Pagination from '../components/Pagination';
 
 // Claves de las cuatro áreas evaluadas. La etiqueta visible la aporta el diccionario (t.series), en el
-// mismo orden: nunca se traduce la clave interna.
+// mismo orden: no se traduce la clave interna.
 const AREAS = [{ key: 'expression' }, { key: 'voice' }, { key: 'coherence' }, { key: 'empathy' }];
 
 // Progreso real del vocero a partir de sus prácticas evaluadas (GET /api/sessions).
@@ -47,7 +47,7 @@ export default function MiProgreso({ audience = 'user' }) {
   // página del historial, para que el progreso no cambie al pasar de página.
   const analytics = useApiData(analyticsPath({ audience, userId }));
   const analyticsSessions = useMemo(() => analytics.data?.sessions || [], [analytics.data]);
-  // Solo las evaluadas alimentan puntajes, tendencias y recomendaciones: nunca se inventan datos.
+  // Solo las evaluadas alimentan puntajes, tendencias y recomendaciones: no se inventan datos.
   const evaluated = useMemo(() => evaluatedSessions(analyticsSessions), [analyticsSessions]);
   const latestReport = useApiData(evaluated[0] ? `/api/sessions/${evaluated[0].id}` : null);
 
@@ -307,7 +307,15 @@ export default function MiProgreso({ audience = 'user' }) {
                 // El administrador abre el informe en su propia ruta (audiencia admin).
                 const reportTo = isAdmin ? `/admin/informe?sesion=${s.id}` : `/vocero/informe?sesion=${s.id}`;
                 return (
-                <li key={s.id}>
+                <li
+                  key={s.id}
+                  className={cx(
+                    'border-l-4',
+                    // Informe con revisión humana publicada: se marca con un borde rojo. La marca NO
+                    // depende de si el vocero ya lo abrió.
+                    s.reviewed ? 'border-l-danger bg-danger/[0.03]' : 'border-l-transparent',
+                  )}
+                >
                   <Link to={reportTo} className="flex items-center gap-4 px-6 py-4 hover:bg-subtle/50 transition-colors">
                     <span className="h-11 w-11 rounded-xl bg-subtle flex items-center justify-center font-display font-semibold text-ink tabular-nums">
                       {s.score ?? '—'}
@@ -402,7 +410,7 @@ export default function MiProgreso({ audience = 'user' }) {
               <div className="text-xs text-muted mb-3">{t.lessonsL}</div>
               <div className="flex flex-wrap gap-2">
                 {lessons.map((l) => (
-                  <Button key={l.id} variant="secondary" size="sm" icon="book" to={`/vocero/leccion/${l.id}`}>
+                  <Button key={l.id} variant="secondary" size="sm" icon="book" to="/vocero/leccion">
                     {l.title}
                   </Button>
                 ))}

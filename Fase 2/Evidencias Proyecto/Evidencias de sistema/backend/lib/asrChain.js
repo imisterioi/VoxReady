@@ -1,9 +1,7 @@
 // Cadena de respaldo ASR: Whisper Large v3 (NVIDIA) → Canary 1B (NVIDIA) → Whisper Small local.
 //
-// Cada ventana de respuesta se transcribe de forma independiente y con el MISMO fragmento.
-// Se pasa al siguiente motor sólo si el anterior no devolvió texto utilizable (nunca por
-// «calidad»). Cada motor tiene su propio límite de tiempo y la cadena entera tiene un
-// presupuesto: cuando ya no queda tiempo suficiente no se inicia otro motor.
+// Cada ventana se transcribe con el mismo fragmento. Se pasa al siguiente motor solo si el anterior
+// no devolvió texto utilizable, nunca por calidad. La cadena completa tiene un presupuesto de tiempo.
 const { runAsr } = require('./nvidiaAsr');
 const { transcribeWindowLocal } = require('./localWhisperWindow');
 const { asrLanguage } = require('./language');
@@ -28,8 +26,8 @@ const DEFAULT_TIMEOUTS = {
 const DEFAULT_BUDGET_MS = envMs('ASR_CHAIN_BUDGET_MS', 45000);
 
 // Motores de la cadena. Cada uno declara con qué clave del registro resuelve su idioma (`asr`) y
-// SOLO se incluye si ese motor ADMITE el idioma de la sesión. Un motor incompatible se descarta:
-// nunca se le envía el código de otro idioma ni se le hace «caer» al idioma predeterminado.
+// solo se incluye si ese motor admite el idioma de la sesión. Un motor incompatible se descarta:
+// No se le envía el código de otro idioma ni se le hace «caer» al idioma predeterminado.
 function defaultEngines({ language = 'multi', runAsrImpl = runAsr, localImpl = transcribeWindowLocal } = {}) {
   const definitions = [
     {
@@ -58,7 +56,7 @@ function defaultEngines({ language = 'multi', runAsrImpl = runAsr, localImpl = t
 }
 
 // Devuelve { ok, text, engine, attempts, totalMs } o { ok:false, code, attempts, totalMs }.
-// Los motores arrancan EN PARALELO; la PRIORIDAD decide qué texto gana, no quién termina
+// Los motores arrancan EN paralelo; la PRIORIDAD decide qué texto gana, no quién termina
 // antes. `down` se comparte entre respuestas de la misma sesión.
 async function transcribeWindow({
   window,
@@ -141,7 +139,7 @@ async function transcribeWindow({
     const text = String(result?.text ?? '').trim();
     if (result?.ok && text) {
       attempts.push({ engine: engine.id, ok: true, ms });
-      // Los demás ya no son necesarios: se abortan y sus resultados tardíos se ignoran.
+      // Los demás intentos se abortan; sus resultados tardíos se ignoran.
       for (const item of runnable) {
         if (item.engine.id !== engine.id) item.controller.abort();
       }
@@ -157,14 +155,14 @@ async function transcribeWindow({
 }
 
 // Motores a pasar a `transcribeAnswers` segun el interruptor operativo `EVAL_NVIDIA_ASR_ENABLED`:
-//  - `false`  → SOLO el respaldo local (los motores NVIDIA quedan desactivados);
+//  - `false`  → solo el respaldo local (los motores NVIDIA quedan desactivados);
 //  - cualquier otro valor (incluido ausente) → `undefined`, que hace que `transcribeAnswers`
 //    construya su cadena por defecto (y así sigue funcionando la inyección de pruebas).
 // Una única definición para la evaluación y para la transcripción por respuesta del entrevistador.
 function enginesForEnv({ language = 'multi' } = {}) {
   const disabled = String(process.env.EVAL_NVIDIA_ASR_ENABLED ?? '').trim().toLowerCase() === 'false';
   if (!disabled) return undefined;
-  // Solo el respaldo local, y solo si ADMITE el idioma de la sesión: si no, la cadena queda vacía y
+  // Solo el respaldo local, y solo si admite el idioma de la sesión: si no, la cadena queda vacía y
   // `transcribeWindow` responde LANGUAGE_UNSUPPORTED en lugar de transcribir en otro idioma.
   return defaultEngines({ language }).filter((engine) => engine.id === 'local-whisper-small');
 }

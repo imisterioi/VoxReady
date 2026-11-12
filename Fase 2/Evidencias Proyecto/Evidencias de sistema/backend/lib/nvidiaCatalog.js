@@ -118,8 +118,8 @@ const VOICE_MODELS = [
     key: 'nemotron-voicechat',
     model: 'nvidia/nemotron-voicechat',
     label: 'Nemotron VoiceChat',
-    // La ficha sólo ofrece «Apply for Early Access» y una demo: no publica endpoint,
-    // ni function-id, ni formato de mensajes. No se inventa un WebRTC/WS.
+    // La ficha del proveedor solo ofrece acceso anticipado y una demo: no publica endpoint,
+    // function-id ni formato de mensajes.
     protocol: 'no publicado',
     host: null,
     functionId: null,

@@ -8,7 +8,7 @@
 // deja un hueco de decenas o cientos de milisegundos en cada corte.
 //
 // Aquí el video se graba con UN MediaRecorder continuo (el WebM de la sesión) y, del
-// MISMO MediaStream, se toman muestras PCM con Web Audio. Cada fragmento se codifica
+// mismo MediaStream, se toman muestras PCM con Web Audio. Cada fragmento se codifica
 // como WAV 16 bits mono: formato aceptado por /api/lab/transcribe y decodificable.
 // Ventajas: sin huecos entre fragmentos y cortes exactos por número de muestras.
 // Limitación conocida: se envía a la frecuencia nativa del AudioContext (48 kHz en

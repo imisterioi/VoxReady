@@ -71,7 +71,7 @@ class FakeRecorder {
 
   stop() {
     this.state = 'inactive';
-    // El navegador emite el dataavailable final ANTES del stop.
+    // El navegador emite el dataavailable final antes del stop.
     this.ondataavailable?.({ data: { size: 7 } });
     this.onstop?.();
     for (const handler of this.listeners.stop || []) handler();

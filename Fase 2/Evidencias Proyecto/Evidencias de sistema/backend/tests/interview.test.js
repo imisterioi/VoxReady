@@ -49,8 +49,8 @@ function configTests() {
   const custom = resolveInterviewConfig({ interviewConfig: { questionCount: 4, followUps: 1, estimatedMinutes: 20 } });
   const auto = resolveInterviewConfig({ interviewConfig: { questionCount: 4, followUps: 1 } });
   const legacy = resolveInterviewConfig({ interviewConfig: null });
-  // Decision funcional vigente: la duracion MAXIMA la define el usuario (`estimatedMinutes`) y es
-  // OBLIGATORIA. Si el escenario no la trae (configuracion antigua o campo vacio) se aplican 5
+  // Decision funcional vigente: la duracion maxima la define el usuario (`estimatedMinutes`) y es
+  // obligatoria. Si el escenario no la trae (configuracion antigua o campo vacio) se aplican 5
   // minutos por defecto: la entrevista nunca queda sin limite. La estimacion de referencia
   // (`estimatedMinutesReference`) es informativa y NO limita nada.
   ok(

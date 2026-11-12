@@ -38,7 +38,7 @@ const DEFAULTS = {
   aggressiveness: 'MEDIA',
   questionCount: 5,
   followUps: 0,
-  // Duracion MAXIMA de la entrevista. Es OBLIGATORIA: la entrevista nunca queda sin limite de
+  // Duracion maxima de la entrevista. Es obligatoria: la entrevista nunca queda sin limite de
   // tiempo, asi que un escenario sin duracion guardada (o con un valor vacio/invalido) usa este
   // predeterminado de 5 minutos. La estimacion orientativa es `estimateMinutes()` y NO es un limite.
   estimatedMinutes: 5,
@@ -65,7 +65,7 @@ function intIn(value, [min, max], fallback) {
   return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback;
 }
 
-// Duracion MAXIMA (minutos). A diferencia de los demas campos NO admite "sin valor": un valor
+// Duracion maxima (minutos). A diferencia de los demas campos NO admite "sin valor": un valor
 // ausente, vacio (incluida una cadena en blanco) o no numerico usa el PREDETERMINADO, y uno fuera
 // de rango se acota dentro de [1, 120] (normalizacion documentada). Nunca devuelve `null`, de modo
 // que la entrevista siempre tiene un limite efectivo. Al GUARDAR, un valor vacio o fuera de rango
@@ -88,7 +88,7 @@ function storedMinutes(value) {
 }
 
 // Normaliza lo que envía el cliente o lo guardado en BD (siempre devuelve una config completa).
-// `estimatedMinutes` SIEMPRE sale como numero dentro de [1, 120]: un valor ausente, `null`, vacio
+// `estimatedMinutes` siempre sale como numero dentro de [1, 120]: un valor ausente, `null`, vacio
 // o no numerico cae al predeterminado (5 min) y uno fuera de rango se acota (normalizacion
 // documentada). Nunca devuelve `null`: la entrevista no puede quedar sin limite de duracion.
 function normalizeInterviewConfig(input) {
@@ -109,7 +109,7 @@ const totalTurns = (cfg) => cfg.questionCount * (1 + cfg.followUps);
 
 // Config de un tema tal como la ve el frontend: incluye los valores calculados.
 // Dos conceptos que NO deben confundirse:
-//  - `estimatedMinutes` / `maxDurationMs`: duracion MAXIMA efectiva (obligatoria, compartida por
+//  - `estimatedMinutes` / `maxDurationMs`: duracion maxima efectiva (obligatoria, compartida por
 //    todos los temas del escenario). Nunca es `null`: un escenario antiguo sin duracion guardada
 //    recibe el predeterminado de 5 minutos.
 //  - `estimatedMinutesReference`: estimacion ORIENTATIVA (preguntas x 1,2 min). Es informativa y
@@ -123,7 +123,7 @@ function resolveInterviewConfig(theme) {
   return {
     ...cfg,
     totalTurns: total,
-    // Duracion MAXIMA efectiva: siempre existe (predeterminado 5 min si no se guardo ninguna).
+    // Duracion maxima efectiva: siempre existe (predeterminado 5 min si no se guardo ninguna).
     maxDurationMs: cfg.estimatedMinutes * 60000,
     // Lo que habia guardado: permite distinguir "elegido por el usuario" de "predeterminado".
     estimatedMinutesStored: storedEstimated,
@@ -193,7 +193,7 @@ const estimateMinutes = (cfg) => Math.max(1, Math.round(totalTurns(cfg) * MINUTE
 
 // Validacion autoritativa (la usa el backend antes de guardar y antes de iniciar).
 // NO recorta nada: si no cabe, devuelve error con el motivo y los parametros a ajustar.
-//  - `requireDuration: true` (rutas que GUARDAN un escenario): la duracion maxima es OBLIGATORIA y
+//  - `requireDuration: true` (rutas que guardan un escenario): la duracion maxima es obligatoria y
 //    debe estar dentro de rango, para que no se pueda guardar un escenario sin limite de tiempo.
 //  - Sin la opcion (configuracion YA guardada, p. ej. al iniciar la entrevista): una duracion
 //    ausente NO es un error, porque `normalizeInterviewConfig` aplica el predeterminado de 5 min.
@@ -255,8 +255,8 @@ function validateInterviewConfig(input, { requireDuration = false } = {}) {
     });
   }
   const budget = followUpBudget({ ...cfg, followUps: Number.isFinite(requestedFollowUps) && requestedFollowUps >= 0 ? requestedFollowUps : cfg.followUps });
-  // El peor caso se calcula con los valores SOLICITADOS, no con los recortados por
-  // `normalizeInterviewConfig`: si no, el recorte podria hacer parecer valida una config invalida.
+  // El peor caso se calcula con los valores solicitados, no con los recortados por
+  // `normalizeInterviewConfig`: el recorte podría ocultar una configuración inválida.
   const rawQuestions = Number.isFinite(requestedQuestions) && requestedQuestions > 0 ? Math.round(requestedQuestions) : cfg.questionCount;
   const potential = rawQuestions * (1 + budget.perMain);
   if (potential > LIMITS.totalTurns) {
@@ -266,7 +266,7 @@ function validateInterviewConfig(input, { requireDuration = false } = {}) {
 }
 
 // Cuerpo 422 UNIFORME para una configuracion invalida. Lo usan todas las rutas que guardan un
-// escenario, siempre ANTES de normalizar: asi una configuracion invalida se rechaza con el motivo
+// escenario, siempre antes de normalizar: asi una configuracion invalida se rechaza con el motivo
 // (en vez de recortarse en silencio) y el mensaje es el mismo en todas.
 // Devuelve `null` cuando la configuracion es valida.
 function invalidInterviewConfigPayload(input, { requireDuration = false } = {}) {

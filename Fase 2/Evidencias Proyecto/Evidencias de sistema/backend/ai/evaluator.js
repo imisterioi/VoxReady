@@ -63,8 +63,8 @@ const clamp = (v, min = 0, max = 100) => Math.max(min, Math.min(max, v));
 const round = (v) => (Number.isFinite(v) ? Math.round(v) : null);
 const num = (v, fallback) => (Number.isFinite(Number(v)) ? Number(v) : fallback);
 
-// Puntaje 100 dentro del rango ideal y decae linealmente fuera de él.
-// Solo números finitos: NaN/Infinity no producen puntaje (no se inventan valores).
+// Puntaje 100 dentro del rango ideal, con decaimiento lineal fuera de él.
+// Un valor no finito no produce puntaje.
 function rangeScore(value, idealMin, idealMax, zeroBelow, zeroAbove) {
   if (!Number.isFinite(value)) return null;
   if (value >= idealMin && value <= idealMax) return 100;
@@ -92,7 +92,7 @@ function scoreVoice(voice = {}, cfg) {
   const varMax = num(c.variation.idealMax, 90) / 100;
   const latMax = num(c.latency.idealMaxSec, 2.5) * 1000;
 
-  // La velocidad SOLO puntúa si viene del audio de la sesión (Whisper). Si no está
+  // La velocidad solo puntúa si viene del audio de la sesión (Whisper). Si no está
   // verificada, el criterio queda EXCLUIDO: no vale 0 ni 100, simplemente no entra en la
   // media ponderada (que reparte su peso entre los criterios que sí se midieron).
   const wpmVerified = voice.wpmSource === 'audio' && Number.isFinite(voice.wpm);
@@ -260,7 +260,7 @@ const asList = (value, maxItems = 6) =>
     ? value.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim().slice(0, 600)).slice(0, maxItems)
     : [];
 
-// Valida la respuesta del modelo ANTES de puntuar.
+// Valida la respuesta del modelo antes de puntuar.
 //
 // Reglas:
 //  - Los criterios con peso > 0 de coherencia y empatía son OBLIGATORIOS y deben ser números
@@ -541,7 +541,7 @@ async function callEvaluator(model, messages, { timeoutMs = 0, signal = null } =
     if (judgement.coherencia == null || judgement.empatia == null) throw new Error('JSON sin puntajes');
     return judgement;
   } catch (error) {
-    // Un corte del transporte se traduce a un motivo legible (nunca se disfraza de límite nuestro).
+    // Un corte del transporte se traduce a un motivo legible (no se disfraza de límite nuestro).
     const transport = TRANSPORT_CODES[error?.cause?.code] || TRANSPORT_CODES[error?.code];
     if (transport && error?.name !== 'AbortError') throw new Error(transport);
     throw error;
@@ -550,8 +550,8 @@ async function callEvaluator(model, messages, { timeoutMs = 0, signal = null } =
   }
 }
 
-// Consulta TODOS los modelos habilitados EN PARALELO y publica el PRIMER informe que supere la
-// validación COMPLETA (estructura, criterios y puntajes del patrón). La primera respuesta recibida
+// Consulta todos los modelos habilitados EN paralelo y publica el primer informe que supere la
+// validación completa (estructura, criterios y puntajes del patrón). La primera respuesta recibida
 // NO basta: si llega antes pero es incompleta o inválida, se descarta y los demás siguen.
 // `call` se inyecta en las pruebas (sin red); `models` y `validate` permiten fijarlos (pruebas y
 // sonda real de modelos). Devuelve el ganador YA VALIDADO y el estado de los demás.
@@ -568,7 +568,7 @@ async function judgeContent(input, { call = callEvaluator, models: modelsOption 
   const configuredTimeoutMs = Number(process.env.AI_EVAL_TIMEOUT_MS);
   const limitMs = Number.isFinite(configuredTimeoutMs) && configuredTimeoutMs > 0 ? configuredTimeoutMs : 0;
   const limitText = limitMs > 0 ? `${limitMs}ms` : 'sin-limite';
-  // Validación COMPLETA de cada candidato ANTES de dejarle ganar: la primera respuesta no gana si
+  // Validación completa de cada candidato antes de dejarle ganar: la primera respuesta no gana si
   // su contenido es incompleto o inválido. Con un `judge` inyectado sin `cfg` (pruebas) se mantiene
   // la validación superficial y `evaluateSession` valida después, como antes.
   const validator =
@@ -619,18 +619,17 @@ async function judgeContent(input, { call = callEvaluator, models: modelsOption 
     race.abort(); // cancela las evaluaciones que siguen pendientes
     recordAi('evaluator', true, winner);
     // Todos los modelos que no ganaron quedan registrados (fallidos o cancelados): sus
-    // errores nunca se mezclan con el resultado final.
+    // errores no se mezclan con el resultado final.
     const failed = models
       .filter((model) => model !== winner.model)
       .map((model) => failures.find((item) => item.model === model) || { model, reason: 'cancelado al ganar otro modelo' });
     return { ...winner, failed, validated: true };
   } catch {
     recordAi('evaluator', false, { error: 'Ningún modelo entregó una evaluación válida' });
-    // Registro técnico completo (solo backend): modelo, motivo y duración de cada intento.
-    // Nunca se registra contenido, transcripción ni claves.
+    // Registro técnico (solo backend): modelo, motivo y duración de cada intento, sin contenido ni claves.
     console.error('[IA evaluadora] ningún modelo respondió', JSON.stringify({ intentos: failures, totalMs: Date.now() - start }));
     const error = new Error('La IA evaluadora no respondió. Intenta nuevamente.');
-    // Si TODOS los modelos respondieron algo que no sirve como informe, el código lo dice: así el
+    // Si todos los modelos respondieron algo que no sirve como informe, el código lo dice: así el
     // diagnóstico distingue «nadie respondió» de «todos respondieron mal».
     const allInvalid = failures.length > 0 && failures.every((item) => item.invalid);
     error.code = allInvalid ? 'INVALID_AI_RESPONSE' : 'AI_UNAVAILABLE';
@@ -666,7 +665,7 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
   });
   const { model, ms, failed } = winner;
 
-  // La respuesta se valida ANTES de puntuar (ya dentro de la carrera si viene de judgeContent): si
+  // La respuesta se valida antes de puntuar (ya dentro de la carrera si viene de judgeContent): si
   // está fuera de 0-100 se lanza INVALID_AI_RESPONSE y no se guarda ningún informe.
   const validated = winner.validated
     ? { judgement: winner.judgement, warnings: winner.warnings || [] }
@@ -730,8 +729,7 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
     sensibilidad: buildSensitivity(metrics?.body, transcript, judgement.risa),
     interview: { aggressiveness: interview.aggressiveness, questionCount: interview.questionCount, followUps: interview.followUps },
     measured: { voice: metrics?.voice || null, body: metrics?.body || null, lighting: metrics?.lighting || null },
-    // Cobertura efectiva por área (0-1) y del criterio de velocidad. Aditivo: la interfaz
-    // actual lo ignora y los informes históricos simplemente no lo tienen.
+    // Cobertura efectiva por área (0-1) y del criterio de velocidad. Los informes anteriores no la incluyen.
     coverage: {
       expression: body.coverage ?? 0,
       voice: voice.coverage ?? 0,
@@ -740,9 +738,8 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
       wpmVerified,
     },
     ai: { evaluator: model, ms },
-    generatedAt: new Date().toISOString(), // fecha/hora de la evaluación (ya era suficiente)
+    generatedAt: new Date().toISOString(),
     // Trazabilidad: cómo se produjo este informe y de dónde salió cada métrica.
-    // Campo NUEVO y compatible: las evaluaciones históricas simplemente no lo tienen.
     audit: {
       evaluatorVersion: EVALUATOR_VERSION,
       promptVersion: PROMPT_VERSION,
@@ -764,7 +761,7 @@ module.exports = {
   EVALUATOR_VERSION,
   PROMPT_VERSION,
   EvaluationResponseError,
-  // `buildPrompt` se exporta para la sonda REAL de modelos (`scripts/probe-evaluator-models.js`):
+  // `buildPrompt` se exporta para la sonda real de modelos (`scripts/probe-evaluator-models.js`):
   // así la validación de un candidato usa exactamente el mismo prompt que la evaluación real.
   buildPrompt,
   buildSensitivity,

@@ -78,7 +78,7 @@ module.exports = function registerPatternRoutes(app, prisma) {
             status: activate ? 'ACTIVE' : 'DRAFT',
             name: name?.trim() || null,
             config,
-            // Columnas originales del modelo (compatibilidad con el endpoint anterior)
+            // Columnas heredadas del modelo, mantenidas por compatibilidad.
             expressionWeight: Number(config.areas.expression),
             voiceToneWeight: Number(config.areas.voice),
             coherenceWeight: Number(config.areas.coherence),

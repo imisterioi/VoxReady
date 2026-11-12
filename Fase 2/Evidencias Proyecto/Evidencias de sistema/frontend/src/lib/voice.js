@@ -79,7 +79,7 @@ export function useInterviewerVoice() {
     }
   };
 
-  // Si la voz guardada ya no existe, se usa la más natural disponible
+  // Si la voz guardada no está disponible, se usa la primera de la lista.
   const voice = voices.find((v) => v.voiceURI === voiceURI) || voices[0] || null;
 
   return { voices, voice, setVoiceURI };

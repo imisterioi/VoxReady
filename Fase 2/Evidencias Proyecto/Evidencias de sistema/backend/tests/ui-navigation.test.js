@@ -1,8 +1,8 @@
-// Comprobación ESTÁTICA de la interfaz: navegación por tarjetas, formulario único de solicitudes
-// y efecto de borde de las tarjetas de organizaciones.
+// Comprobación estática de la interfaz: navegación por tarjetas, formulario único de solicitudes y
+// efecto de borde de las tarjetas de organizaciones.
 //
-// No es una prueba de navegador: lee el código de las pantallas y verifica que se cumplen las
-// condiciones pedidas. La comprobación visual (cursor, foco, clics) queda para revisión manual.
+// No es una prueba de navegador: lee el código de las pantallas y verifica su estructura. La
+// comprobación visual (cursor, foco, clics) queda para revisión manual.
 //
 // Uso:  node tests/ui-navigation.test.js
 const fs = require('fs');

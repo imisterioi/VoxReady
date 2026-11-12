@@ -1,8 +1,8 @@
 // Ventanas de audio de cada respuesta, listas para recortar el `<id>.audio.webm`.
 //
-// `startMs`/`endMs` los registra SesionPractica relativos al inicio de ESE archivo. Aquí
-// sólo se validan y se les añade un margen prudente sin invadir la respuesta vecina.
-// Nunca se reparte el texto por proporciones: si una ventana no es utilizable, se marca.
+// `startMs`/`endMs` los registra SesionPractica relativos al inicio de ese archivo. Aquí solo se
+// validan y se les añade un margen sin invadir la respuesta vecina. Si una ventana no es utilizable
+// se marca como tal, en lugar de repartir el texto por proporciones.
 const DEFAULT_PAD_MS = 200;
 
 function number(value) {

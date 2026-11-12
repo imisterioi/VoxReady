@@ -117,7 +117,7 @@ function sanitizeSegments(rawSegments) {
       dropped += 1;
       continue;
     }
-    // Solo interesa el texto para emparejar; nunca se persiste.
+    // Solo interesa el texto para emparejar; no se persiste.
     const tokens = normalizeTokens(text || words.map((word) => word.text).join(' '));
     // Sin palabras ni texto no hay nada que medir ni que comparar.
     if (!words.length && !tokens.length) {

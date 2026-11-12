@@ -20,6 +20,7 @@ import ColaEtiquetado from './pages/ColaEtiquetado';
 import Microleccion from './pages/Microleccion';
 import NotFound from './pages/NotFound';
 import Laboratorio from './pages/Laboratorio';
+import LaboratorioSesionVocero from './pages/LaboratorioSesionVocero';
 import NvidiaLab from './components/NvidiaLab';
 import RecordedComparison from './components/RecordedComparison';
 import RealtimeLab from './components/RealtimeLab';
@@ -32,6 +33,7 @@ import Organizaciones from './pages/sistema/Organizaciones';
 import DetalleOrganizacion from './pages/sistema/DetalleOrganizacion';
 import Usuarios from './pages/sistema/Usuarios';
 import Biblioteca from './pages/sistema/Biblioteca';
+import Microlecciones from './pages/sistema/Microlecciones';
 
 // MediaPipe es pesado: se carga solo al entrar a la prueba
 const MediaPipeTest = lazy(() => import('./pages/MediaPipeTest'));
@@ -63,6 +65,7 @@ function App() {
 
           {/* Laboratorio: pruebas técnicas (backend + MediaPipe) */}
           <Route path="laboratorio" element={<Laboratorio />} />
+          <Route path="laboratorio/sesion-vocero" element={<LaboratorioSesionVocero />} />
           <Route path="laboratorio/transcripcion" element={<TranscriptionLab />} />
           <Route path="laboratorio/tiempo-real" element={<RealtimeLab />} />
           <Route path="laboratorio/grabacion" element={<RecordedComparison />} />
@@ -105,6 +108,7 @@ function App() {
           <Route path="maestro/rubrica" element={<EditorRubrica />} />
           <Route path="maestro/etiquetado" element={<ColaEtiquetado />} />
           <Route path="maestro/informe" element={<InformeCoach audience="master" />} />
+          <Route path="maestro/revision" element={<InformeCoach audience="review" />} />
 
           {/* Administrador del sistema */}
           <Route path="sistema" element={<SistemaHome />} />
@@ -113,6 +117,7 @@ function App() {
           <Route path="sistema/organizaciones/:id" element={<DetalleOrganizacion />} />
           <Route path="sistema/usuarios" element={<Usuarios />} />
           <Route path="sistema/biblioteca" element={<Biblioteca />} />
+          <Route path="sistema/microlecciones" element={<Microlecciones />} />
 
           <Route path="*" element={<NotFound />} />
         </Route>

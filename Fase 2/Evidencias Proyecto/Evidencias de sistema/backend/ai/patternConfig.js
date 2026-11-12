@@ -1,4 +1,4 @@
-// Configuración de un patrón de evaluación (HU-13/14/15).
+// Configuración de un patrón de evaluación.
 // El configurador maestro puede cambiar:
 //  - el peso de cada área en el puntaje global,
 //  - el peso de cada criterio dentro de un área,

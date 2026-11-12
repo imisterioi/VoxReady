@@ -206,7 +206,7 @@ export default function ElegirEscenario() {
           {escenariosFiltrados.map((escenario) => {
             const meta = CATEGORY_META[escenario.category] || { tone: 'neutral', icon: 'layers' };
             const categoryLabel = t.categories[escenario.category] || escenario.category;
-            // Escenario personalizado escrito en otro idioma: se avisa, nunca se traduce solo.
+            // Escenario personalizado escrito en otro idioma: se avisa, no se traduce solo.
             const otherLanguage =
               escenario.language && escenario.language !== lang ? t.inLanguage(t.languageNames[escenario.language]) : null;
             return (

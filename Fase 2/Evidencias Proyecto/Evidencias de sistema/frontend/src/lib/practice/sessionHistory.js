@@ -1,18 +1,18 @@
-// Historial de prácticas del vocero: separa lo evaluado de lo pendiente y traduce el estado REAL
-// del backend (`session.evaluation.state` + `session.hasReport`) a una etiqueta para el vocero.
+// Historial de prácticas del vocero: separa lo evaluado de lo pendiente y traduce el estado real del
+// backend (`session.evaluation.state` + `session.hasReport`) a una etiqueta para el vocero.
 //
 // Reglas:
-//  - El estado NUNCA se deduce de la ausencia de `score`/`report`: lo informa el backend.
-//  - Una sesión sin informe sigue apareciendo en el historial (no se descarta).
-//  - Nunca se inventan puntajes: las vistas numéricas usan solo sesiones con informe válido.
-//  - Los mensajes son comprensibles y sin detalles técnicos (sin modelos, códigos ni errores).
+//  - El estado lo informa el backend, no se deduce de la ausencia de `score`/`report`.
+//  - Una sesión sin informe sigue apareciendo en el historial.
+//  - Las vistas numéricas usan solo sesiones con informe válido.
+//  - Los mensajes no incluyen detalles técnicos (modelos, códigos ni errores).
 
 export const HISTORY_LABELS = {
   ready: 'Informe disponible',
   preparing: 'Informe en preparación',
   exhausted: 'Informe no disponible todavía',
   failed: 'El informe no se pudo generar',
-  // Sesión sin evaluación solicitada: no hay informe ni nada programado (no se promete uno).
+  // Sesión sin evaluación solicitada: no hay informe ni nada programado.
   idle: 'Sin informe',
 };
 
@@ -22,8 +22,8 @@ const TONES = { ready: 'success', preparing: 'accent', exhausted: 'warning', fai
 // Estados que el backend informa mientras el informe puede llegar más adelante.
 const PENDING_STATES = new Set(['processing', 'retrying', 'stalled']);
 
-// Estado del informe de una sesión. `labels` permite mostrarlo en el idioma del usuario; por defecto
-// se usan las etiquetas en español (compatibilidad con el comportamiento anterior).
+// Estado del informe de una sesión. `labels` permite mostrarlo en el idioma del usuario; si no se
+// indica, se usan las etiquetas en español de `HISTORY_LABELS`.
 export function historyStatus(session = {}, labels = HISTORY_LABELS) {
   const text = { ...HISTORY_LABELS, ...(labels || {}) };
   if (session?.hasReport || session?.report) return { key: 'ready', label: text.ready, tone: TONES.ready };

@@ -1,7 +1,6 @@
-// Conservación de Unicode en el flujo del informe (determinista, SIN red: proveedor simulado).
-// El defecto real fue texto doblemente codificado en un archivo fuente; esta prueba garantiza que el
-// CAMINO DE DATOS (respuesta del proveedor -> validación -> objeto para Prisma -> HTTP) no altera ni
-// un byte de acentos, eñes, comillas curvas, guiones largos ni símbolos.
+// Conservación de Unicode en el flujo del informe (determinista, sin red: proveedor simulado).
+// Comprueba que el camino de datos (respuesta del proveedor -> validación -> objeto para Prisma ->
+// HTTP) no altera acentos, eñes, comillas curvas, guiones largos ni símbolos.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 

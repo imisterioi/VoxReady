@@ -1,14 +1,14 @@
 // Laboratorio de transcripción: métricas de comparación entre una transcripción y un guion.
 //
-// Módulo PURO (sin React, sin red, sin dependencias): se prueba con `node --test`.
+// Módulo puro (sin React, sin red, sin dependencias): se prueba con `node --test`.
 //
 // Notas de interpretación (para no engañar a quien lea los resultados):
-//  - El WER mide ERRORES DE EDICIÓN (sustituciones, omisiones e inserciones), no "calidad"
-//    en sentido amplio: una transcripción con WER bajo puede perder matices (muletillas,
-//    repeticiones) que sí importan para evaluar a un vocero.
-//  - El WER puede SUPERAR el 100 % (cuando hay más errores que palabras en el guion).
-//  - El texto ORIGINAL nunca se altera: la normalización solo se usa para calcular.
-//  - Nunca se eliminan muletillas ni repeticiones del texto original.
+//  - El WER mide errores de edición (sustituciones, omisiones e inserciones), no "calidad" en sentido
+//    amplio: una transcripción con WER bajo puede perder matices (muletillas, repeticiones) que sí
+//    importan para evaluar a un vocero.
+//  - El WER puede superar el 100 % (cuando hay más errores que palabras en el guion).
+//  - El texto original no se altera: la normalización solo se usa para calcular.
+//  - No se eliminan muletillas ni repeticiones del texto original.
 
 // ---------------------------------------------------------------- Normalización
 
@@ -146,7 +146,7 @@ export function wordErrorReport(reference, hypothesis, options = {}) {
     distance,
     referenceWords,
     hypothesisWords: hypTokens.length,
-    // null cuando no se puede medir (guion sin palabras): no se inventa un 0.
+    // null cuando no se puede medir (guion sin palabras).
     wer: referenceWords > 0 ? errors / referenceWords : null,
     ops,
   };
@@ -304,8 +304,7 @@ function csvCell(value) {
 }
 
 export function toCSV(runs) {
-  // Las columnas mantienen el orden original (compatibilidad con las exportaciones anteriores);
-  // las de Whisper Small y el resumen de motores usados en la ejecución se añaden al final.
+  // Las columnas mantienen el orden original y las nuevas se añaden al final.
   const header = [
     'id', 'fecha', 'estado', 'guion', 'duracion_audio_s',
     'webspeech_texto', 'webspeech_wer', 'webspeech_s', 'webspeech_d', 'webspeech_i',
@@ -354,7 +353,7 @@ export function toCSV(runs) {
 
 // ---------------------------------------------------------------- Historial local (navegador)
 
-// El historial vive SOLO en el navegador. Nunca guarda el token ni credenciales.
+// El historial vive solo en el navegador. Nunca guarda el token ni credenciales.
 export function loadRuns() {
   if (typeof window === 'undefined' || !window.localStorage) return [];
   try {

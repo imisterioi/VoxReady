@@ -1,7 +1,7 @@
 // Cliente del laboratorio «En tiempo real»: estado del servicio y transcripción de un
 // fragmento de audio.
 //
-// Contrato REAL verificado en backend/routes/lab.js y backend/whisper/server.py:
+// Contrato real verificado en backend/routes/lab.js y backend/whisper/server.py:
 //   GET  /api/lab/health      -> { status, available, ms?, service: { model_loaded,
 //                                 load_ms, default_model, models: { key: { key, model,
 //                                 device, loaded, loading, load_ms, load_error, ... } },
@@ -11,7 +11,7 @@
 //                                  serviceTotalMs, modelKey, modelName, durationSeconds,
 //                                  rtf, proxyMs, totalMs, audioBytes }
 //                             -> error: { status: 'error', mensaje, proxyMs }
-// Nunca se inventan campos: lo que el servidor no devuelve queda en `null`.
+// Los campos que el servidor no devuelve quedan en `null`.
 
 export const REALTIME_MODELS = [
   {

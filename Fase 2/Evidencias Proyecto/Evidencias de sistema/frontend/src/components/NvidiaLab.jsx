@@ -9,7 +9,7 @@ import { characterErrorRate, wordErrorRate } from '../lib/lab/wer';
 // Laboratorio NVIDIA Build (EXPERIMENTAL).
 // Reutiliza el mecanismo de grabación del laboratorio (lib/practice/mediaCapture) y los
 // endpoints ya existentes: /api/lab/nvidia/catalog, /voice y /asr.
-// No hay endpoint para Nemotron VoiceChat: no se inventa ni se simula una sesión.
+// Nemotron VoiceChat no publica endpoint: no se simula una sesión.
 
 const fmtMs = (ms) => (ms == null || !Number.isFinite(ms) ? '—' : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 const fmtSeconds = (ms) => (ms == null ? '—' : `${(ms / 1000).toFixed(1)} s`);
@@ -143,7 +143,7 @@ export default function NvidiaLab() {
   };
 
 
-  // Una llamada, un modelo. El audio es SIEMPRE el mismo Blob mientras no se regrabe.
+  // Una llamada, un modelo. El audio es siempre el mismo Blob mientras no se regrabe.
   const callModel = useCallback(
     async (model) => {
       const started = performance.now();

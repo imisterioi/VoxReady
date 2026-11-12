@@ -20,6 +20,7 @@ const { effectivePlan } = require('../lib/retentionPlan');
 const { syncDuePlans } = require('../lib/retentionSchedule');
 const { registerJob, runJob } = require('../lib/runtimeStatus');
 const { resolveSessionOwner, resolvePaging } = require('../lib/sessionScope');
+const { buildReview, isEmptyDraft } = require('../lib/reviewScore');
 const { resolveLanguage, normalizeLanguage, asrLanguage, sessionLanguage } = require('../lib/language');
 
 const RETENTION_JOB = 'retention';
@@ -92,12 +93,12 @@ function cleanReportForRetention(report) {
   return { report: changed ? out : report, changed };
 }
 
-// Retención automática por tenant — SOLO por VENCIMIENTO de retentionDays.
+// Retención automática por tenant — solo por vencimiento de retentionDays.
 // FULL y METRICS se comportan igual:
-//  - vigente → se conserva TODO (video, transcripción, report, métricas, score, review).
+//  - vigente → se conserva todo (video, transcripción, report, métricas, score, review).
 //  - vencida → se elimina el .webm, la transcripción (null) y el texto sensible del report;
 //              se conservan la sesión, el score, las métricas y la parte cuantitativa del report.
-// El score, la revisión humana, el report o una evaluación manual NO adelantan la retención.
+// El score, la revisión humana, el report o una evaluación manual no adelantan la retención.
 //
 // Opciones:
 //  - tenantId: aplica la retención solo a esa organización (ejecución manual por tenant).
@@ -202,6 +203,12 @@ async function applyRetention(prisma, { tenantId = null, dryRun = false } = {}) 
       data: { transcript: null },
     });
     transcriptsCleared = result.count;
+    // El borrador de revisión (cambios SIN publicar) tampoco sobrevive al plazo de retención: es
+    // información auxiliar y no forma parte del informe publicado.
+    await prisma.session.updateMany({
+      where: { id: { in: eligibleIds }, reviewDraft: { not: null } },
+      data: { reviewDraft: null },
+    });
     // La auditoría no conserva transcripciones más allá de la política existente.
     await prisma.transcriptionAudit.updateMany({
       where: { sessionId: { in: eligibleIds } },
@@ -250,6 +257,9 @@ const summary = (s) => ({
   areas: s.report?.areas?.map(({ key, label, score }) => ({ key, label, score })) || [],
   // Estado del informe, sin inferencias: el frontend no debe deducirlo de la ausencia de `score`.
   hasReport: Boolean(s.report),
+  // Revisión humana PUBLICADA (el vocero la ve). El borrador nunca se expone aquí.
+  reviewed: Boolean(s.review),
+  reviewSentAt: s.review?.sentAt || null,
 });
 
 module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
@@ -277,9 +287,9 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
   //   CREATED    -> todavía no se evaluó (o se subió el video/audio)
   //   EVALUATING -> hay un trabajo en curso (el estado fino vive en metrics.evaluation)
   //   FAILED     -> el trabajo terminó mal; se puede reintentar
-  //   COMPLETED  -> existe informe guardado (nunca se escribe antes de tenerlo)
+  //   COMPLETED  -> existe informe guardado (no se escribe antes de tenerlo)
   //
-  // `jobs` evita lanzar dos trabajos en el MISMO proceso; el CAS sobre `status` evita que
+  // `jobs` evita lanzar dos trabajos en el mismo proceso; el CAS sobre `status` evita que
   // dos peticiones simultáneas reclamen la sesión.
   const jobs = new Map();
   const STALE_MS = Number(process.env.EVAL_STALE_MS) || 15 * 60 * 1000;
@@ -292,8 +302,8 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     if (session?.report) {
       return { state: 'done', finishedAt: meta?.finishedAt ?? session.completedAt ?? null };
     }
-    // Reintentos automáticos: se informa ANTES que `failed` para que el cliente siga esperando.
-    // Nunca se exponen códigos técnicos al vocero: solo el estado y el momento del próximo intento.
+    // Reintentos automáticos: se informa antes que `failed` para que el cliente siga esperando. Solo
+    // se expone el estado y el momento del próximo intento, sin códigos técnicos.
     if (retry.exhausted) {
       return { state: 'exhausted', attempts: retry.attempts, maxAttempts: retry.maxAttempts, nextAttemptAt: null, finishedAt: retry.finishedAt };
     }
@@ -331,7 +341,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     return resolveLanguage(owner, owner?.tenant);
   }
 
-  // Transcripción del audio de la sesión + cálculo de la evidencia. NUNCA lanza: cualquier
+  // Transcripción del audio de la sesión + cálculo de la evidencia. Nunca lanza: cualquier
   // problema se traduce en `unverified` con motivo, y la evaluación sigue sin el criterio.
   async function verifySpeech(sessionId, input, lang = 'es') {
     const disabled = {
@@ -347,7 +357,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     };
     if (!WHISPER_ON) return disabled;
 
-    // El motor local solo se usa si ADMITE el idioma de la sesión: nunca se transcribe en otro
+    // El motor local solo se usa si admite el idioma de la sesión: no se transcribe en otro
     // idioma. Si no lo admite, el criterio queda sin verificar (motivo explícito) y la evaluación
     // continúa sin él, en lugar de aportar una transcripción en un idioma equivocado.
     const asr = asrLanguage(lang, 'iso');
@@ -399,14 +409,14 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       },
     });
     // El estado de la evaluación se cierra AQUÍ, en la misma escritura que el informe:
-    // nunca se marca COMPLETED sin report.
+    // No se marca COMPLETED sin report.
     const evaluation = {
       ...(input.metrics.evaluation || {}),
       state: 'done',
       stage: 'done',
       finishedAt: Date.now(),
     };
-    // Publicación ATÓMICA y CONDICIONAL: informe, puntaje y estado se escriben en UNA sola
+    // Publicación atómica y CONDICIONAL: informe, puntaje y estado se escriben en UNA sola
     // sentencia, y solo si este intento sigue siendo el dueño del lease. Así un intento antiguo
     // (o una ejecución duplicada) no puede publicar ni sobrescribir el informe de otro.
     const published = await prisma.session.updateMany({
@@ -510,7 +520,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     return promise;
   }
 
-  // Ejecuta un intento reclamado usando SOLO lo persistido: sobrevive a reinicios y no necesita al
+  // Ejecuta un intento reclamado usando solo lo persistido: sobrevive a reinicios y no necesita al
   // navegador. El intento ya quedó contado en `evalAttempts` al reclamarlo.
   async function runPersistedAttempt(sessionId, { reason = 'retry', leaseUntil = null } = {}) {
     const session = await prisma.session.findUnique({ where: { id: sessionId }, include: { theme: true } });
@@ -560,7 +570,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       if (!session) return fail(res, 404, 'Sesión no encontrada.');
       if (session.userId !== req.user.id) return fail(res, 403, 'Esta sesión no te pertenece.');
 
-      // Ya evaluada: se devuelve el informe guardado (histórico intacto, sin re-evaluar).
+      // Ya evaluada: se devuelve el informe guardado, sin re-evaluar.
       if (session.report) {
         return res.json({
           status: 'ok',
@@ -601,7 +611,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
         const transcribed = pending.length
           ? await transcribe({ filePath: audioPath(session.id), turns: pending, engines })
           : { ok: true, answers: [], diagnostics: [] };
-        // El diagnóstico vuelve indexado por la posición en `pending`: se reindexa al turno REAL.
+        // El diagnóstico vuelve indexado por la posición en `pending`: se reindexa al turno real.
         transcriptionDiagnostics = (transcribed.diagnostics || []).map((item, position) => ({
           ...item,
           index: pendingIndexes[position] ?? item.index,
@@ -669,12 +679,12 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       // manual). Las peticiones repetidas siguen siendo idempotentes: el lease impide que dos
       // se ejecuten a la vez y solo la que gana el reclamo consume un intento.
 
-      // Reclamo ATÓMICO del intento: contador persistente (`evalAttempts`) + lease, de modo que
-      // dos peticiones (o dos instancias del backend) nunca ejecutan la misma sesión a la vez.
+      // Reclamo atómico del intento: contador persistente (`evalAttempts`) y lease, para que dos
+      // peticiones o instancias no ejecuten la misma sesión a la vez.
       const startedAt = Date.now();
       const claimed = await claimAttempt(prisma, session.id);
       if (!claimed) {
-        // Otra petición/instancia ganó el reclamo (o la sesión ya no es evaluable): se informa.
+        // Otra petición ganó el reclamo (o la sesión ya no es evaluable).
         const current = await prisma.session.findUnique({ where: { id: session.id } });
         return res.status(202).json({ status: 'processing', evaluation: evaluationState(current || session) });
       }
@@ -695,8 +705,8 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     }
   });
 
-  // Transcripción de UNA respuesta para que el entrevistador conozca su contenido ANTES de decidir
-  // la siguiente intervención (repregunta o pregunta principal). Reutiliza la MISMA cadena ASR que
+  // Transcripción de UNA respuesta para que el entrevistador conozca su contenido antes de decidir
+  // la siguiente intervención (repregunta o pregunta principal). Reutiliza la misma cadena ASR que
   // la evaluación (mismos motores y prioridad) y deja la auditoría del turno.
   //
   //   POST /api/sessions/:id/answer-transcript?startMs=..&endMs=..&turnIndex=..
@@ -756,7 +766,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       });
 
       const text = String(transcribed?.answers?.[0] ?? '').trim();
-      // La auditoría reutiliza el mecanismo existente: se reindexa el diagnóstico al turno REAL.
+      // La auditoría reutiliza el mecanismo existente: se reindexa el diagnóstico al turno real.
       const diagnostics = (transcribed?.diagnostics?.length
         ? transcribed.diagnostics
         : [{ index: 0, status: 'failed', engine: null, code: transcribed?.code || 'NO_TRANSCRIPT', attempts: [], totalMs: null }]
@@ -814,10 +824,19 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
       if (!session) return fail(res, 404, 'Sesión no encontrada.');
       if (!canView(req.user, req.apiRole, session)) return fail(res, 403, 'No puedes ver esta sesión.');
 
+      // La revisión PUBLICADA la ve cualquiera con acceso a la sesión. El BORRADOR solo lo ve quien
+      // puede revisar: el vocero nunca ve cambios sin publicar.
+      const canReview = req.apiRole === 'master' || req.apiRole === 'system';
       res.json({
         status: 'ok',
         evaluation: evaluationState(session),
-        session: { ...summary(session), report: session.report, transcript: session.transcript },
+        session: {
+          ...summary(session),
+          report: session.report,
+          transcript: session.transcript,
+          review: session.review || null,
+          ...(canReview ? { reviewDraft: session.reviewDraft || null } : {}),
+        },
       });
     } catch (error) {
       console.error('Error obteniendo sesión:', error);
@@ -884,57 +903,203 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
     return { label: 'Muestreo aleatorio', tone: 'neutral', priority: 3 };
   }
 
+  // Cola de etiquetado: los informes agrupados POR TENANT (la vista inicial muestra una tarjeta por
+  // cliente). Dentro de cada tenant el orden es: pendientes de revisar (del más antiguo al más
+  // nuevo) y después los ya revisados (también del más antiguo al más nuevo). Ese orden NO altera
+  // el orden de las tarjetas de los tenants.
   app.get('/api/review-queue', auth('master', 'system'), async (req, res) => {
     try {
       const sessions = await prisma.session.findMany({
         where: { score: { not: null } },
         orderBy: { completedAt: 'desc' },
-        take: 100,
+        take: 300,
         include: { theme: true, user: true, tenant: true },
       });
-      const items = sessions
-        .map((s) => ({
-          ...summary(s),
-          tenant: s.tenant ? { id: s.tenant.id, name: s.tenant.name } : null,
-          reason: reviewReason(s),
-          review: s.review,
-          hasVideo: fs.existsSync(videoPath(s.id)),
+      const items = sessions.map((s) => ({
+        ...summary(s),
+        tenant: s.tenant ? { id: s.tenant.id, name: s.tenant.name } : null,
+        reason: reviewReason(s),
+        review: s.review || null,
+        pendingDraft: Boolean(s.reviewDraft),
+        hasVideo: fs.existsSync(videoPath(s.id)),
+      }));
+
+      const timeOf = (item) => new Date(item.completedAt || item.createdAt || 0).getTime();
+      const grouped = new Map();
+      for (const item of items) {
+        const key = item.tenant?.id || 'none';
+        if (!grouped.has(key)) grouped.set(key, { id: item.tenant?.id || null, name: item.tenant?.name || '', reports: [] });
+        grouped.get(key).reports.push(item);
+      }
+
+      const tenants = [...grouped.values()]
+        .map((tenant) => ({
+          ...tenant,
+          reports: [...tenant.reports].sort(
+            (a, b) => Number(Boolean(a.review)) - Number(Boolean(b.review)) || timeOf(a) - timeOf(b),
+          ),
         }))
-        .sort((a, b) => Number(Boolean(a.review)) - Number(Boolean(b.review)) || a.reason.priority - b.reason.priority);
-      res.json({ status: 'ok', pending: items.filter((i) => !i.review).length, items });
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+
+      // Lista plana con el MISMO orden (compatibilidad con quien ya consumía `items`).
+      const flat = tenants.flatMap((tenant) => tenant.reports);
+      res.json({ status: 'ok', pending: flat.filter((item) => !item.review).length, tenants, items: flat });
     } catch (error) {
       console.error('Error en cola de etiquetado:', error);
       fail(res, 500, 'No se pudo obtener la cola de revisión.');
     }
   });
 
-  // Guarda la corrección del experto (puntajes por área y comentario)
+  // Guarda un BORRADOR de revisión (no publica nada): el vocero sigue viendo el informe original.
+  // El puntaje de cada área y el global se recalculan con la rúbrica; el global que envíe el cliente
+  // se ignora.
+  app.put('/api/sessions/:id/review', auth('master', 'system'), async (req, res) => {
+    try {
+      const session = await prisma.session.findUnique({ where: { id: req.params.id } });
+      if (!session?.report) return fail(res, 404, 'Sesión evaluada no encontrada.');
+      const draft = buildReview(session.report, req.body || {}, {
+        reviewer: { id: req.user.id, name: req.user.name },
+      });
+      await prisma.session.update({ where: { id: session.id }, data: { reviewDraft: draft } });
+      res.json({ status: 'ok', draft });
+    } catch (error) {
+      console.error('Error guardando el borrador de revisión:', error);
+      fail(res, 500, 'No se pudo guardar el borrador de la revisión.');
+    }
+  });
+
+  // Publica la revisión (la ENVÍA al vocero). Acepta el borrador guardado o los cambios enviados en
+  // el cuerpo. Al publicar: la revisión pasa a `review`, el borrador se limpia y la notificación
+  // queda como no leída.
   app.post('/api/sessions/:id/review', auth('master', 'system'), async (req, res) => {
     try {
-      const { scores = {}, comment = '' } = req.body || {};
       const session = await prisma.session.findUnique({ where: { id: req.params.id } });
       if (!session?.report) return fail(res, 404, 'Sesión evaluada no encontrada.');
 
-      const clean = {};
-      for (const key of ['expression', 'voice', 'coherence', 'empathy']) {
-        const v = scores[key];
-        clean[key] = v === '' || v == null ? null : Math.max(0, Math.min(100, Math.round(Number(v))));
-      }
-      const review = {
-        scores: clean,
-        comment: String(comment).trim(),
+      const body = req.body || {};
+      // Si el cuerpo viene vacío se publica el borrador guardado; si no, lo enviado manda.
+      const source = isEmptyDraft(body) ? session.reviewDraft || {} : body;
+      const review = buildReview(session.report, source, {
         reviewer: { id: req.user.id, name: req.user.name },
-        at: new Date().toISOString(),
-        // Diferencia entre la IA y el experto (sirve para medir el "acuerdo IA-humano")
-        agreement: Object.fromEntries(
-          session.report.areas.map((a) => [a.key, a.score != null && clean[a.key] != null ? Math.abs(a.score - clean[a.key]) : null]),
-        ),
-      };
-      await prisma.session.update({ where: { id: session.id }, data: { review } });
+        sentAt: new Date().toISOString(),
+      });
+      if (isEmptyDraft(review)) return fail(res, 422, 'No hay ningún cambio que publicar.');
+
+      await prisma.session.update({
+        where: { id: session.id },
+        data: { review, reviewDraft: null, reviewSeenAt: null },
+      });
       res.json({ status: 'ok', review });
     } catch (error) {
-      console.error('Error guardando revisión:', error);
-      fail(res, 500, 'No se pudo guardar la revisión.');
+      console.error('Error publicando la revisión:', error);
+      fail(res, 500, 'No se pudo publicar la revisión.');
+    }
+  });
+
+  // Rúbrica HISTÓRICA con la que se generó el informe de una sesión (solo lectura).
+  // No es la configuración actual: sale del patrón guardado en el propio informe (`report.pattern`) y
+  // los pesos/subcriterios EFECTIVOS son los registrados en el informe, que ya reflejan cualquier
+  // ajuste de escenario o de vocero aplicado al evaluar.
+  app.get('/api/sessions/:id/rubric', auth(), async (req, res) => {
+    try {
+      const session = await prisma.session.findUnique({ where: { id: req.params.id } });
+      if (!session) return fail(res, 404, 'Sesión no encontrada.');
+      if (!canView(req.user, req.apiRole, session)) return fail(res, 403, 'No puedes ver esta rúbrica.');
+      const report = session.report;
+      if (!report) return fail(res, 404, 'La sesión todavía no tiene informe.');
+
+      // Configuración del patrón EXACTO usado (si sigue existiendo; los informes antiguos pueden
+      // apuntar a un patrón ya eliminado: en ese caso se muestran solo los valores del informe).
+      const stored = report.pattern?.id ? await prisma.masterPattern.findUnique({ where: { id: report.pattern.id } }) : null;
+      const config = stored?.config || null;
+
+      res.json({
+        status: 'ok',
+        rubric: {
+          pattern: report.pattern || null,
+          patternVersion: report.patternVersion ?? null,
+          strictness: report.strictness || null,
+          interview: report.interview || null,
+          weights: report.weights || null,
+          areas: (report.areas || []).map((area) => ({
+            key: area.key,
+            label: area.label,
+            weight: area.weight,
+            score: area.score,
+            source: area.source || null,
+            details: (area.details || []).map((detail) => ({
+              key: detail.key,
+              label: detail.label,
+              weight: detail.weight,
+              unit: detail.unit ?? null,
+              value: detail.value ?? null,
+            })),
+          })),
+          descriptors: config
+            ? {
+                coherence: config.coherence?.descriptor || null,
+                empathy: config.empathy?.descriptor || null,
+                criteria: { coherence: config.coherence?.criteria || null, empathy: config.empathy?.criteria || null },
+              }
+            : null,
+          config,
+        },
+      });
+    } catch (error) {
+      console.error('Error obteniendo la rúbrica de la sesión:', error);
+      fail(res, 500, 'No se pudo obtener la rúbrica.');
+    }
+  });
+
+  // ------------------------------------------------ Notificaciones del vocero
+  //
+  // La notificación EXISTE solo cuando hay una revisión humana PUBLICADA: se genera al enviarla
+  // (POST /api/sessions/:id/review), no al guardar un borrador. No se duplica información: el aviso
+  // se deriva de la propia sesión y se marca como leído en `reviewSeenAt`.
+  app.get('/api/notifications', auth('user'), async (req, res) => {
+    try {
+      const sessions = await prisma.session.findMany({
+        where: { userId: req.user.id, review: { not: null } },
+        include: { theme: { select: { title: true } } },
+        take: 50,
+      });
+      const items = sessions
+        .map((s) => {
+          const sentAt = s.review?.sentAt || s.review?.at || null;
+          const seenAt = s.reviewSeenAt ? new Date(s.reviewSeenAt).getTime() : null;
+          const sentTime = sentAt ? new Date(sentAt).getTime() : 0;
+          return {
+            sessionId: s.id,
+            theme: s.theme?.title || null,
+            score: s.review?.global ?? s.score ?? null,
+            reviewer: s.review?.reviewer?.name || null,
+            sentAt,
+            // No leída: nunca se abrió, o se envió una revisión NUEVA después de la última lectura.
+            unread: seenAt == null || sentTime > seenAt,
+          };
+        })
+        .sort((a, b) => new Date(b.sentAt || 0) - new Date(a.sentAt || 0));
+      res.json({ status: 'ok', unread: items.filter((item) => item.unread).length, items });
+    } catch (error) {
+      console.error('Error obteniendo notificaciones:', error);
+      fail(res, 500, 'No se pudieron obtener las notificaciones.');
+    }
+  });
+
+  // Marca como leídas las notificaciones del vocero (una sesión concreta o todas).
+  app.post('/api/notifications/seen', auth('user'), async (req, res) => {
+    try {
+      const { sessionId, all } = req.body || {};
+      const where = { userId: req.user.id, review: { not: null } };
+      if (!all) {
+        if (!sessionId) return fail(res, 422, 'Indica la notificación o pide marcar todas como leídas.');
+        where.id = String(sessionId);
+      }
+      const result = await prisma.session.updateMany({ where, data: { reviewSeenAt: new Date() } });
+      res.json({ status: 'ok', updated: result.count });
+    } catch (error) {
+      console.error('Error marcando notificaciones:', error);
+      fail(res, 500, 'No se pudieron marcar las notificaciones.');
     }
   });
 
@@ -960,7 +1125,7 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
   // - ADMIN del cliente: las de los voceros de SU organización, indicando `?userId=`; el
   //   servidor valida rol y pertenencia al tenant (el id del frontend no autoriza nada).
   // - MASTER/SYSTEM: las de cualquier vocero.
-  // - `?page=` (desde 1) y `?limit=` (máx. 50; por defecto 50 = tope histórico del endpoint).
+  // - `?page=` (desde 1) y `?limit=` (máximo 50; por defecto 50).
   //   Se devuelven `total` y `pages` para que el cliente pagine sin traer todo el historial.
   // - `orderBy createdAt`: `completedAt` es nulo en las sesiones sin informe, así que ordenar por
   //   esa columna las dejaría al final y las sacaría del historial.

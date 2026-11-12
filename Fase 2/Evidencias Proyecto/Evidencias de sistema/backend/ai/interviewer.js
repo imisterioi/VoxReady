@@ -78,6 +78,15 @@ const TEXTS_ES = {
   noTranscript: '- No hay transcripción utilizable de su última respuesta: pide una aclaración concreta sobre el punto central, sin afirmar lo que dijo.',
   noRepeat: '- No repitas preguntas que ya hiciste.',
   onlyQuestion: '- Responde solo con la pregunta: sin saludos, comillas, explicaciones ni etiquetas.',
+  // Bloque de IDIOMA: se declara en cada solicitud (el idioma de la sesión manda, pase lo que pase).
+  languageHeader: 'Idioma de la entrevista (obligatorio, no negociable):',
+  languageRules: [
+    '- Formula TODAS tus preguntas y repreguntas en español.',
+    '- Aunque el vocero responda en otro idioma, sigue preguntando en español.',
+    '- Aunque el escenario incluya palabras o expresiones en otro idioma, no cambies de idioma.',
+    '- No traduzcas nombres propios, marcas, cargos ni nombres de instituciones: escríbelos tal como aparecen.',
+    '- No inventes traducciones de nombres institucionales ni alteres los mensajes clave.',
+  ],
   spokeNoText: '(habló, pero no se pudo transcribir su respuesta)',
   silence: '(silencio, no respondió)',
   answerPrefix: (text) => `Respuesta del vocero: ${text}`,
@@ -108,6 +117,15 @@ const TEXTS_EN = {
   noTranscript: '- There is no usable transcript of their last answer: ask for a concrete clarification on the central point, without asserting what they said.',
   noRepeat: '- Do not repeat questions you already asked.',
   onlyQuestion: '- Reply only with the question: no greetings, quotes, explanations or labels.',
+  // Language block: stated in EVERY request (the session language wins, no matter what).
+  languageHeader: 'Interview language (mandatory, non-negotiable):',
+  languageRules: [
+    '- Ask ALL your questions and follow-ups in English.',
+    '- Even if the spokesperson answers in another language, keep asking in English.',
+    '- Even if the scenario includes words or expressions in another language, do not switch language.',
+    '- Do not translate proper nouns, brands, job titles or institution names: write them exactly as they appear.',
+    '- Do not invent translations of institutional names and do not alter the key messages.',
+  ],
   spokeNoText: '(they spoke, but their answer could not be transcribed)',
   silence: '(silence, no answer)',
   answerPrefix: (text) => `Spokesperson answer: ${text}`,
@@ -122,7 +140,7 @@ const textsFor = (lang) => TEXTS[lang] || TEXTS.es;
 
 // Instrucciones del entrevistador. El escenario se completa con datos de la tabla Theme;
 // el tono y la estructura (preguntas y repreguntas) vienen de su configuración de entrevista.
-// `turn` describe el turno REAL que se está pidiendo: { kind, mainQuestion, focus, hasTranscript }.
+// `turn` describe el turno real que se está pidiendo: { kind, mainQuestion, focus, hasTranscript }.
 // silent: el vocero no dijo nada en su último turno (silencio real, no una transcripción fallida).
 // lang: idioma efectivo del vocero ('es' | 'en'); el entrevistador pregunta en ese idioma.
 function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false, lang = 'es') {
@@ -130,7 +148,9 @@ function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false, lang = '
   const level = (LEVELS[lang] || LEVELS.es)[cfg.aggressiveness];
   const who = cfg.interviewerRole || T.interviewerFallback;
   const lines = [T.opening(who), level.persona];
-  // Tipo REAL del turno. `plan.kind` es la estructura nominal y puede contradecir la intervención
+  // El idioma se declara en cada solicitud: el entrevistador pregunta en el idioma de la práctica.
+  lines.push(T.languageHeader, ...T.languageRules);
+  // Tipo real del turno. `plan.kind` es la estructura nominal y puede contradecir la intervención
   // que de verdad se envía (una repregunta adaptativa decidida por la evaluación, por ejemplo).
   const isFollowUp = (turn.kind || plan.kind) === 'followup';
 
@@ -157,7 +177,7 @@ function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false, lang = '
     lines.push(cfg.aggressiveness === 'BAJA' ? T.silentLow : T.silentHigh);
   } else if (cfg.followUps > 0 || isFollowUp) {
     // Una repregunta decidida por la evaluación puede ocurrir aunque la configuración no tenga
-    // repreguntas fijas: en ese caso la instrucción debe describir el turno REAL, no el plan.
+    // repreguntas fijas: en ese caso la instrucción debe describir el turno real, no el plan.
     // Estructura fija: cada pregunta principal va seguida de sus repreguntas
     lines.push(isFollowUp ? T.followUpTurn(level.followUp) : T.newQuestion);
     // La instrucción de silencio solo vale cuando de verdad no hay respuesta: si se detectó voz y
@@ -177,15 +197,15 @@ function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false, lang = '
   return lines.join('\n');
 }
 
-// Etiqueta del turno del vocero sin texto: distingue el SILENCIO real de una respuesta hablada que
-// no se pudo transcribir. Nunca se inventa su contenido.
+// Etiqueta del turno del vocero sin texto: distingue el silencio real de una respuesta que no se
+// pudo transcribir.
 const noAnswerLabel = (turn, lang = 'es') => {
   const T = textsFor(lang);
   return turn?.spoke === true ? T.spokeNoText : T.silence;
 };
 
 // history: [{ role: 'interviewer' | 'vocero', text: string, spoke?: boolean }]
-// `turn` es el turno REAL que se pide (kind/mainQuestion/focus/hasTranscript) y se usa para que el
+// `turn` es el turno real que se pide (kind/mainQuestion/focus/hasTranscript) y se usa para que el
 // prompt describa la intervención que de verdad se envía. `lang` es el idioma efectivo del vocero.
 function buildMessages(theme, history = [], cfg, plan, turn = {}, lang = 'es') {
   const T = textsFor(lang);
@@ -287,7 +307,7 @@ async function askModel(model, messages, { timeoutMs = 20000, signal = null, fet
   }
 }
 
-// Compatibilidad con el código anterior (sin señal compartida entre modelos).
+// Alias de `askModel` sin señal compartida entre modelos.
 const callModel = (model, messages, timeoutMs) => askModel(model, messages, { timeoutMs });
 
 // Modelos habilitados y timeout efectivos (misma fórmula que usaba generateQuestion).
@@ -302,16 +322,16 @@ function interviewTimeoutMs() {
 
 // Adaptador para `interviewSession.js`: recibe el contexto central y devuelve { question }.
 // El contexto debe traer `messages` ya construidos, o bien `theme/history/cfg/plan` para
-// construirlos con la MISMA función que usa producción (`buildMessages`).
+// construirlos con la misma función que usa producción (`buildMessages`).
 function askModelFromContext(model, context = {}, options = {}) {
   let messages;
   try {
     // `cfg`/`plan` pueden faltar si el llamador no los adjuntó: se derivan con las funciones
-    // REALES del proyecto (mismo diseño: un tema sin configuración usa los valores por defecto).
+    // reales del proyecto (mismo diseño: un tema sin configuración usa los valores por defecto).
     const cfg = context.cfg || normalizeInterviewConfig(context.theme?.interviewConfig);
     const plan =
       context.plan || turnPlan(cfg, (context.history || []).filter((turn) => turn.role === 'interviewer').length);
-    // Turno REAL que se está pidiendo: el `kind` del contexto manda sobre el plan nominal, y el
+    // Turno real que se está pidiendo: el `kind` del contexto manda sobre el plan nominal, y el
     // foco/estado de la respuesta viajan al prompt para que la repregunta se apoye en lo dicho.
     const turn = {
       kind: context.kind || null,
@@ -329,7 +349,7 @@ function askModelFromContext(model, context = {}, options = {}) {
   return askModel(model, messages, { lang: context.lang, ...options });
 }
 
-// Consulta el modelo principal y el de respaldo EN PARALELO y usa la primera
+// Consulta el modelo principal y el de respaldo EN paralelo y usa la primera
 // respuesta válida. En el plan gratuito los modelos populares (como DeepSeek)
 // pueden tener cola; así la entrevista no queda esperando.
 async function generateQuestion({ theme, history, lang = 'es' }) {
@@ -381,4 +401,15 @@ function warmUp() {
     .catch(() => console.warn('[IA] No se pudo precalentar el modelo; se reintentará en la primera pregunta'));
 }
 
-module.exports = { generateQuestion, warmUp, parseList, buildSystemPrompt, askModel, askModelFromContext, cleanQuestion, interviewModels, interviewTimeoutMs };
+module.exports = {
+  generateQuestion,
+  warmUp,
+  parseList,
+  buildSystemPrompt,
+  buildMessages,
+  askModel,
+  askModelFromContext,
+  cleanQuestion,
+  interviewModels,
+  interviewTimeoutMs,
+};

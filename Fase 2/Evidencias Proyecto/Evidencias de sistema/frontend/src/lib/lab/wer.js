@@ -34,7 +34,7 @@ export function levenshtein(a = [], b = []) {
 }
 
 // WER con desglose de sustituciones, eliminaciones e inserciones.
-// Devuelve null si no hay referencia: nunca se inventa una puntuación.
+// Devuelve null si no hay referencia: no se inventa una puntuación.
 export function wordErrorRate(reference, hypothesis) {
   const ref = normalizeForComparison(reference);
   if (!ref) return null;

@@ -1,5 +1,5 @@
 // Solicitudes de borrado de la organización (retención / derecho al olvido).
-// - El administrador del cliente crea solicitudes SOLO de su organización y consulta su estado.
+// - El administrador del cliente crea solicitudes solo de su organización y consulta su estado.
 // - Únicamente el ADMINISTRADOR DEL SISTEMA resuelve las solicitudes (aprobar / rechazar /
 //   completar). El administrador del cliente no puede resolverlas, ni por API.
 // - Al COMPLETAR una solicitud:
@@ -86,7 +86,7 @@ module.exports = function registerDeletionRoutes(app, prisma) {
   });
 
   // Cambia el estado: aprobar, rechazar o completar (al completar ejecuta la acción).
-  // SOLO el administrador del sistema puede resolver: el admin del cliente únicamente crea
+  // Solo el administrador del sistema puede resolver: el admin del cliente únicamente crea
   // solicitudes y consulta su estado (la comprobación se hace aquí, no en la interfaz).
   app.patch('/api/deletion-requests/:id', auth('system'), async (req, res) => {
     try {

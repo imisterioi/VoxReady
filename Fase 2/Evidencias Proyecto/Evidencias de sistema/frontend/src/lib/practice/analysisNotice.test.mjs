@@ -1,4 +1,4 @@
-// El aviso de los 60 s es SOLO de interfaz: informa de que el informe continúa preparándose en
+// El aviso de los 60 s es solo de interfaz: informa de que el informe continúa preparándose en
 // segundo plano y dónde consultarlo. No cancela la evaluación ni modifica el backend.
 // Se comprueba sobre el código real de la pantalla (las pruebas no tienen DOM).
 import test from 'node:test';

@@ -28,6 +28,7 @@ const registerSystemRoutes = require('./routes/system');
 const registerLabRoutes = require('./routes/lab');
 const registerInterviewerRoutes = require('./routes/interviewer');
 const registerNvidiaLabRoutes = require('./routes/nvidiaLab');
+const registerMicroLessonRoutes = require('./routes/microLessons');
 const { processPendingTenantDeletions } = require('./lib/tenantDeletion');
 const { registerJob, runJob } = require('./lib/runtimeStatus');
 const { withRetry } = require('./lib/dbRetry');
@@ -68,6 +69,7 @@ registerMetricsRoutes(app, prisma);
 registerSystemRoutes(app, prisma);
 registerLabRoutes(app, prisma); // Laboratorio de transcripción (experimental)
 registerNvidiaLabRoutes(app, prisma); // Laboratorio NVIDIA Build (experimental)
+registerMicroLessonRoutes(app, prisma); // Microlecciones (formación de voceros)
 
 // Idiomas habilitados en la plataforma (público): lo consumen los selectores de la interfaz.
 // Al habilitar un idioma nuevo en `lib/language.js`, aparece aquí automáticamente.
@@ -228,7 +230,7 @@ app.post('/api/sessions', requireAuth(prisma), async (req, res) => {
       });
     }
 
-    // El propietario de la sesión es SIEMPRE el usuario autenticado.
+    // El propietario de la sesión es siempre el usuario autenticado.
     // Un email/userId enviado por el cliente se ignora.
     const user = req.user;
 
@@ -537,7 +539,7 @@ app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {
       });
     }
 
-    // Configuracion de la entrevista: se valida ANTES de normalizar. Una configuracion que supera
+    // Configuracion de la entrevista: se valida antes de normalizar. Una configuracion que supera
     // el limite tecnico se rechaza con 422 (no se guarda recortada en silencio) y la duracion
     // maxima es obligatoria; mismo cuerpo que PUT /api/themes y la biblioteca de escenarios.
     const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: req.body.interview !== undefined });
@@ -568,7 +570,7 @@ app.post('/api/themes', requireAuth(prisma, ['admin']), async (req, res) => {
         interviewConfig: normalizeInterviewConfig(req.body.interview),
 
         // Idioma del contenido del escenario personalizado. Si el editor no lo envía, se usa el
-        // idioma con el que el administrador está trabajando (nunca se traduce automáticamente).
+        // idioma con el que el administrador está trabajando (no se traduce automáticamente).
         language: normalizeLanguage(req.body.language) || resolveLanguage(user, user.tenant),
 
         tenantId: user.tenantId,

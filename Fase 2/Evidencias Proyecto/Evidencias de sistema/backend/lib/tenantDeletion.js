@@ -1,11 +1,11 @@
 // Eliminación manual de TENANTS: resiliente, idempotente y reintentable.
 //
 // Estrategia ante la falta de transacción entre PostgreSQL y el filesystem:
-//  - ORDEN: primero ARCHIVOS, luego BD. Motivo: mientras el tenant exista en BD podemos
-//    seguir localizando sus sesiones/archivos; si borráramos la BD primero, perderíamos
-//    el mapeo sesión→archivo y quedarían grabaciones huérfanas para siempre.
-//  - Se eliminan los DOS archivos de cada sesión (video `<id>.webm` y pista de audio
-//    `<id>.audio.webm`) y se VERIFICA en disco que ya no queden antes de tocar la BD.
+//  - Orden: primero los archivos y después la base de datos. Mientras el tenant exista en la BD se
+//    pueden localizar sus sesiones y archivos; si se borrara la BD primero se perdería el mapeo
+//    sesión→archivo y quedarían grabaciones huérfanas.
+//  - Se eliminan los dos archivos de cada sesión (video `<id>.webm` y audio `<id>.audio.webm`) y se
+//    verifica en disco que ya no queden antes de tocar la BD.
 //  - La transacción de BD es atómica (todo o nada). Si el borrado de archivos falla, NO se
 //    toca la BD: el tenant queda en DELETING y se reintenta (sin datos a medias).
 //  - Idempotente: archivo ya borrado → ok; deleteMany → no-op; tenant ya inexistente → completo.
@@ -40,7 +40,7 @@ async function startTenantDeletion(prisma, tenantId) {
 // 2) Elimina los archivos de CADA sesión del tenant (video y pista de audio).
 // Idempotente y reintentable: devuelve { removed, failures, remaining, pending }.
 //
-// POR QUÉ SE VERIFICA DESPUÉS DE BORRAR
+// POR QUÉ SE VERIFICA después DE BORRAR
 // `removeSessionMedia` hace un borrado best-effort (no propaga errores), así que el retorno no
 // sirve como garantía. La garantía se obtiene comprobando, sesión por sesión, qué archivos
 // siguen en disco: si alguno permanece, el tenant NO puede darse por eliminado.
@@ -65,7 +65,7 @@ async function deleteTenantFiles(prisma, tenantId, { sessionsDir = SESSIONS_DIR 
   return { removed, failures, remaining, pending: failures.length > 0 };
 }
 
-// 3) Elimina TODOS los registros del tenant en una transacción atómica.
+// 3) Elimina todos los registros del tenant en una transacción atómica.
 // No toca escenarios globales (tenantId=null) ni otros tenants. deleteMany → idempotente.
 async function deleteTenantRecords(prisma, tenantId) {
   const themeIds = (await prisma.theme.findMany({ where: { tenantId }, select: { id: true } })).map((t) => t.id);
@@ -106,8 +106,8 @@ async function verifyTenantDeletion(prisma, tenantId) {
 
 // 5) Proceso completo de UN tenant. Idempotente y reintentable.
 // Devuelve { status: 'completed' | 'pending', ... }.
-// Los registros de la organización SOLO se eliminan cuando ya no queda ningún archivo de sus
-// sesiones en disco: así nunca se pierde el mapeo sesión→archivo mientras existan grabaciones.
+// Los registros de la organización se eliminan solo cuando no queda ningún archivo de sus sesiones
+// en disco: así no se pierde el mapeo sesión→archivo mientras existan grabaciones.
 async function processTenantDeletion(prisma, tenantId, { sessionsDir = SESSIONS_DIR } = {}) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
   if (!tenant) return { status: 'completed', reason: 'tenant no existe' }; // ya eliminado

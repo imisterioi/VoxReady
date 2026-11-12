@@ -2,7 +2,7 @@
 //
 // Crea un conjunto aislado de fixtures (tenants, usuarios, temas y sesiones) con
 // fechas controladas, ejecuta las funciones de métricas y verifica los 13 casos
-// obligatorios. Limpia TODO lo creado en `finally` (no toca datos reales).
+// obligatorios. Limpia todo lo creado en `finally` (no toca datos reales).
 //
 // Uso:  node tests/metrics.test.js
 require('dotenv').config();
@@ -90,7 +90,7 @@ async function createFixtures() {
   return { created, tenantA, tenantB, tenantSusp, tenantDel, tenantNew, tenantOld, themeA, themeA2, vocA1, vocA2, vocSusp, vocAnon, vocB1, vocWeek, adminA };
 }
 
-// Borra TODO lo creado (por orden de dependencias).
+// Borra todo lo creado (por orden de dependencias).
 async function cleanup(created) {
   await prisma.session.deleteMany({ where: { id: { in: created.sessions } } });
   await prisma.theme.deleteMany({ where: { id: { in: created.themes } } });

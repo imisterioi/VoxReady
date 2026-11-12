@@ -7,7 +7,7 @@ export const TURN_LIMIT = 30;
 export const EXTRA_MARGIN_MS = 120000; // margen global de cierre: 2 minutos
 export const MINUTES_PER_TURN = 1.2;
 
-// Duración MÁXIMA de la entrevista: es obligatoria (la entrevista nunca queda sin límite de
+// Duración máxima de la entrevista: es obligatoria (la entrevista nunca queda sin límite de
 // tiempo). Si el escenario no la trae (configuración antigua o campo vacío) se usa este valor.
 export const DEFAULT_MINUTES = 5;
 export const MINUTES_RANGE = [1, 120];
@@ -36,7 +36,7 @@ export function autoMinutes(cfg = {}) {
 // Problemas que impiden iniciar/guardar. Devuelve [] si la configuración es válida.
 export function interviewConfigIssues(cfg = {}) {
   const issues = [];
-  // Duración máxima OBLIGATORIA: vacía, nula o inválida no puede desactivar el límite de tiempo.
+  // Duración máxima obligatoria: vacía, nula o inválida no puede desactivar el límite de tiempo.
   const rawMinutes = cfg.estimatedMinutes;
   const missingMinutes = rawMinutes === '' || rawMinutes == null;
   const minutes = Number(rawMinutes);

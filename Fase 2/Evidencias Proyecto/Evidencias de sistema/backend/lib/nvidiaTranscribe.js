@@ -88,7 +88,7 @@ async function transcribeAnswers({
   }
 
   if (failures.length) {
-    // Si TODAS las respuestas fallaron por incompatibilidad de idioma, se propaga ese motivo: es un
+    // Si todas las respuestas fallaron por incompatibilidad de idioma, se propaga ese motivo: es un
     // problema de configuración que no se arregla reintentando y no debe confundirse con un fallo
     // puntual del servicio.
     const unsupported = failures.every((failure) => failure.code === 'LANGUAGE_UNSUPPORTED');

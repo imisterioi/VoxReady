@@ -261,7 +261,7 @@ module.exports = function registerLabRoutes(app, prisma) {
         // Duración que el filtro de voz conservó (evidencia de que el VAD no recortó).
         durationAfterVad: data.duration_after_vad ?? null,
         rtf: data.rtf ?? null,
-        // `processingMs` es SOLO inferencia; la carga del modelo se informa aparte para
+        // `processingMs` es solo inferencia; la carga del modelo se informa aparte para
         // no confundir el arranque del modelo con el tiempo de transcripción.
         processingMs: data.elapsed_ms ?? null,
         modelLoadMs: data.model_load_ms ?? null,

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict');
 
 const { createPrismaStub, TEXTO, anonymizationSeed } = require('./privacy-support');
 
-// La autenticación real se sustituye por un doble ANTES de cargar las rutas (igual que en el
+// La autenticación real se sustituye por un doble antes de cargar las rutas (igual que en el
 // resto de la suite). El rol y el usuario se fijan desde la propia prueba con una cabecera.
 const authPath = require.resolve('../auth');
 const SESSION = { user: null, role: 'user' };

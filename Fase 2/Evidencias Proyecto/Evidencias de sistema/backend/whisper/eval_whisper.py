@@ -148,8 +148,8 @@ def working_set_mb(peak: bool = False) -> float | None:
     if os.name != "nt":
         return None
     try:
-        # Los tipos hay que declararlos explícitamente: sin ellos ctypes pasa el HANDLE como
-        # entero de 32 bits y la llamada falla en Windows de 64 bits.
+        # Los tipos deben declararse: sin ellos ctypes pasa el HANDLE como entero de 32 bits y la
+        # llamada falla en Windows de 64 bits.
         kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
         psapi = ctypes.WinDLL("psapi", use_last_error=True)
         kernel32.GetCurrentProcess.restype = ctypes.c_void_p

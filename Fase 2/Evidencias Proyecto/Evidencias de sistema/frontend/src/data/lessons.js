@@ -122,7 +122,7 @@ export const LESSONS = [
 export const getLesson = (id) => LESSONS.find((l) => l.id === id);
 
 // Lección con el texto del idioma activo (español por defecto). No altera la lección original:
-// solo elige el texto de la interfaz; el contenido nunca se traduce automáticamente.
+// Solo elige el texto de la interfaz; el contenido no se traduce automáticamente.
 export function localizedLesson(lesson, lang = 'es') {
   if (!lesson || lang !== 'en') return lesson;
   const en = LESSONS_EN[lesson.id];

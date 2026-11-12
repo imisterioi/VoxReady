@@ -74,7 +74,7 @@ test('las solicitudes localizan etiquetas sin alterar los valores por defecto', 
 });
 
 test('el contenido del diccionario no expone el diccionario en claves de contenido dinámico', () => {
-  // Los escenarios y datos de usuarios NUNCA se guardan en el diccionario: el diccionario solo
+  // Los escenarios y datos de usuarios no se guardan en el diccionario: el diccionario solo
   // contiene textos de interfaz (cadenas, listas y funciones), no datos de escenarios concretos.
   const walk = (value, path) => {
     if (value == null) return;

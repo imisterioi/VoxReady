@@ -9,7 +9,7 @@ import { REALTIME_MODELS, describeModelStatus, transcribeChunk } from '../lib/la
 
 // Laboratorio «En tiempo real» (EXPERIMENTAL).
 //
-// Graba UNA sesión (cámara + micrófono) en un único WebM y, del MISMO MediaStream, toma
+// Graba UNA sesión (cámara + micrófono) en un único WebM y, del mismo MediaStream, toma
 // muestras PCM con Web Audio y las envía a Whisper por fragmentos. El texto aparece de
 // forma INCREMENTAL: faster-whisper no hace streaming nativo.
 //
@@ -141,7 +141,7 @@ export default function RealtimeLab() {
     try {
       if (flush) collectorRef.current?.flush();
     } catch {
-      /* el resto de audio ya no se puede recuperar */
+      /* el resto del audio no se puede recuperar */
     }
     try {
       graph.processor.onaudioprocess = null;
@@ -287,7 +287,7 @@ export default function RealtimeLab() {
       return;
     }
 
-    // Fragmentos de audio del MISMO stream (Web Audio), sin tocar la grabación.
+    // Fragmentos de audio del mismo stream (Web Audio), sin tocar la grabación.
     const Ctx = window.AudioContext || window.webkitAudioContext;
     let graph;
     try {

@@ -20,7 +20,7 @@ const toApiTheme = (t) => ({
   publics: parseList(t.publics),
   availableToAllVoceros: t.availableToAllVoceros,
   interview: resolveInterviewConfig(t),
-  // Idioma en el que está escrito el contenido del escenario (nunca se traduce automáticamente).
+  // Idioma en el que está escrito el contenido del escenario (no se traduce automáticamente).
   language: normalizeLanguage(t.language) || DEFAULT_LANGUAGE,
   voceroIds: (t.assignments || []).map((a) => a.userId),
   sessions: t._count?.sessions ?? 0,
@@ -93,9 +93,8 @@ module.exports = function registerThemeRoutes(app, prisma) {
       });
       if (duplicated) return fail(res, 409, 'Ya existe otro tema con ese nombre.');
 
-      // Validacion ANTES de normalizar: si la configuracion solicitada supera el limite tecnico
-      // se rechaza con 422 en lugar de guardarla recortada en silencio. La duracion maxima es
-      // obligatoria al guardar (no se admite un escenario sin limite de tiempo).
+      // Validación antes de normalizar: si la configuración supera el límite técnico se rechaza con
+      // 422 en lugar de guardarla recortada. La duración máxima es obligatoria al guardar.
       if (req.body.interview !== undefined) {
         const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: true });
         if (configError) return res.status(422).json(configError);
@@ -237,7 +236,7 @@ module.exports = function registerThemeRoutes(app, prisma) {
 
   // ------------------------------------------------ Política de retención
 
-  // Plan vigente + fechas REALES (calculadas con la misma lógica que aplica la retención):
+  // Plan vigente + fechas reales (calculadas con la misma lógica que aplica la retención):
   //  - `nextPurgeAt`: la próxima fecha en que el sistema puede eliminar algo.
   //  - `periodEndsAt`: el fin del periodo actual (cuando la sesión más reciente cumple el plazo).
   //  - `pending`: cambio de plan programado, si existe.

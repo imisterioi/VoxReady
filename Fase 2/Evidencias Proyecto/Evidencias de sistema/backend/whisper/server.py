@@ -168,7 +168,7 @@ def _run_transcription(
 async def lifespan(_: FastAPI):
     # El modelo por defecto se carga al arrancar (no en cada petición). Si falla, el
     # servicio sigue en pie y /health explica el motivo: así el laboratorio puede
-    # informarlo. Con WHISPER_PRELOAD_ALL=true se cargan TODOS al arrancar (así la
+    # informarlo. Con WHISPER_PRELOAD_ALL=true se cargan todos al arrancar (así la
     # descarga de 'small' ocurre una sola vez y fuera de una petición).
     await asyncio.to_thread(REGISTRY.preload)
     yield
@@ -301,7 +301,7 @@ async def transcribe(
         raise HTTPException(status_code=413, detail=f"El archivo supera el límite de {MAX_MB} MB.")
 
     tmp_path = None
-    # `started` se toma DESPUÉS de la carga del modelo: `elapsed_ms` es solo inferencia.
+    # `started` se toma después de la carga del modelo: `elapsed_ms` es solo inferencia.
     started = time.perf_counter()
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix or ".webm") as tmp:
@@ -363,7 +363,7 @@ async def transcribe(
                 "duration_after_vad": round(float(getattr(info, "duration_after_vad", 0.0) or 0.0), 3),
                 # RTF = tiempo de proceso / duración del audio (< 1 = más rápido que tiempo real)
                 "rtf": round(elapsed_ms / 1000 / duration, 3) if duration > 0 else None,
-                # `elapsed_ms` es SOLO inferencia; la carga del modelo se informa aparte:
+                # `elapsed_ms` es solo inferencia; la carga del modelo se informa aparte:
                 # así no se confunde el arranque del modelo con el tiempo de transcripción.
                 "elapsed_ms": elapsed_ms,
                 "model_load_ms": model_load_ms,

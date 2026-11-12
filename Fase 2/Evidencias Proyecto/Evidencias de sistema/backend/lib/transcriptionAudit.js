@@ -1,8 +1,8 @@
 // Auditoría de transcripción por respuesta.
 //
-// Mapea el resultado de `transcribeAnswers` a filas de `TranscriptionAudit` y las guarda
-// con `upsert` sobre la clave única (sessionId, turnIndex): reintentar la evaluación no
-// duplica registros ni pisa una auditoría ya cerrada con datos de una tarea tardía.
+// Mapea el resultado de `transcribeAnswers` a filas de `TranscriptionAudit` y las guarda con
+// `upsert` sobre la clave única (sessionId, turnIndex): reintentar la evaluación no duplica registros
+// ni pisa una auditoría ya cerrada.
 //
 // No guarda el texto de cada motor, sólo su estado, duración y número de caracteres; el
 // texto completo se guarda únicamente para el motor elegido (y se borra con la retención).
@@ -46,9 +46,9 @@ function auditRowsFor({ sessionId, diagnostics = [], answers = [] } = {}) {
 
 // Persistencia idempotente con transición explícita:
 //   - si no existe la fila, se crea;
-//   - si ya existe, SÓLO se permite `failed → ok` (un reintento que sí transcribe);
-//   - una fila ya `ok` nunca se sobrescribe (ni por un reintento ni por una tarea tardía).
-// Nunca lanza: un fallo de auditoría no debe tumbar la evaluación.
+//   - si ya existe, solo se permite `failed → ok` (un reintento que sí transcribe);
+//   - una fila ya `ok` no se sobrescribe.
+// No lanza: un fallo de auditoría no debe tumbar la evaluación.
 async function persistAudit(prisma, rows = []) {
   let saved = 0;
   for (const row of rows) {

@@ -7,8 +7,8 @@ const path = require('path');
 
 const file = path.join(__dirname, '..', '..', 'frontend', 'src', 'components', 'MetricsDashboard.jsx');
 const source = fs.readFileSync(file, 'utf8');
-// Las etiquetas visibles ya no viven en el componente: se resuelven desde el diccionario central
-// del idioma activo. Por eso las etiquetas humanas se comprueban en el diccionario español.
+// Las etiquetas visibles se resuelven desde el diccionario central del idioma activo, así que se
+// comprueban en el diccionario español.
 const dictionary = fs.readFileSync(
   path.join(__dirname, '..', '..', 'frontend', 'src', 'data', 'dictionary.js'),
   'utf8',

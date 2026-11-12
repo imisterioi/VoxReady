@@ -18,7 +18,7 @@ const TENANT_PLAN_FIELDS = {
 };
 
 // Contexto que usa el cálculo: sesiones (creación y dueño) y pausas por usuario.
-// Es la MISMA información que revisa el proceso automático, así que las fechas que se muestran
+// Es la misma información que revisa el proceso automático, así que las fechas que se muestran
 // coinciden con las que aplica la retención.
 async function loadPlanContext(prisma, tenantId) {
   const [sessions, pauses] = await Promise.all([
@@ -99,9 +99,8 @@ async function schedulePlanChange(prisma, tenant, { mode, days }, { now = Date.n
   return { tenant: updated, effectiveAt, applied: applyNow ? 'now' : 'scheduled' };
 }
 
-// Aprueba una extensión: el plazo solicitado pasa a ser el vigente de inmediato (los datos
-// existentes quedan protegidos en la siguiente pasada de la retención) y, si había un cambio de
-// plan programado con un plazo menor, se eleva para que la extensión no quede sin efecto.
+// Aprueba una extensión: el plazo solicitado pasa a ser el vigente de inmediato y, si había un cambio
+// de plan programado con un plazo menor, se eleva para que la extensión no quede sin efecto.
 async function applyExtension(prisma, { tenantId, requestedDays }, { now = Date.now() } = {}) {
   const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: TENANT_PLAN_FIELDS });
   if (!tenant) return { found: false };

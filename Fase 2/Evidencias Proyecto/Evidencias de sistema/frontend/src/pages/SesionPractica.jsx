@@ -44,7 +44,7 @@ function formatTime(totalSeconds) {
 }
 
 export default function SesionPractica() {
-  const { d } = useI18n();
+  const { d, lang, setPracticeLock, releasePracticeLock } = useI18n();
   const t = d.L.u4;
   const tb = d.L.u4b;
   const navigate = useNavigate();
@@ -166,7 +166,7 @@ export default function SesionPractica() {
     // práctica o al terminar, ninguna pregunta debe seguir sonando.
     stopSpeaking();
     speechRef.current?.cancel(); // invalida callbacks y temporizador pendientes
-    // Se detienen los grabadores ANTES de soltar las pistas: así no queda ningún
+    // Se detienen los grabadores antes de soltar las pistas: así no queda ningún
     // MediaRecorder activo al descartar o salir de la práctica.
     stopAll([recorderRef.current, audioRecorderRef.current]);
     recorderRef.current = null;
@@ -199,8 +199,15 @@ export default function SesionPractica() {
       body: JSON.stringify({ themeId: scenario.id }),
     });
     const data = await response.json();
-    if (!response.ok) throw new Error(data.mensaje || tb.createFailed);
+    if (!response.ok) {
+      const failure = new Error(data.mensaje || tb.createFailed);
+      failure.status = response.status;
+      throw failure;
+    }
     sessionIdRef.current = data.sessionId;
+    // El idioma de la práctica queda BLOQUEADO con el de la sesión recién creada: el backend lo
+    // congela en `Session.language` y aquí se fija para toda la interfaz y sus peticiones.
+    setPracticeLock({ language: lang, sessionId: data.sessionId });
   }
 
   // Prepara cámara, micrófono, medición y modelo de cuerpo. NO graba todavía:
@@ -230,10 +237,10 @@ export default function SesionPractica() {
     // Grabación: se crea y arranca en startRecording(), cuando todo está listo.
     // (Grabar aquí incluía el tiempo de carga del entrevistador.)
 
-    // Segunda grabación, SOLO de audio (Opus ~32 kbps): es la que se transcribe en el
+    // Segunda grabación, solo de audio (Opus ~32 kbps): es la que se transcribe en el
     // servidor para medir el tiempo de habla. El video se sigue grabando igual que antes.
     //
-    // IMPORTANTE: se usa un MediaStream con SOLO la pista de audio. Con el stream mixto
+    // importante: se usa un MediaStream con solo la pista de audio. Con el stream mixto
     // (cámara + micrófono), Chromium acepta el constructor pero `start()` falla con
     // NotSupportedError (reproducido en Edge 155) y el Blob quedaba vacío en silencio.
     // Se crea también en startRecording().
@@ -242,7 +249,7 @@ export default function SesionPractica() {
     audioRef.current = new AudioMeter(stream);
     const pose = new PoseTracker(videoRef.current);
     poseRef.current = pose;
-    // El modelo de cuerpo se carga ANTES de grabar. Si tarda demasiado o falla, la
+    // El modelo de cuerpo se carga antes de grabar. Si tarda demasiado o falla, la
     // práctica sigue: simplemente no se medirá el cuerpo.
     const poseOk = await Promise.race([
       pose.load().catch(() => false),
@@ -412,7 +419,7 @@ export default function SesionPractica() {
 
   // Pide al backend la transcripción de la respuesta recién terminada. Nunca lanza: si falla, el
   // turno queda como "habló sin transcripción" (no como silencio) y la evaluación final volverá a
-  // transcribir el audio completo. El texto NUNCA se registra en el log técnico.
+  // transcribir el audio completo. El texto no se registra en el log técnico.
   async function transcribeAnswer({ startMs, endMs, turnIndex }) {
     if (!sessionIdRef.current) return normalizeTranscription({ ok: false });
     // Volcado del audio pendiente: `requestData()` fuerza un `dataavailable` con lo grabado desde
@@ -457,7 +464,7 @@ export default function SesionPractica() {
 
     const typedAnswer = (typedRef.current || '').trim();
     const audio = audioRef.current?.endAnswer();
-    // Fin de la respuesta relativo al MISMO origen que el audio enviado a NVIDIA.
+    // Fin de la respuesta relativo al mismo origen que el audio enviado a NVIDIA.
     const endMs = audioOriginRef.current
       ? Math.round(performance.now() - audioOriginRef.current)
       : null;
@@ -503,7 +510,7 @@ export default function SesionPractica() {
       endMs,
       metrics: turnMetrics(typedAnswer),
     };
-    // El turno se registra ANTES de esperar la transcripción: así, si el vocero finaliza la
+    // El turno se registra antes de esperar la transcripción: así, si el vocero finaliza la
     // entrevista durante esa espera, la respuesta no se pierde (mismo comportamiento que antes).
     turnsRef.current.push(turn);
     setTurnCount(turnsRef.current.length);
@@ -660,6 +667,8 @@ export default function SesionPractica() {
         console.warn('No se pudo eliminar la sesión:', err);
       }
     }
+    // Práctica abandonada: se libera el bloqueo del idioma.
+    releasePracticeLock();
     navigate('/vocero/escenarios');
   }
 
@@ -672,8 +681,8 @@ export default function SesionPractica() {
     const startTimer = setTimeout(async () => {
       try {
         await createSession();
-        // La pantalla pudo desmontarse mientras se creaba la sesión (salida, recarga o
-        // remontaje): esa sesión ya no se usará, así que se descarta en lugar de dejarla vacía.
+        // La pantalla pudo desmontarse mientras se creaba la sesión (salida, recarga o remontaje):
+        // esa sesión no se usará, así que se descarta en lugar de dejarla vacía.
         if (cancelled) {
           await discardUnused();
           return;
@@ -709,6 +718,9 @@ export default function SesionPractica() {
         if (audioRecorderRef.current?.state === 'recording') audioRecorderRef.current.stop();
         recorderRef.current = null;
         audioRecorderRef.current = null;
+        // El backend rechaza practicar un escenario que no está en el idioma de la sesión: se
+        // libera el bloqueo para que el vocero pueda ajustar el idioma o elegir otro escenario.
+        if (err?.status === 403) releasePracticeLock();
         if (!cancelled) setError(err.message || tb.startFailed);
         // Si la preparación falló antes de empezar, la sesión creada no tiene datos: se
         // descarta para no dejar un registro CREATED vacío. Si ya se estaba grabando, se
@@ -744,13 +756,39 @@ export default function SesionPractica() {
 
   return (
     <>
-      <PracticeSteps className="!mb-4" />
+      <PracticeSteps />
 
-      {/* La entrevista ocupa el alto de la pantalla: cámara grande a la izquierda y,
-          a la derecha, el entrevistador, la pregunta y los controles */}
-      <div className="rounded-[28px] bg-[#0B1118] p-3 ring-1 ring-black/5 shadow-lift grid grid-cols-1 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] gap-3 lg:h-[calc(100vh-160px)] lg:min-h-[440px] lg:max-h-[760px]">
-        {/* Cámara del vocero */}
-        <div className="relative h-[56vw] lg:h-auto rounded-2xl overflow-hidden bg-black">
+      {/* Dos pantallas del mismo tamaño, una al lado de la otra:
+          entrevistador virtual a la izquierda y cámara del vocero a la derecha */}
+      <div className="rounded-[28px] bg-[#0B1118] p-3 md:p-4 ring-1 ring-black/5 shadow-lift">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Entrevistador IA */}
+          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-br from-[#16263A] to-[#0E1824] flex items-center justify-center">
+            <div className="relative">
+              {phase === 'speaking' && <span className="absolute inset-0 rounded-full bg-accent/30 animate-pulse-ring" />}
+              <span
+                className={cx(
+                  'relative h-24 w-24 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-300',
+                  phase === 'speaking' ? 'bg-gradient-to-br from-accent to-brand-deep scale-105' : 'bg-gradient-to-br from-[#3A4A5E] to-[#1E2A38]',
+                )}
+              >
+                {phase === 'thinking' || phase === 'loading' ? (
+                  <span className="h-8 w-8 rounded-full border-2 border-white/20 border-t-white animate-spin" />
+                ) : (
+                  <Icon name="sparkles" size={34} strokeWidth={1.5} />
+                )}
+              </span>
+            </div>
+
+            <div className="absolute top-4 left-4 flex items-center gap-2 rounded-full bg-white/10 backdrop-blur px-3 h-7 text-white/90 text-xs">
+              <span className={cx('h-1.5 w-1.5 rounded-full', phase === 'speaking' ? 'bg-accent-bright animate-pulse' : 'bg-white/40')} />
+              {t.interviewer}
+            </div>
+            {scenario && <div className="absolute bottom-4 inset-x-4 text-center text-[11px] text-white/40 truncate">{scenario.title}</div>}
+          </div>
+
+          {/* Cámara del vocero */}
+          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-black">
           <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover -scale-x-100" />
 
           {phase === 'loading' && !error && (
@@ -796,148 +834,123 @@ export default function SesionPractica() {
               </div>
             </>
           )}
+          </div>
         </div>
 
-        {/* Entrevistador, pregunta y controles */}
-        <div className="flex flex-col gap-3 min-h-0">
-          {/* Entrevistador IA */}
-          <div className="flex items-center gap-4 rounded-2xl bg-gradient-to-br from-[#16263A] to-[#0E1824] px-4 py-3">
-            <div className="relative shrink-0">
-              {phase === 'speaking' && <span className="absolute inset-0 rounded-full bg-accent/30 animate-pulse-ring" />}
-              <span
-                className={cx(
-                  'relative h-14 w-14 rounded-full flex items-center justify-center text-white shadow-2xl transition-all duration-300',
-                  phase === 'speaking' ? 'bg-gradient-to-br from-accent to-brand-deep scale-105' : 'bg-gradient-to-br from-[#3A4A5E] to-[#1E2A38]',
-                )}
-              >
-                {phase === 'thinking' || phase === 'loading' ? (
-                  <span className="h-6 w-6 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                ) : (
-                  <Icon name="sparkles" size={24} strokeWidth={1.5} />
-                )}
-              </span>
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-medium text-white/90">
-                <span className={cx('h-1.5 w-1.5 rounded-full', phase === 'speaking' ? 'bg-accent-bright animate-pulse' : 'bg-white/40')} />
-                {t.interviewer}
-              </div>
-              {scenario && <div className="text-xs text-white/40 truncate mt-0.5">{scenario.title}</div>}
-            </div>
+        {/* Pregunta y respuesta en vivo: centradas debajo de ambas pantallas */}
+        <div className="px-4 md:px-8 pt-8 pb-6 text-center min-h-[180px]">
+          <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-4">
+            {phase === 'loading' ? tb.preparingShort : mainLabel}
           </div>
+          <p className="font-display font-medium text-[22px] md:text-[28px] leading-[1.35] tracking-[-0.015em] text-white max-w-3xl mx-auto">
+            {question ? `“${question}”` : '…'}
+          </p>
 
-          {/* Pregunta y respuesta */}
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-white/[0.03] px-5 py-4 flex flex-col">
-            <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-2">
-              {phase === 'loading' ? tb.preparingShort : mainLabel}
-            </div>
-            <p className="font-display font-medium text-[19px] xl:text-[21px] leading-[1.3] tracking-[-0.015em] text-white">
-              {question ? `“${question}”` : '…'}
+          {phase === 'listening' && !textMode && (
+            <p className="mt-5 text-sm text-white/60 max-w-2xl mx-auto leading-relaxed">
+              {tb.speakHint}
             </p>
+          )}
 
-            {phase === 'listening' && !textMode && (
-              <p className="mt-3 text-sm text-white/60 leading-relaxed">
-                {tb.speakHint}
-              </p>
-            )}
-
-            {phase === 'listening' && textMode && (
+          {phase === 'listening' && textMode && (
+            <div className="mt-5 max-w-2xl mx-auto">
               <textarea
                 value={typed}
                 onChange={(e) => setTyped(e.target.value)}
                 placeholder={tb.answerPlaceholder}
-                className="mt-3 w-full flex-1 min-h-[64px] rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 p-3 text-sm focus:outline-none focus:border-white/30"
+                className="w-full min-h-[90px] rounded-xl bg-white/5 border border-white/10 text-white placeholder:text-white/30 p-3 text-sm focus:outline-none focus:border-white/30"
               />
-            )}
+            </div>
+          )}
 
-            <p className="mt-auto pt-3 text-xs text-white/40 flex items-center gap-1.5">
-              {phase === 'listening' && !textMode && answerLeft != null && answerLeft <= 10 ? (
-                <>
-                  <Icon name="clock" size={12} /> {tb.remainingSeconds(answerLeft)}
-                </>
-              ) : phase === 'listening' && silenceIn ? (
-                <>
-                  <Icon name="clock" size={12} /> {tb.silenceDetected(silenceIn)}
-                </>
-              ) : (
-                status
-              )}
-            </p>
+          <p className="mt-4 text-xs text-white/40 flex items-center justify-center gap-1.5">
+            {phase === 'listening' && !textMode && answerLeft != null && answerLeft <= 10 ? (
+              <>
+                <Icon name="clock" size={12} /> {tb.remainingSeconds(answerLeft)}
+              </>
+            ) : phase === 'listening' && silenceIn ? (
+              <>
+                <Icon name="clock" size={12} /> {tb.silenceDetected(silenceIn)}
+              </>
+            ) : (
+              status
+            )}
+          </p>
+        </div>
+
+        {mediaWarning && !error && (
+          <div className="mx-1 mb-4 flex items-center gap-3 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-3 text-sm text-amber-200">
+            <Icon name="info" size={16} className="shrink-0" />
+            <span className="flex-1">{mediaWarning}</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="mx-1 mb-4 flex items-center gap-3 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-300">
+            <Icon name="alert" size={16} className="shrink-0" />
+            <span className="flex-1">{error}</span>
+            {!scenario && (
+              <Button variant="secondary" size="sm" to="/vocero/escenarios">
+                {tb.chooseScenario}
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Controles */}
+        <div className="flex flex-col md:flex-row md:items-center gap-3 rounded-2xl bg-white/[0.04] p-3 md:p-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={discardSession}
+              disabled={phase === 'finishing'}
+              className="h-11 px-4 rounded-xl hover:bg-red-500/10 text-white/60 hover:text-red-300 text-sm font-medium inline-flex items-center gap-2 transition-colors disabled:opacity-40"
+            >
+              <Icon name="x" size={16} /> {tb.discard}
+            </button>
+            <button
+              type="button"
+              onClick={repeatQuestion}
+              disabled={phase !== 'listening'}
+              className="h-11 px-4 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-sm font-medium inline-flex items-center gap-2 transition-colors disabled:opacity-40"
+            >
+              <Icon name="repeat" size={16} /> {t.repeat}
+            </button>
           </div>
 
-          {mediaWarning && !error && (
-            <div className="flex items-center gap-3 rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-2 text-[13px] text-amber-200">
-              <Icon name="info" size={16} className="shrink-0" />
-              <span className="flex-1">{mediaWarning}</span>
+          <div className="flex items-center gap-3 md:flex-1 md:max-w-xs md:mx-auto">
+            <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${progressPercent(progress)}%` }} />
             </div>
-          )}
+            <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
+              {tb.mainsOf(progress.mainsAsked, progress.mainsTotal ?? '—')}
+            </span>
+          </div>
 
-          {error && (
-            <div className="flex items-center gap-3 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-2 text-[13px] text-red-300">
-              <Icon name="alert" size={16} className="shrink-0" />
-              <span className="flex-1">{error}</span>
-              {!scenario && (
-                <Button variant="secondary" size="sm" to="/vocero/escenarios">
-                  {tb.chooseScenario}
-                </Button>
-              )}
-            </div>
-          )}
-
-          {/* Controles */}
-          <div className="rounded-2xl bg-white/[0.04] p-3 space-y-3">
-            <div className="flex items-center gap-3 px-1">
-              <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full rounded-full bg-accent-bright transition-all duration-500" style={{ width: `${progressPercent(progress)}%` }} />
-              </div>
-              <span className="text-xs text-white/50 whitespace-nowrap tabular-nums">
-                {tb.mainsOf(progress.mainsAsked, progress.mainsTotal ?? '—')}
-              </span>
-            </div>
-
+          <div className="flex items-center gap-2 md:ml-auto">
+            <button
+              type="button"
+              onClick={finishEarly}
+              disabled={phase === 'finishing' || phase === 'loading' || (turnCount === 0 && phase !== 'listening')}
+              className="h-11 px-4 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-sm font-medium transition-colors disabled:opacity-40"
+            >
+              {t.finish}
+            </button>
             <Button
               variant="accent"
               size="lg"
-              className="w-full"
               onClick={() => finishAnswer()}
               disabled={phase !== 'listening' || (textMode && !typed.trim())}
             >
               {phase === 'finishing' ? tb.saving : tb.finishedAnswer}
             </Button>
-
-            <div className="flex items-center justify-between gap-1">
-              <button
-                type="button"
-                onClick={discardSession}
-                disabled={phase === 'finishing'}
-                className="h-9 px-3 rounded-xl hover:bg-red-500/10 text-white/60 hover:text-red-300 text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors disabled:opacity-40"
-              >
-                <Icon name="x" size={15} /> {tb.discard}
-              </button>
-              <button
-                type="button"
-                onClick={repeatQuestion}
-                disabled={phase !== 'listening'}
-                className="h-9 px-3 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-[13px] font-medium inline-flex items-center gap-1.5 transition-colors disabled:opacity-40"
-              >
-                <Icon name="repeat" size={15} /> {t.repeat}
-              </button>
-              <button
-                type="button"
-                onClick={finishEarly}
-                disabled={phase === 'finishing' || phase === 'loading' || (turnCount === 0 && phase !== 'listening')}
-                className="h-9 px-3 rounded-xl hover:bg-white/10 text-white/70 hover:text-white text-[13px] font-medium transition-colors disabled:opacity-40"
-              >
-                {t.finish}
-              </button>
-            </div>
           </div>
-
-          <p className="text-[11px] text-white/30 flex items-start gap-1.5 px-1">
-            <Icon name="info" size={12} className="mt-0.5 shrink-0" /> {tb.headphones}
-          </p>
         </div>
       </div>
+
+      <p className="text-center text-xs text-faint mt-6 flex items-center justify-center gap-1.5">
+        <Icon name="info" size={13} /> {tb.headphones}
+      </p>
     </>
   );
 }

@@ -178,7 +178,11 @@ model Session {
   metrics     Json? // Métricas de voz, cuerpo e iluminación medidas en el navegador
   report      Json? // Informe generado por la IA evaluadora
   score       Int? // Puntaje global 0-100
-  review      Json? // Segunda opinión del experto (cola de etiquetado)
+  review      Json? // Segunda opinión del experto (cola de etiquetado): versión PUBLICADA
+  // Revisión humana en dos pasos: el BORRADOR es privado del revisor (el vocero sigue viendo el
+  // informe original) y al publicar se avisa al vocero con una notificación.
+  reviewDraft  Json? // cambios pendientes de publicar (nunca visibles para el vocero)
+  reviewSeenAt DateTime? // última vez que el vocero abrió la revisión publicada (notificación leída)
 
   // Idioma con el que se inició la sesión ('es' | 'en'). Congela el idioma de la entrevista y de
   // su informe: cambiar después la preferencia del vocero no altera las sesiones ya iniciadas.
@@ -397,5 +401,32 @@ model TenantEvent {
   tenantCreatedAt DateTime?
 
   @@index([type, at])
+}
+
+
+// 13. Microlecciones: formación de voceros administrada por el equipo VoxReady.
+//
+//  - `language` es el idioma PROPIO de la lección ('es' | 'en'). No se infiere del título ni del
+//    contenido y no se traduce automáticamente: una lección en inglés solo aparece en el catálogo
+//    inglés. Si se quiere la misma temática en dos idiomas se crean dos lecciones independientes.
+//  - `areas` son las áreas de la RÚBRICA que refuerza (subconjunto de expression | voice |
+//    coherence | empathy). No se crean áreas nuevas.
+//  - `active` permite retirarla del catálogo sin borrarla.
+//  - El video vive en disco (`uploads/lessons`) y se entrega SIEMPRE por una ruta protegida.
+model MicroLesson {
+  id          String   @id @default(uuid())
+  title       String
+  description String
+  language    String   @default("es")
+  areas       Json
+  active      Boolean  @default(true)
+  videoFile   String?
+  videoMime   String?
+  videoBytes  Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String?
+
+  @@index([language, active])
 }
 

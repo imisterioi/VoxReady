@@ -1,9 +1,9 @@
 // Catálogo de motores del Laboratorio de transcripción y utilidades para compararlos.
 //
-// Módulo PURO (sin React, sin red, sin dependencias): se prueba con `node --test`.
+// Módulo puro (sin React, sin red, sin dependencias): se prueba con `node --test`.
 //
 // Reglas del experimento (las mismas de siempre):
-//  - Los motores trabajan sobre la MISMA grabación y el MISMO guion de referencia.
+//  - Los motores trabajan sobre la misma grabación y el mismo guion de referencia.
 //  - Whisper Base y Whisper Small son cómputo LOCAL (faster-whisper en el servicio
 //    FastAPI): el audio no sale del equipo.
 //  - Speech API es el reconocimiento del navegador: escucha el micrófono en vivo y el
@@ -128,8 +128,8 @@ export function supportsFileInput(engine) {
 
 // ---------------------------------------------------------------- métricas
 
-// Métricas de una transcripción respecto del guion, con el MISMO procedimiento para
-// todos los motores. Si no hay guion no se inventa un WER: se marca como no medible.
+// Métricas de una transcripción respecto del guion, con el mismo procedimiento para todos los
+// motores. Sin guion no hay WER: se marca como no medible.
 export function metricsFor(text, reference, options = {}) {
   const hasReference = Boolean(normalizeText(reference ?? '', options));
   const comparison = compareWithReference(reference ?? '', String(text ?? ''), { options });

@@ -1,6 +1,6 @@
 ﻿// Núcleo del laboratorio «En tiempo real».
 //
-// IMPORTANTE: faster-whisper NO hace streaming nativo. Aquí se trocea el audio y se
+// importante: faster-whisper NO hace streaming nativo. Aquí se trocea el audio y se
 // transcribe cada fragmento con el servicio por petición; el texto aparece de forma
 // INCREMENTAL (no en tiempo real) y el retraso se mide y se muestra.
 //
@@ -23,7 +23,7 @@ export function latencyStats(values = []) {
 }
 
 // Reloj por defecto: MONOTÓNICO (performance.now), en milisegundos.
-// IMPORTANTE: todas las marcas que entran al pipeline deben venir del MISMO reloj.
+// Importante: todas las marcas que entran al pipeline deben venir del mismo reloj.
 // Mezclar Date.now() con performance.now() produce diferencias del orden de 1.79e9 ms
 // (epoch) que se mostraban como "1792530551.5 s" de latencia.
 export const monotonicNow = () =>
@@ -172,7 +172,7 @@ export function createChunkPipeline({
 
     getState: () => ({ ...state, chunks: [...state.chunks], errors: [...state.errors] }),
 
-    // Espera a vaciar la cola. Devuelve el estado final y NUNCA lo declara completo si
+    // Espera a vaciar la cola. Devuelve el estado final y nunca lo declara completo si
     // quedan fragmentos pendientes o fallidos.
     async stop({ timeoutMs = flushTimeoutMs } = {}) {
       if (state.status === 'cancelled') {

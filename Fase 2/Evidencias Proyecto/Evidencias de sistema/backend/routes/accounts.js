@@ -186,7 +186,7 @@ module.exports = function registerAccountRoutes(app, prisma) {
       const existing = await prisma.tenant.findUnique({ where: { id: req.params.id } });
       if (!existing) return fail(res, 404, 'Organización no encontrada.');
       if (existing.status === 'DELETING') return fail(res, 409, 'La organización está en proceso de eliminación.');
-      // Cambia el estado y ajusta las pausas de retención de TODOS los voceros del tenant (atómico).
+      // Cambia el estado y ajusta las pausas de retención de todos los voceros del tenant (atómico).
       const tenant = await prisma.$transaction(async (tx) => {
         const updated = await tx.tenant.update({ where: { id: req.params.id }, data: { status } });
         const users = await tx.user.findMany({ where: { tenantId: updated.id }, select: { id: true } });

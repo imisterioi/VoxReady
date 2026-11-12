@@ -46,7 +46,7 @@ test('la respuesta tardía de otro modelo no deja promesas sin gestionar', async
     const winner = await fast;
     assert.equal(winner.question, '¿Primera pregunta?');
 
-    // El modelo lento termina DESPUÉS y con error: no debe producir unhandledRejection.
+    // El modelo lento termina después y con error: no debe producir unhandledRejection.
     resolveSlow({ ok: false, status: 503, text: async () => 'caído' });
     await tick();
     await tick();
@@ -138,7 +138,7 @@ test('contexto sin cfg ni plan: se derivan del tema (no se atribuye a los modelo
   assert.ok(seen[0].messages[0].content.includes('Eres'), 'el prompt del sistema se construye sin cfg');
 });
 
-// --- E4: el prompt describe el turno REAL y el contexto de la repregunta ---
+// --- E4: el prompt describe el turno real y el contexto de la repregunta ---
 
 const captureFetch = (captured) => async (url, init) => {
   captured.push(JSON.parse(init.body));

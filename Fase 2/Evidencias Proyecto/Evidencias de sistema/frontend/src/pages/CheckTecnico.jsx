@@ -5,11 +5,21 @@ import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Badge, Button, Card, Checkbox, Field, PageHeader, Progress, cx } from '../components/ui';
 import { ScenarioBriefModal } from '../components/ScenarioBrief';
+import PoseTracker from '../lib/practice/poseTracker';
+import {
+  CALIBRATION_MS,
+  SAMPLE_MS,
+  addSample,
+  calibrationResult,
+  createCalibration,
+  isFinished,
+  progress as calibrationProgressOf,
+} from '../lib/practice/calibration';
 
 // El escenario (contexto, mensajes clave y líneas rojas) se muestra en una
 // ventana emergente al entrar; se puede volver a abrir con "Ver escenario".
 export default function CheckTecnico() {
-  const { d } = useI18n();
+  const { d, lang, setPracticeLock } = useI18n();
   const t = d.L.u3;
   const tb = d.L.u3b;
   const navigate = useNavigate();
@@ -22,6 +32,13 @@ export default function CheckTecnico() {
       return null;
     }
   })();
+
+  // El idioma queda BLOQUEADO desde que se entra en la preparación: se fija con el idioma del
+  // escenario elegido (el idioma activo con el que se seleccionó). Se libera al salir del flujo de
+  // práctica (lo hace la cabecera) o cuando el informe queda listo.
+  useEffect(() => {
+    setPracticeLock({ language: lang });
+  }, [lang, setPracticeLock]);
 
   // -----------------------------------------
   // Estados
@@ -62,6 +79,12 @@ export default function CheckTecnico() {
 
   const brightnessCanvasRef = useRef(null);
   const brightnessAnimationRef = useRef(null);
+
+  // Calibración real (≈10 s): acumula muestras de micrófono, imagen y presencia.
+  const calibrationRef = useRef(null);
+  const micBufferRef = useRef(null);
+  const poseTrackerRef = useRef(null);
+  const [calibrationOutcome, setCalibrationOutcome] = useState(null);
 
   // -----------------------------------------
   // Activar cámara
@@ -231,32 +254,68 @@ export default function CheckTecnico() {
   // Iniciar calibración
   // -----------------------------------------
 
+  // Calibración real (≈10 s): durante la ventana se recogen muestras del micrófono (RMS), de la
+  // imagen de la cámara y de la presencia (MediaPipe, el mismo mecanismo que usa la entrevista), y
+  // al terminar se clasifican en un resultado sencillo. No es un temporizador: mide de verdad.
   const startCalibration = () => {
     if (!cameraActive) {
       setError(tb.errCameraFirst);
+      return;
+    }
+    if (!microphoneActive) {
+      setError(tb.errMicFirst);
       return;
     }
 
     setError('');
     setCalibrating(true);
     setCalibrationProgress(0);
+    setCalibrationOutcome(null);
+    const clock = () => performance.now();
+    calibrationRef.current = createCalibration({ now: clock });
 
-    const startTime = performance.now();
-    const duration = 1000;
+    // Presencia frente a la cámara con el mecanismo existente. Si el modelo no está listo a tiempo,
+    // la calibración NO se bloquea: se evalúa que la cámara entregue imagen.
+    if (!poseTrackerRef.current && videoRef.current) {
+      const tracker = new PoseTracker(videoRef.current);
+      poseTrackerRef.current = tracker;
+      tracker
+        .load()
+        .then((ready) => {
+          if (ready && !tracker.running) tracker.start();
+        })
+        .catch(() => {});
+    }
 
     calibrationTimerRef.current = setInterval(() => {
-      const elapsed = performance.now() - startTime;
+      const analyser = analyserRef.current;
+      let micLevel = null;
+      if (analyser) {
+        if (!micBufferRef.current || micBufferRef.current.length !== analyser.fftSize) {
+          micBufferRef.current = new Float32Array(analyser.fftSize);
+        }
+        analyser.getFloatTimeDomainData(micBufferRef.current);
+        let sum = 0;
+        for (const value of micBufferRef.current) sum += value * value;
+        micLevel = Math.sqrt(sum / micBufferRef.current.length);
+      }
 
-      const progress = Math.min(elapsed / duration, 1);
+      const video = videoRef.current;
+      const hasImage = Boolean(video && video.readyState >= 2 && video.videoWidth > 0);
+      const tracker = poseTrackerRef.current;
+      const person = tracker?.ready ? Boolean(tracker.personNow) : null;
 
-      setCalibrationProgress(progress);
+      calibrationRef.current = addSample(calibrationRef.current, { micLevel, hasImage, person });
+      setCalibrationProgress(calibrationProgressOf(calibrationRef.current, clock));
 
-      if (progress >= 1) {
+      if (isFinished(calibrationRef.current, clock)) {
         clearInterval(calibrationTimerRef.current);
         calibrationTimerRef.current = null;
         setCalibrating(false);
+        setCalibrationOutcome(calibrationResult(calibrationRef.current));
+        poseTrackerRef.current?.stop?.();
       }
-    }, 100);
+    }, SAMPLE_MS);
   };
 
   // -----------------------------------------
@@ -316,6 +375,12 @@ export default function CheckTecnico() {
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
+
+      // La calibración no debe dejar la cámara ni el micrófono abiertos al abandonar la pantalla.
+      if (poseTrackerRef.current) {
+        poseTrackerRef.current.destroy();
+        poseTrackerRef.current = null;
+      }
     };
   }, []);
 
@@ -349,19 +414,49 @@ export default function CheckTecnico() {
 
   const consentOk = check1 && check2;
   const calibrationDone = calibrationProgress >= 1;
+  // Resultado real de la calibración: solo se exige que no haya problemas que impidan practicar
+  // (sin señal de micrófono o cámara sin imagen). Volumen bajo y encuadre mejorable solo avisan.
+  const calibrationOk = Boolean(calibrationOutcome?.canStart);
+
+  const MIC_LABELS = {
+    ok: tb.calibMicOk,
+    low: tb.calibMicLow,
+    silent: tb.calibMicSilent,
+    unavailable: tb.calibMicNone,
+  };
+  const CAMERA_LABELS = { ok: tb.calibCamOk, 'no-image': tb.calibCamNoImage, framing: tb.calibCamFraming };
+  const calibrationMicLabel = calibrationOutcome ? MIC_LABELS[calibrationOutcome.mic.status] : '';
+  const calibrationCameraLabel = calibrationOutcome ? CAMERA_LABELS[calibrationOutcome.camera.status] : '';
+  const calibrationHints = calibrationOutcome
+    ? [
+        calibrationOutcome.mic.status === 'low' && tb.calibHintLow,
+        calibrationOutcome.mic.status === 'silent' && tb.calibHintSilent,
+        calibrationOutcome.mic.status === 'unavailable' && tb.calibHintMicUnavailable,
+        calibrationOutcome.camera.status === 'no-image' && tb.calibHintNoImage,
+        calibrationOutcome.camera.status === 'framing' && tb.calibHintFraming,
+        calibrationOutcome.mic.noise === 'high' && tb.calibHintNoise,
+      ].filter(Boolean)
+    : [];
 
   const canStart =
     consentOk &&
     cameraActive &&
     microphoneActive &&
     lightingOk &&
-    calibrationDone;
+    calibrationDone &&
+    calibrationOk;
 
   const checks = [
     { label: tb.checkCamera, ok: cameraActive, icon: 'camera' },
     { label: tb.checkMic, ok: microphoneActive, icon: 'mic' },
     { label: tb.checkLighting, ok: lightingOk, icon: 'sun', warn: cameraActive && !lightingOk },
-    { label: tb.checkCalibration, ok: calibrationDone, icon: 'person', progress: calibrating },
+    {
+      label: tb.checkCalibration,
+      ok: calibrationDone && calibrationOk,
+      icon: 'person',
+      progress: calibrating,
+      warn: calibrationDone && !calibrationOk,
+    },
     { label: tb.checkConsent, ok: consentOk, icon: 'shield' },
   ];
   const doneCount = checks.filter((c) => c.ok).length;
@@ -400,9 +495,15 @@ export default function CheckTecnico() {
       )}
 
       {error && (
-        <div className="mb-6 flex items-center gap-3 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
-          <Icon name="alert" size={16} />
-          {error}
+        <div className="mb-6 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger">
+          <div className="flex items-center gap-3">
+            <Icon name="alert" size={16} />
+            {error}
+          </div>
+          {/* Sin permisos no hay nada que medir: se explica cómo habilitarlos. */}
+          {(error === tb.errCamera || error === tb.errMic) && (
+            <p className="text-xs text-muted mt-1 pl-7">{tb.permissionHint}</p>
+          )}
         </div>
       )}
 
@@ -565,21 +666,62 @@ export default function CheckTecnico() {
               )}
             </div>
 
-            {/* Calibración */}
-            <div className="mt-6 pt-6 border-t border-line flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium text-ink">{tb.calibration}</span>
-                  <span className="text-xs text-muted tabular-nums">
-                    {calibrating ? `${Math.round(calibrationProgress * 100)}%` : calibrationDone ? tb.completed : tb.pending}
-                  </span>
+            {/* Calibración real del equipo (micrófono + cámara, ≈10 s) */}
+            <div className="mt-6 pt-6 border-t border-line">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-ink">{tb.calibration}</span>
+                    <span className="text-xs text-muted tabular-nums">
+                      {calibrating
+                        ? tb.calibProgress(Math.ceil((1 - calibrationProgress) * (CALIBRATION_MS / 1000)))
+                        : calibrationDone
+                          ? tb.completed
+                          : tb.pending}
+                    </span>
+                  </div>
+                  <Progress value={calibrationProgress * 100} tone={calibrationDone && calibrationOk ? 'success' : 'accent'} />
+                  <p className="text-xs text-faint mt-2">{calibrating ? tb.calibHintStay : tb.calibrationHint}</p>
                 </div>
-                <Progress value={calibrationProgress * 100} tone={calibrationDone ? 'success' : 'accent'} />
-                <p className="text-xs text-faint mt-2">{tb.calibrationHint}</p>
+                <Button
+                  variant="secondary"
+                  icon="person"
+                  onClick={startCalibration}
+                  disabled={!cameraActive || !microphoneActive || calibrating}
+                >
+                  {calibrating ? tb.calibrating : calibrationDone ? tb.recalibrate : tb.startCalibration}
+                </Button>
               </div>
-              <Button variant="secondary" icon="person" onClick={startCalibration} disabled={!cameraActive || calibrating}>
-                {calibrating ? tb.calibrating : tb.startCalibration}
-              </Button>
+
+              {/* Resultado: qué se midió y qué debe corregir el vocero (si hace falta) */}
+              {calibrationOutcome && !calibrating && (
+                <div
+                  className={cx(
+                    'mt-4 rounded-xl border px-4 py-3',
+                    calibrationOk ? 'border-success/30 bg-success/5' : 'border-danger/30 bg-danger/5',
+                  )}
+                >
+                  <div className="flex items-center gap-2 text-sm font-medium text-ink">
+                    <Icon
+                      name={calibrationOk ? 'check' : 'alert'}
+                      size={15}
+                      strokeWidth={calibrationOk ? 2.5 : 1.75}
+                      className={calibrationOk ? 'text-success' : 'text-danger'}
+                    />
+                    {calibrationOk ? tb.calibReady : tb.calibReview}
+                  </div>
+                  <div className="mt-2 space-y-1 text-[13px]">
+                    <div className="text-muted">{tb.calibrationResult}</div>
+                    <div className={cx(calibrationOutcome.mic.status === 'ok' ? 'text-muted' : 'text-danger')}>{calibrationMicLabel}</div>
+                    <div className={cx(calibrationOutcome.camera.status === 'ok' ? 'text-muted' : 'text-danger')}>{calibrationCameraLabel}</div>
+                    {calibrationHints.map((hint) => (
+                      <div key={hint} className="text-danger">
+                        {hint}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </div>

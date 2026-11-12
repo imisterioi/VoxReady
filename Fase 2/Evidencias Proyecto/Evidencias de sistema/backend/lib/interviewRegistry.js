@@ -1,8 +1,8 @@
 // Registro en memoria de las sesiones de entrevista orquestadas.
 //
-// Una misma práctica reutiliza SIEMPRE la misma instancia (mismas reservas, mismo contexto y
+// Una misma práctica reutiliza siempre la misma instancia (mismas reservas, mismo contexto y
 // mismo modelo activo) entre solicitudes. No se comparte nada entre sesiones distintas.
-// La limpieza es explícita (dispose) o por `disposeIdle`: nunca se libera una sesión con
+// La limpieza es explícita (dispose) o por `disposeIdle`: no se libera una sesión con
 // consultas pendientes, para no perder respuestas en curso.
 const sessions = new Map();
 

@@ -1,7 +1,7 @@
 // Estado centralizado de una entrevista + orquestación de modelos del entrevistador.
 //
 // Reglas:
-//  - Todas las consultas se lanzan EN PARALELO y NINGUNA se cancela porque otra responda antes;
+//  - Todas las consultas se lanzan EN paralelo y ninguna se cancela porque otra responda antes;
 //    las respuestas útiles quedan como reserva.
 //  - El estado (reservadas / formuladas / respuestas / repreguntas / turno) vive aquí.
 //  - Una reserva se consume UNA sola vez.
@@ -65,11 +65,10 @@ function createInterviewSession({
     elapsedMs: state.startedAt ? now() - state.startedAt : 0,
   });
 
-  // Contexto común: distingue lo reservado (aún NO formulado) de lo formulado y de las respuestas.
-  // `base` es el contexto de producción (theme/history/cfg/plan) que envía la ruta: sin él,
-  // `buildSystemPrompt` no puede leer la configuración del escenario (fallaba con
-  // "reading 'aggressiveness'"). Se conserva como último contexto recibido para las tandas en
-  // segundo plano, de modo que todas las consultas usen la MISMA configuración del escenario.
+  // Contexto común: distingue lo reservado (aún no formulado) de lo formulado y de las respuestas.
+  // `base` es el contexto de producción (theme/history/cfg/plan) que envía la ruta y que
+  // `buildSystemPrompt` necesita para leer la configuración del escenario. Se conserva como último
+  // contexto recibido para las tandas en segundo plano.
   const contextFor = ({ kind, originAnswer = null, focus = null, mainQuestion = null, hasTranscript = null, base = state.base } = {}) => ({
     ...(base || {}),
     sessionId: state.sessionId,
@@ -108,7 +107,7 @@ function createInterviewSession({
 
   function handleError({ model, error, requestId }) {
     if (state.disposed) return;
-    // Error definitivo → se desactiva SOLO ese modelo; el resto sigue trabajando.
+    // Error definitivo → se desactiva solo ese modelo; el resto sigue trabajando.
     const definitive = ['HTTP 401', 'HTTP 403', 'HTTP 404', 'HTTP 410'].some((token) =>
       String(error?.message || '').includes(token),
     );
@@ -198,7 +197,7 @@ function createInterviewSession({
   }
 
   // Reconstruye el estado desde el historial disponible (p. ej. tras reiniciar el backend o
-  // perder el registro en memoria). `kindFor(i)` decide normal/repregunta con la regla REAL
+  // perder el registro en memoria). `kindFor(i)` decide normal/repregunta con la regla real
   // del proyecto (interviewConfig/turnPlan), que el llamador inyecta.
   // NO recupera reservas previas (viven en memoria y no persisten): solo lo ya formulado.
   function seed({ history = [], kindFor = () => 'normal' } = {}) {

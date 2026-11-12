@@ -92,7 +92,7 @@ export default function EditorTema() {
   const [params] = useSearchParams();
   const editingId = params.get('id');
 
-  // Idioma del contenido del escenario personalizado (nunca se traduce automáticamente).
+  // Idioma del contenido del escenario personalizado (no se traduce automáticamente).
   const [language, setLanguage] = useState(lang);
 
   const [name, setName] = useState('');

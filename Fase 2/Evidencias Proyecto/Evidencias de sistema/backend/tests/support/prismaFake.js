@@ -1,5 +1,5 @@
 // Apoyo de pruebas: evaluador de condiciones y operaciones atómicas para un Prisma falso.
-// Cubre SOLO lo que usan las rutas (igualdad, null, { in }, { not }, { lt }, { lte }, { gt },
+// Cubre solo lo que usan las rutas (igualdad, null, { in }, { not }, { lt }, { lte }, { gt },
 // OR/AND y { increment }). No es un motor SQL: mantiene las pruebas deterministas y sin base real.
 const compare = (a, b) => {
   if (a instanceof Date || b instanceof Date) return new Date(a).getTime() - new Date(b).getTime();

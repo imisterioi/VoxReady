@@ -1,7 +1,7 @@
 // Origen de datos del progreso: qué historial consulta cada audiencia.
 //
-// Regla de seguridad (comprobada en el backend, no aquí): el vocero NUNCA envía `userId`
-// —siempre se consulta su propia sesión del token— y el administrador siempre indica el
+// Regla de seguridad (comprobada en el backend, no aquí): el vocero nunca envía `userId`
+// —se consulta su propia sesión del token— y el administrador siempre indica el
 // vocero de su organización. Si falta el identificador en la vista administrativa se devuelve
 // `null` (no se consulta nada) en vez de caer en el historial propio o en el de toda la
 // organización.
@@ -22,8 +22,8 @@ export function progressPath({ audience = 'user', userId = null, page = 1, limit
   return query ? `/api/sessions?${query}` : '/api/sessions';
 }
 
-// Ventana acotada para las estadísticas del progreso (series, tendencia y recomendaciones).
-// No es "todo el historial": es el mismo tope histórico del endpoint y se mantiene acotado.
+// Ventana acotada para las estadísticas del progreso (series, tendencia y recomendaciones), con el
+// mismo tope de sesiones que el endpoint del historial.
 export function analyticsPath({ audience = 'user', userId = null, limit = 50 } = {}) {
   return progressPath({ audience, userId, page: 1, limit });
 }

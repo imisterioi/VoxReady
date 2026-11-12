@@ -187,7 +187,7 @@ export default function RecordedComparison() {
   };
 
 
-  // Ejecuta los motores EN SERIE sobre la MISMA grabación. Nunca dos a la vez.
+  // Ejecuta los motores EN SERIE sobre la misma grabación. Nunca dos a la vez.
   const runEngines = useCallback(
     async (engineIds) => {
       if (busyRef.current || !recorded?.blob?.size) return;

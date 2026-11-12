@@ -1,10 +1,10 @@
-// Pruebas de integridad de la evaluación (Etapa 1).
+// Pruebas de integridad de la evaluación.
 //
 //   cd backend && node --test tests/evaluation-integrity.test.js
 //
-// No usan red, ni base de datos, ni el proveedor de IA: validan la normalización de la
-// entrada, la validación de la respuesta del modelo, el registro del modelo ganador y la
-// compatibilidad del informe con la interfaz actual.
+// No usan red, ni base de datos, ni el proveedor de IA: validan la normalización de la entrada, la
+// validación de la respuesta del modelo, el registro del modelo ganador y la forma del informe que
+// consume la interfaz.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -30,7 +30,7 @@ const {
 
 const turn = (question, answer, metrics) => ({ question, answer, metrics });
 
-// Turnos con SOLO las señales que el navegador sí puede aportar (palabras y muletillas se
+// Turnos con solo las señales que el navegador sí puede aportar (palabras y muletillas se
 // recalculan en el servidor, así que no se declaran).
 const validTranscript = () => [
   turn('¿Qué ocurrió?', 'Quiero lamentar profundamente lo ocurrido y expresar nuestra solidaridad con la familia afectada.', {
@@ -66,7 +66,7 @@ const validMetrics = () => ({
   durationSeconds: 25,
 });
 
-// Respuesta del modelo con TODOS los criterios por defecto (0-100).
+// Respuesta del modelo con todos los criterios por defecto (0-100).
 function judgementFixture(overrides = {}) {
   const coherencia = Object.fromEntries(Object.keys(DEFAULT_CONFIG.coherence.criteria).map((key) => [key, 80]));
   const empatia = Object.fromEntries(Object.keys(DEFAULT_CONFIG.empathy.criteria).map((key) => [key, 70]));

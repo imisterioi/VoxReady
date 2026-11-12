@@ -17,7 +17,7 @@ import {
 // Formulario ÚNICO de solicitudes del administrador del cliente.
 //
 // Se elige primero el tipo de solicitud y solo aparecen los campos de ese tipo; al cambiarlo, los
-// campos del tipo anterior se descartan (ver lib/requestForm.js), así nunca se envían datos
+// campos del tipo anterior se descartan (ver lib/requestForm.js), así no se envían datos
 // incompatibles. El envío lo ejecuta la pantalla, que conoce las listas que hay que refrescar.
 export default function RequestFormModal({
   open = true,

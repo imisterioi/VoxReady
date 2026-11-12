@@ -7,12 +7,11 @@
 //    habla válida, palabras/minuto y muletillas/minuto) se RECALCULA.
 //  - Lo que solo existe en el navegador (MediaPipe, AudioMeter: duración de habla, latencia,
 //    pausas, variación de volumen, mirada/risa) se conserva como DECLARADO POR EL CLIENTE y
-//    nunca se presenta como verificado.
+//    no se presenta como verificado.
 //  - Los valores no numéricos, NaN, infinitos o fuera de rango se descartan (null) y quedan
-//    registrados como advertencia; nunca se convierten en un valor que mejore el puntaje.
+//    registrados como advertencia; no se convierten en un valor que mejore el puntaje.
 //
-// No se inventan métricas para "poder guardar" el informe: si un área se queda sin datos,
-// el evaluador la deja como no medida (comportamiento ya existente del proyecto).
+// Si un área se queda sin datos, el evaluador la deja como no medida.
 
 const {
   MAX_ANSWER_CHARS,
@@ -220,7 +219,7 @@ function normalizeTranscript(rawTranscript, warnings) {
   return { turns };
 }
 
-// Agregado de voz con la MISMA forma que consumía el evaluador.
+// Agregado de voz con la misma forma que consumía el evaluador.
 function buildVoice(turns, rawVoice, warnings) {
   const valuesOf = (key) => turns.map((turn) => turn.metrics[key]).filter((value) => Number.isFinite(value));
   const sumOf = (key) => {

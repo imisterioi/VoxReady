@@ -7,7 +7,7 @@
 // micrófono) construye bien pero falla al arrancar:
 //     NotSupportedError: Failed to execute 'start' on 'MediaRecorder'
 // No depende del bitrate ni del MIME: con `new MediaStream(stream.getAudioTracks())`
-// arranca y entrega datos. Por eso el grabador de audio SIEMPRE usa un stream solo-audio.
+// arranca y entrega datos. Por eso el grabador de audio siempre usa un stream solo-audio.
 //
 // El módulo no toca el DOM directamente: recibe las factorías (MediaRecorder, MediaStream,
 // Blob, fetch) para poder probarse sin navegador.
@@ -39,7 +39,7 @@ export function pickSupportedMime(isSupported, candidates = AUDIO_MIME_CANDIDATE
   return null;
 }
 
-// Stream con SOLO las pistas de audio vivas. Es la corrección del fallo reproducido.
+// Stream con solo las pistas de audio vivas.
 export function audioOnlyStream(stream, StreamCtor = globalThis.MediaStream) {
   const tracks = typeof stream?.getAudioTracks === 'function' ? stream.getAudioTracks() : [];
   const live = tracks.filter((track) => {
@@ -132,9 +132,9 @@ export function stopAll(recorders = []) {
   return stopped;
 }
 
-// Sube un Blob y devuelve un resultado explícito. NUNCA lanza y nunca registra el token.
+// Sube un Blob y devuelve un resultado explícito. Nunca lanza y nunca registra el token.
 // `parseJson`: lee el cuerpo de la respuesta (la transcripción por respuesta devuelve el texto).
-// `signal`: permite acotar la espera desde el llamador (nunca se registra).
+// `signal`: permite acotar la espera desde el llamador (no se registra).
 export async function uploadBlob({ url, blob, type, fetchImpl = globalThis.fetch, parseJson = false, signal } = {}) {
   if (!blob || !blob.size) return { ok: false, reason: 'EMPTY', bytes: 0 };
   try {

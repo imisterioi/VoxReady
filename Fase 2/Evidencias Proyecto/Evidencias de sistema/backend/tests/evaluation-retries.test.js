@@ -114,7 +114,7 @@ function createStore({ sessions = {} } = {}) {
   };
 }
 
-// Juicio válido construido con los criterios REALES de la configuración (nada inventado).
+// Juicio válido construido con los criterios reales de la configuración (nada inventado).
 function judgement() {
   const coherencia = Object.fromEntries(Object.keys(DEFAULT_CONFIG.coherence.criteria).map((key) => [key, 80]));
   const empatia = Object.fromEntries(Object.keys(DEFAULT_CONFIG.empathy.criteria).map((key) => [key, 70]));
@@ -131,7 +131,7 @@ function judgement() {
   };
 }
 
-// Intercepta SOLO las llamadas al proveedor de IA; el resto sigue al servidor local de pruebas.
+// Intercepta solo las llamadas al proveedor de IA; el resto sigue al servidor local de pruebas.
 function stubAI({ status = 200, body = null, calls = null } = {}) {
   global.fetch = async (url, options) => {
     if (!String(url).includes('integrate.api.nvidia.com')) return realFetch(url, options);
@@ -304,7 +304,7 @@ test('el contador persiste tras un reinicio y se reanuda un trabajo interrumpido
   });
   stubAI({});
   try {
-    // "Reinicio": instancia nueva sobre la MISMA base. El contador no se reinicia.
+    // "Reinicio": instancia nueva sobre la misma base. El contador no se reinicia.
     await withApp(store, async ({ queue }) => {
       assert.equal(store.rows.get('s1').evalAttempts, 2, 'el contador persiste');
       await queue.tick();
@@ -479,7 +479,7 @@ test('un fallo permanente se registra como tal y NO programa reintentos automát
   const row = store.rows.get('s1');
   assert.equal(row.metrics.evaluation.errorKind, 'permanent');
   // Reintentar no arreglaría nada (credenciales, configuración, modelo inexistente): se detiene y
-  // queda señalado para revisión técnica. La política de 3/15/50 sigue aplicando a los temporales.
+  // queda señalado para revisión técnica. Los temporales siguen la política de 3/15/50.
   assert.equal(row.evalNextAt, null, 'un error permanente no genera reintentos inútiles');
   assert.equal(row.evalExhausted, false, 'no es «agotada por 50 intentos»: requiere corregir la causa');
   assert.equal(row.status, 'FAILED', 'la interfaz debe mostrar el estado real, no «puede llegar»');

@@ -70,7 +70,7 @@ export async function apiFetch(path, { method = 'GET', body, auth = true } = {})
   return data;
 }
 
-// Compatibilidad con el código existente
+// Alias de `apiFetch` para peticiones GET.
 export const apiGet = (path) => apiFetch(path);
 
 // Consulta un endpoint y devuelve su estado (sin lanzar errores).

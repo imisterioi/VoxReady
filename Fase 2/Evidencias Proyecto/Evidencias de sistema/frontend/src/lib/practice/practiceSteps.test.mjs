@@ -1,4 +1,4 @@
-// Los indicadores de etapas son EXCLUSIVAMENTE visuales: no deben permitir navegación por clic.
+// Los indicadores de etapas son solo visuales: no deben permitir navegación por clic.
 // Se comprueba sobre el código real del componente compartido (no hay DOM en las pruebas).
 import test from 'node:test';
 import assert from 'node:assert/strict';

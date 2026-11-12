@@ -1,4 +1,4 @@
-// Último respaldo: Whisper Small del servicio local, sobre el MISMO fragmento.
+// Último respaldo: Whisper Small del servicio local, sobre el mismo fragmento.
 // El servicio local sólo acepta archivos completos, así que se extrae la ventana a un
 // WAV temporal (PyAV, ya instalado), se envía con el cliente existente y se borra.
 const { spawn } = require('node:child_process');

@@ -93,8 +93,8 @@ async function seedDemo(prisma, { tenant, scenarios }) {
     create: { id: '00000000-0000-0000-0000-000000000002', name: 'Energía Andes', sector: 'Energía' },
   });
 
-  // Cuentas (contraseña: demo1234). El idioma se fija EXPLÍCITAMENTE en todas: los perfiles del
-  // «Acceso rápido» quedan en español y se añade un vocero en inglés para probar el catálogo inglés.
+  // Cuentas (contraseña: demo1234). Todas fijan su idioma: los perfiles del acceso rápido quedan en
+  // español y hay un vocero en inglés para probar el catálogo inglés.
   const accounts = [
     await upsertUser(prisma, { email: 'sofia@voxready.io', name: 'Sofía Reyes', role: 'SYSTEM', language: 'es' }),
     await upsertUser(prisma, { email: 'marta@voxready.io', name: 'Marta Vidal', role: 'MASTER', language: 'es' }),

@@ -189,7 +189,7 @@ test('una sesión agotada tampoco se presenta como error: espera hasta el límit
     now: () => now,
     timeoutMs: 60_000,
   });
-  // Nunca se convierte en `failed` por el estado: solo el límite de sondeo lo detiene, y sigue en curso.
+  // El estado no lo convierte en `failed`: solo el límite de sondeo lo detiene, y sigue en curso.
   assert.equal(result.status, 'pending');
   assert.equal(result.reason, 'STILL_RUNNING');
 });

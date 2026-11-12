@@ -3,7 +3,7 @@
 //
 // REGLA: un segmento se asigna al turno con el que MÁS se solapa en el tiempo. Si no se
 // solapa con ninguna ventana (o la ventana no es válida) el texto queda en `orphans` y NO
-// se atribuye a ninguna pregunta: nunca se reparte por proporciones ni por parecido.
+// se atribuye a ninguna pregunta: no se reparte por proporciones ni por parecido.
 //
 // Los tiempos son milisegundos desde el inicio de la grabación de audio que se transcribe.
 

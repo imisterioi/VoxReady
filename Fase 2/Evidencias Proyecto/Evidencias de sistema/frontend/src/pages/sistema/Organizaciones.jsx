@@ -236,7 +236,7 @@ export default function Organizaciones() {
               onClick={(event) => openDetail(event, tn)}
               onKeyDown={(event) => onCardKeyDown(event, tn)}
               className={cx(
-                // Interactiva: al pasar el cursor el borde pasa a un color claro y GANA 1px de
+                // Interactiva: al pasar el cursor el borde pasa a un color claro y gana 1px de
                 // grosor. El grosor se dibuja con un borde INTERIOR reservado (::after), así la
                 // tarjeta no cambia de tamaño ni se desplaza. Sin sombras ni efectos de brillo.
                 'relative cursor-pointer transition-colors duration-200 hover:border-line-strong',

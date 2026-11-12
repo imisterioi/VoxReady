@@ -1,10 +1,7 @@
-// Guardia de codificación: ningún archivo del backend puede contener mojibake por DOBLE CODIFICACIÓN
-// (bytes UTF-8 decodificados como Windows-1252 y vueltos a guardar como UTF-8) ni caracteres de
-// reemplazo. Es el defecto real que apareció en pantalla: en lugar de "Según tu área más débil" el
-// vocero leía los caracteres C3 BA / C3 A1 / C3 A9 escritos como texto (notación escapada a
-// propósito: este archivo no debe contener el mojibake ni como ejemplo). Se comprueba sobre los
-// BYTES de cada archivo, no sobre lo que muestra un terminal (los terminales Windows suelen
-// decodificar UTF-8 como CP1252 y "fabricar" ese texto).
+// Guardia de codificación: ningún archivo del backend puede contener mojibake por doble
+// codificación (bytes UTF-8 decodificados como Windows-1252 y vueltos a guardar como UTF-8) ni
+// caracteres de reemplazo. Se comprueba sobre los bytes de cada archivo, no sobre lo que muestra un
+// terminal, que suele decodificar UTF-8 como CP1252.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');

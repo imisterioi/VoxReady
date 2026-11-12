@@ -6,7 +6,7 @@
 //  - El POST /evaluate solo se hace si hay payload (práctica recién terminada) y lo decide
 //    quien llama: así una entrada con ?sesion= nunca vuelve a evaluar.
 //  - El informe solo se considera listo cuando el backend devuelve `session.report`.
-//  - Un fallo o error de consulta NUNCA se traduce en "completado".
+//  - Un fallo o error de consulta no se traduce en "completado".
 
 const defaultSleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -68,7 +68,7 @@ export async function runAnalysis({
         continue;
       }
       if (evaluation.state === 'failed' || evaluation.state === 'stalled') {
-        // `errorKind` (clasificación del backend) decide el mensaje; nunca se muestran códigos.
+        // `errorKind` (clasificación del backend) decide el mensaje; no se muestran códigos.
         return {
           status: 'failed',
           reason: evaluation.reason || 'ERROR',
@@ -87,7 +87,7 @@ export async function runAnalysis({
     return { status: 'pending', reason: 'STILL_RUNNING' };
   } catch (error) {
     if (error?.code === 'CANCELLED' || signal?.aborted) return { status: 'cancelled' };
-    // Se conserva el motivo REAL (código de la API y estado HTTP) para poder registrar y elegir
+    // Se conserva el motivo real (código de la API y estado HTTP) para poder registrar y elegir
     // el mensaje adecuado. La interfaz NO muestra detalles técnicos: `Analizando` los traduce a
     // textos genéricos (nunca nombres de modelos, proveedores, códigos HTTP ni mensajes de API).
     return {

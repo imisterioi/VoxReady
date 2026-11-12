@@ -62,7 +62,7 @@ export function createSpeechController({
       return token;
     },
 
-    // Invalida el intento en curso: sus callbacks tardíos ya no hacen nada.
+    // Invalida el intento en curso: sus callbacks tardíos no hacen nada.
     cancel() {
       attempt += 1;
       settled = true;

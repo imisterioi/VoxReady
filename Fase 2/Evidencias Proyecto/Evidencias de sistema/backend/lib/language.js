@@ -1,9 +1,9 @@
 // Registro central de idiomas de la plataforma y resolución del idioma efectivo de un usuario.
 //
-// PARA AÑADIR UN IDIOMA NUEVO solo hay que tocar este archivo (y añadir su contenido):
+// Para añadir un idioma nuevo:
 //   1. Agregar una entrada en `REGISTRY` con `code`, `label`, `enabled: true` y sus códigos ASR.
-//   2. Añadir su diccionario en el frontend (`frontend/src/data/dictionary.<code>.js`) y su
-//      entrada en `frontend/src/lib/language.js`.
+//   2. Añadir su diccionario en el frontend (`frontend/src/data/dictionary.<code>.js`) y su entrada
+//      en `frontend/src/lib/language.js`.
 //   3. Añadir su catálogo de escenarios generales (`prisma/library-scenarios.<code>.js`) y
 //      registrarlo en `prisma/seed.js`.
 // No hay condiciones por idioma repartidas por el código: todo se resuelve desde este registro.
@@ -85,7 +85,7 @@ function resolveLanguage(user, tenant = null) {
 }
 
 // Código que se envía a un motor de transcripción para un idioma concreto.
-// Reglas (nunca se sustituye un idioma por otro):
+// Reglas (no se sustituye un idioma por otro):
 //   - idioma conocido y admitido por el motor → su código para ese motor ('es', 'en-US'…);
 //   - idioma desconocido y motor con autodetección declarada → el valor de autodetección ('multi');
 //   - en cualquier otro caso → null, que significa «este motor NO sirve para este idioma».
@@ -126,7 +126,7 @@ function sessionLanguage(session, user, tenant = null) {
 // ¿Se puede practicar con este escenario en el idioma indicado?
 //
 // El catálogo está separado por idioma: un escenario de otro idioma (o sin idioma válido) NO se
-// puede usar, y NUNCA se sustituye por otro idioma en silencio. Es la regla que aplica el rechazo
+// puede usar, y no se sustituye por otro idioma en silencio. Es la regla que aplica el rechazo
 // HTTP 403 al iniciar una práctica; se expone como función pura para poder probarla sin base de datos.
 function scenarioLanguageAllowed(themeLanguage, sessionLanguage) {
   const theme = normalizeLanguage(themeLanguage);

@@ -4,7 +4,7 @@
 // que estas pruebas controlan el cronómetro con un reloj simulado: no hay esperas reales ni
 // llamadas a modelos (todo lo que consulta IA está inyectado).
 //
-// Se fijan el coste por turno y el margen ANTES de cargar los módulos para que el resultado no
+// Se fijan el coste por turno y el margen antes de cargar los módulos para que el resultado no
 // dependa del entorno de quien ejecuta las pruebas: son exactamente los valores por defecto.
 process.env.INTERVIEW_MS_PER_TURN = '40000';
 process.env.INTERVIEW_EXTRA_MARGIN_MS = '120000';
@@ -53,7 +53,7 @@ function harness({ interviewConfig, assess = SUFFICIENT, clock = fakeClock() } =
   const app = express();
   app.use(express.json());
   registerInterviewerRoutes(app, prisma, {
-    // Nunca se llama a un modelo real: se cuenta cuántas preguntas se pidieron.
+    // No se llama a un modelo real: se cuenta cuántas preguntas se pidieron.
     askModel: async (model) => { calls.ask += 1; return { question: `¿Pregunta ${calls.ask}?`, model, ms: 1 }; },
     models: () => ['m1'],
     timeoutFor: () => 400,
@@ -198,7 +198,7 @@ test('E2-6 el cronómetro es de la entrevista completa: no se reinicia al cambia
 test('E2-7 una sesión cerrada no genera preguntas nuevas ni reutiliza reservas precargadas', async () => {
   const { app, registry, calls, clock } = harness({ interviewConfig: { questionCount: 3, followUps: 0, estimatedMinutes: 1 } });
 
-  // Precalentamiento: deja reservas listas ANTES del cierre.
+  // Precalentamiento: deja reservas listas antes del cierre.
   const prewarm = await call(app, { sessionId: 's1', history: [] }, PREWARM);
   assert.equal(prewarm.status, 200);
   const session = registry.get('s1').session;

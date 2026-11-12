@@ -27,7 +27,7 @@ async function syncUserPause(db, userId) {
   return { changed: false };
 }
 
-// Reconcilia TODOS los usuarios al arrancar: inicializa/cierra intervalos para que la pausa
+// Reconcilia todos los usuarios al arrancar: inicializa/cierra intervalos para que la pausa
 // registrada coincida con el estado actual. Sirve de backfill para suspensiones previas a
 // esta funcionalidad y sanea cualquier deriva. Idempotente.
 async function reconcilePauses(prisma) {

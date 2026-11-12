@@ -11,6 +11,7 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react';
 import I from '../data/dictionary';
 import { apiFetch, getCurrentUser, getToken, saveSession } from './api';
+import { canChangeLanguage, clearPracticeLock, lockedLanguage, readPracticeLock, writePracticeLock } from './practice/practiceLock';
 import {
   DEFAULT_LANGUAGE,
   LANGUAGE_CODES as LANGUAGES,
@@ -28,8 +29,8 @@ export { LANGUAGES, DEFAULT_LANGUAGE, LANGUAGE_LABELS, normalizeLanguage, resolv
 export const LANGUAGE_OPTIONS = LANGUAGES.map((code) => ({ value: code, label: LANGUAGE_LABELS[code] }));
 
 const LANGUAGE_KEY = 'voxready_language';
-// Marca de "selección explícita pendiente de guardar": garantiza que una elección hecha en el
-// login prevalezca sobre la preferencia guardada anteriormente.
+// Marca de selección explícita pendiente de guardar: una elección hecha en el login prevalece sobre
+// la preferencia guardada.
 const EXPLICIT_KEY = 'voxready_language_explicit';
 
 function readStoredLanguage() {
@@ -78,13 +79,16 @@ const effectiveLanguage = (user) => resolveLanguage(user, readStoredLanguage());
 const I18nContext = createContext(null);
 
 export function I18nProvider({ children }) {
-  const [lang, setLang] = useState(() => effectiveLanguage(getCurrentUser()));
+  // Bloqueo del idioma durante la práctica: si existe, MANDA sobre la preferencia individual.
+  // Se lee del almacenamiento para recuperarlo tras una recarga o al navegar atrás/adelante.
+  const [lock, setLock] = useState(() => readPracticeLock());
+  const [lang, setLang] = useState(() => lockedLanguage(readPracticeLock()) || effectiveLanguage(getCurrentUser()));
 
   // Señal de "idioma efectivo aplicado": los datos dependientes del idioma la usan como dependencia.
   const [langVersion, setLangVersion] = useState(0);
   const appliedLangRef = useRef(effectiveCode(lang));
 
-  // Incrementa la versión SOLO cuando el idioma efectivo cambia de verdad: re-aplicar el mismo
+  // Incrementa la versión solo cuando el idioma efectivo cambia de verdad: re-aplicar el mismo
   // idioma (p. ej. `syncUser` al montar) no dispara peticiones nuevas.
   const commitLanguage = useCallback((value) => {
     const code = effectiveCode(value);
@@ -112,6 +116,14 @@ export function I18nProvider({ children }) {
   // Si hay una selección explícita pendiente (hecha en el login), se guarda como preferencia y
   // prevalece sobre la anterior: una elección reciente nunca queda tapada por una preferencia vieja.
   const syncUser = useCallback(async (user) => {
+    // Durante una práctica el idioma de la sesión es la fuente de verdad: la preferencia del
+    // usuario (ni una selección pendiente) no puede cambiarlo.
+    const locked = lockedLanguage(readPracticeLock());
+    if (locked) {
+      setLang(locked);
+      commitLanguage(locked);
+      return user;
+    }
     const pending = readExplicit();
     if (pending && getToken() && normalizeLanguage(user?.language) !== pending) {
       try {
@@ -136,7 +148,9 @@ export function I18nProvider({ children }) {
 
   // Cambio explícito de idioma (login o cabecera): se aplica al instante y, si hay sesión, se
   // guarda como preferencia individual (sobrescribe la anterior).
+  // Durante una práctica NO se cambia nada: el bloqueo se comprueba aquí, no solo en la interfaz.
   const setLanguage = useCallback(async (next) => {
+    if (!canChangeLanguage(readPracticeLock())) return { blocked: true };
     const value = normalizeLanguage(next) || DEFAULT_LANGUAGE;
     requestedLangRef.current = value;
     setLang(value);
@@ -159,6 +173,32 @@ export function I18nProvider({ children }) {
     }
   }, [commitLanguage, persistLanguage]);
 
+  // ------------------------------------------------ Bloqueo del idioma durante la práctica
+
+  // Activa el bloqueo con el idioma de la práctica. La interfaz pasa a ese idioma y NO se toca la
+  // preferencia guardada del usuario: al liberar el bloqueo se recupera su idioma habitual.
+  const setPracticeLock = useCallback(
+    (value) => {
+      const stored = writePracticeLock(value);
+      if (!stored) return null;
+      setLock(stored);
+      setLang(stored.language);
+      commitLanguage(stored.language);
+      return stored;
+    },
+    [commitLanguage],
+  );
+
+  // Libera el bloqueo (práctica terminada o abandonada) y vuelve al idioma habitual del usuario.
+  const releasePracticeLock = useCallback(() => {
+    clearPracticeLock();
+    setLock(null);
+    const next = effectiveLanguage(getCurrentUser());
+    setLang(next);
+    writeStoredLanguage(next);
+    commitLanguage(next);
+  }, [commitLanguage]);
+
   const value = useMemo(
     () => ({
       lang,
@@ -166,10 +206,15 @@ export function I18nProvider({ children }) {
       d: I[lang] || I[DEFAULT_LANGUAGE],
       languages: LANGUAGES,
       labels: LANGUAGE_LABELS,
+      // Bloqueo activo: la cabecera lo usa para deshabilitar el selector y explicar el motivo.
+      languageLocked: Boolean(lock),
+      lockedLanguage: lockedLanguage(lock),
       setLanguage,
+      setPracticeLock,
+      releasePracticeLock,
       syncUser,
     }),
-    [lang, langVersion, setLanguage, syncUser],
+    [lang, langVersion, lock, setLanguage, setPracticeLock, releasePracticeLock, syncUser],
   );
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
@@ -183,7 +228,11 @@ export function useI18n() {
       d: I[DEFAULT_LANGUAGE],
       languages: LANGUAGES,
       labels: LANGUAGE_LABELS,
+      languageLocked: false,
+      lockedLanguage: null,
       setLanguage: async () => {},
+      setPracticeLock: () => null,
+      releasePracticeLock: () => {},
       syncUser: () => {},
     }
   );

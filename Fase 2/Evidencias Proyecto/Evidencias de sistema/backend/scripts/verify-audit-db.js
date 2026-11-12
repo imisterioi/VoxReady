@@ -1,6 +1,6 @@
 // Verificación real del ciclo de auditoría contra PostgreSQL.
 // Crea su PROPIO tenant/usuario/tema/sesión marcados como prueba, comprueba el ciclo
-// completo y borra TODO lo que creó (incluso si falla). No toca sesiones existentes.
+// completo y borra todo lo que creó (incluso si falla). No toca sesiones existentes.
 //
 //   cd backend && node scripts/verify-audit-db.js
 require('dotenv').config();

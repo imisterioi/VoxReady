@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--server", default="grpc.nvcf.nvidia.com:443")
     parser.add_argument("--language", default="es-US")
     parser.add_argument("--input-file", required=True)
-    # Ventana opcional en milisegundos: se recorta ANTES de transcribir para obtener una
+    # Ventana opcional en milisegundos: se recorta antes de transcribir para obtener una
     # transcripción independiente por respuesta (Whisper no devuelve offsets utilizables).
     parser.add_argument("--start-ms", type=int, default=None)
     parser.add_argument("--end-ms", type=int, default=None)

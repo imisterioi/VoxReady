@@ -145,8 +145,8 @@ export default function Laboratorio() {
       });
     };
 
-    // Pide al entrevistador IA (backend → API de NVIDIA) la siguiente pregunta.
-    // Si escribiste una respuesta, la IA genera una repregunta sobre ella.
+    // Pide al entrevistador la siguiente pregunta (backend → API de NVIDIA). Si hay una respuesta
+    // escrita, el entrevistador genera una repregunta sobre ella.
     const askAI = async () => {
       const nextHistory = history.length
         ? [...history, { role: 'vocero', text: answer }]
@@ -273,6 +273,37 @@ export default function Laboratorio() {
         </section>
         
       </div>
+      {/* Reconstrucción de la interfaz de la sesión del vocero */}
+      <section className="mt-8">
+        <div className="mb-4">
+          <h2 className="text-[15px] font-semibold text-ink">Sesión del vocero</h2>
+          <p className="text-[13px] text-muted mt-0.5">Comparación del diseño anterior con la interfaz actual</p>
+        </div>
+
+        <Link to="/laboratorio/sesion-vocero" className="group block">
+          <Card className="p-0 overflow-hidden hover:shadow-lift hover:border-line-strong transition-all">
+            <div className="p-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[15px] font-semibold text-ink">Reconstrucción de la interfaz anterior</h3>
+                <Icon
+                  name="arrowRight"
+                  size={16}
+                  className="text-faint group-hover:text-ink group-hover:translate-x-0.5 transition-all"
+                />
+              </div>
+              <p className="text-[13px] text-muted mt-1.5 leading-relaxed">
+                Recupera el diseño anterior de la sesión del vocero (dos pantallas del mismo tamaño: entrevistador a la
+                izquierda y cámara a la derecha, con la pregunta centrada debajo) y lo compara con la interfaz actual.
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-3">
+                <Badge tone="neutral">Solo visual</Badge>
+                <Badge tone="neutral">Datos simulados</Badge>
+              </div>
+            </div>
+          </Card>
+        </Link>
+      </section>
+
       {/* Transcripción */}
       <section className="mt-8">
         <div className="mb-4">

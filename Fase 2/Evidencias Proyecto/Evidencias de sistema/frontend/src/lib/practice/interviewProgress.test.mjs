@@ -59,8 +59,8 @@ test('etiquetas: pregunta principal vs repregunta', () => {
 
 test('6) la duracion maxima es obligatoria: el formulario muestra 5 minutos', () => {
   const source = readFileSync(new URL('../../components/InterviewConfig.jsx', import.meta.url), 'utf8');
-  // La duracion MAXIMA de la entrevista la define el usuario y es obligatoria (nunca queda vacia).
-  // El texto visible ya no vive en el componente: viene del diccionario central (`L.cfg.minutesL`).
+  // La duración máxima de la entrevista la define el usuario y es obligatoria (nunca queda vacía).
+  // El texto visible viene del diccionario central (`L.cfg.minutesL`).
   const es = readFileSync(new URL('../../data/dictionary.js', import.meta.url), 'utf8');
   assert.equal(source.includes("onChange={set('estimatedMinutes')}"), true, 'debe existir un input editable de duracion');
   assert.equal(source.includes('t.minutesL'), true, 'la etiqueta de duracion viene del diccionario');
@@ -125,7 +125,7 @@ test('7b) presupuestos y estimacion coherentes con el backend', () => {
 test('13) la etiqueta de pregunta del componente usa el progreso del backend', () => {
   // El progreso es autoritativo del backend: el componente no debe referenciar el contador local
   // (`currentNumber` / `total`), que rompería el render con ReferenceError.
-  // Se comprueba sobre el fuente porque el repositorio no tiene entorno de DOM para renderizar.
+  // Se comprueba sobre el fuente porque no hay entorno de DOM para renderizar.
   const source = readFileSync(new URL('../../pages/SesionPractica.jsx', import.meta.url), 'utf8');
   assert.equal(source.includes('currentNumber'), false, 'no debe quedar ninguna referencia al contador local eliminado');
 

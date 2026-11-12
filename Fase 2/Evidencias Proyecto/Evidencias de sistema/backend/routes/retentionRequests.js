@@ -1,9 +1,9 @@
-// Solicitudes de EXTENSIÓN del plazo de conservación (operación distinta a las de privacidad).
+// Solicitudes de extensión del plazo de conservación (operación distinta a las de privacidad).
 //
-// - El administrador del CLIENTE crea solicitudes de su organización y consulta su estado.
-// - Únicamente el ADMINISTRADOR DEL SISTEMA (SYSTEM) puede aprobarlas o rechazarlas: el
-//   aislamiento se comprueba aquí, no en la interfaz.
-// - Aprobar aplica el plazo de INMEDIATO (retentionDays = plazo solicitado) para que el proceso
+// - El administrador del cliente crea solicitudes de su organización y consulta su estado.
+// - Solo el administrador del sistema (SYSTEM) puede aprobarlas o rechazarlas: el aislamiento se
+//   comprueba aquí, no en la interfaz.
+// - Aprobar aplica el plazo de inmediato (retentionDays = plazo solicitado) para que el proceso
 //   automático de retención no borre los datos que la extensión protege. Rechazar no toca nada.
 // - La resolución es idempotente: un segundo intento recibe 409 y no vuelve a aplicar nada.
 const { requireAuth } = require('../auth');
@@ -85,7 +85,7 @@ module.exports = function registerRetentionRequestRoutes(app, prisma) {
     }
   });
 
-  // Resuelve (aprobar / rechazar): SOLO el administrador del sistema.
+  // Resuelve (aprobar / rechazar): solo el administrador del sistema.
   app.patch('/api/retention-requests/:id', auth('system'), async (req, res) => {
     try {
       const { status, resolutionNote = '' } = req.body || {};

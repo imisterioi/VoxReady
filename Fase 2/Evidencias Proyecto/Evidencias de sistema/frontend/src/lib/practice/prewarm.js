@@ -3,7 +3,7 @@
 //
 // Garantías:
 //  - una sola solicitud por sesión, aunque el componente se re-renderice o cambie de fase;
-//  - nunca lanza ni rechaza: un fallo de precalentamiento no debe bloquear al vocero;
+//  - no lanza ni rechaza: un fallo de precalentamiento no debe bloquear al vocero;
 //  - ignora la respuesta si la sesión ya no es la activa (desmontaje o cambio de práctica).
 export function createPrewarmTrigger({ post, isCurrentSession = () => true } = {}) {
   let startedFor = null;

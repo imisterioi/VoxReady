@@ -74,7 +74,7 @@ function classifyProbe({ ok = false, status = null, finish = null, usable = fals
 
 const isHardFailure = (reason) => HARD_FAILURE.test(String(reason || ''));
 
-// Una sonda: petición mínima con el MISMO contrato que exige el evaluador
+// Una sonda: petición mínima con el mismo contrato que exige el evaluador
 // (`response_format: json_object` + objeto con `coherencia` y `empatia`).
 // No imprime la clave, ni el prompt, ni el contenido de la respuesta.
 async function probeModel(model, {
@@ -149,7 +149,7 @@ async function runProbes({ models = evaluatorModels(), deps = {}, now = () => Da
   state.lastRunAt = Math.max(state.lastRunAt, startedAt);
   state.runs += 1;
   // La clave se hereda del entorno recibido: así la sonda y su comprobación previa de clave usan
-  // la MISMA configuración (evita sondear "sin clave" cuando el llamador pasó un entorno válido).
+  // la misma configuración (evita sondear "sin clave" cuando el llamador pasó un entorno válido).
   const apiKey = deps.apiKey ?? env.NVIDIA_API_KEY;
   const results = await Promise.all(
     models.map((model) => probeModel(model, { ...deps, apiKey, timeoutMs: deps.timeoutMs || probeTimeoutMs, now })),

@@ -59,7 +59,7 @@ export function failureMessage(evaluation, texts = REPORT_TEXTS) {
 }
 
 // Reintentos automáticos en curso (o agotados): el informe puede llegar más adelante y el vocero
-// no debe hacer nada. Se comprueba ANTES que `failed` para no mostrar un error técnico.
+// no debe hacer nada. Se comprueba antes que `failed` para no mostrar un error técnico.
 export function pendingRetryAccess(evaluation = null, texts = REPORT_TEXTS) {
   return {
     state: 'pending',
@@ -105,7 +105,7 @@ export function reportAccess({ session = null, evaluation = null, error = '', te
       state: 'failed',
       canOpen: false,
       title: texts.failed.title,
-      // Mensaje según la clasificación del backend (temporal o requiere revisión). Sin códigos.
+      // Mensaje según la clasificación del backend (temporal o requiere revisión), sin códigos.
       description: failureMessage(evaluation, texts),
     };
   }
@@ -117,7 +117,7 @@ export function reportAccess({ session = null, evaluation = null, error = '', te
   };
 }
 
-// De QUÉ sesión se muestra el informe. Regla dura: NUNCA se sustituye una sesión por otra.
+// De QUÉ sesión se muestra el informe. Regla dura: no se sustituye una sesión por otra.
 //  - 'url':    la sesión indicada en el enlace (?sesion=) manda siempre.
 //  - 'recent': la práctica recién terminada por el vocero (guardada por SesionPractica). Si su
 //              informe no está listo o falló, se muestra ESE estado; nunca el informe de otra.

@@ -1,4 +1,4 @@
-// Cálculo REAL de vencimientos de retención y del plan vigente (funciones puras, sin BD).
+// Cálculo real de vencimientos de retención y del plan vigente (funciones puras, sin BD).
 //
 // Regla base: una sesión vence cuando el TIEMPO EFECTIVO transcurrido desde
 // su creación supera el plazo del tenant, descontando las pausas por suspensión:
@@ -89,8 +89,8 @@ function planState({ tenant = {}, sessions = [], pausesByUser = new Map(), now =
   };
 }
 
-// Fecha efectiva de un cambio de plan: fin del periodo actual (o ahora, si no hay datos bajo el
-// plan vigente). Nunca se adelanta ni se altera el plazo de las sesiones existentes.
+// Fecha efectiva de un cambio de plan: fin del periodo actual, o ahora si no hay datos bajo el plan
+// vigente. No altera el plazo de las sesiones existentes.
 function planChangeEffectiveAt({ tenant = {}, sessions = [], pausesByUser = new Map(), now = Date.now() } = {}) {
   const state = planState({ tenant, sessions, pausesByUser, now });
   if (!state.periodEndsAt) return new Date(now);

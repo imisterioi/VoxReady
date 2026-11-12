@@ -177,7 +177,7 @@ const aiResponse = () =>
     { status: 200, headers: { 'content-type': 'application/json' } },
   );
 
-// Sustituye `fetch` SOLO para el proveedor de IA; el resto sigue yendo al servidor local.
+// Sustituye `fetch` solo para el proveedor de IA; el resto sigue yendo al servidor local.
 function stubAI({ calls, delay = 0, status = 200 } = {}) {
   global.fetch = async (url, options) => {
     if (!String(url).includes('integrate.api.nvidia.com')) return realFetch(url, options);
@@ -599,7 +599,7 @@ test('una evaluación lenta pero válida publica el informe completo (proveedor 
 test('un timeout técnico real produce un fallo controlado y programa el reintento (proveedor simulado)', async () => {
   const store = createStore({ sessions: { s1: sessionRow() }, users: users() });
   const calls = { value: 0 };
-  // Proveedor que NUNCA responde: solo rechaza cuando el backend aborta (como fetch real).
+  // Proveedor que nunca responde: solo rechaza cuando el backend aborta (como fetch real).
   global.fetch = async (url, options = {}) => {
     if (!String(url).includes('integrate.api.nvidia.com')) return realFetch(url, options);
     calls.value += 1;
@@ -664,7 +664,7 @@ test('un error permanente queda identificado para revisión técnica sin cambiar
       assert.equal(row.metrics.evaluation.errorKind, 'permanent');
       assert.equal(row.evalNextAt, null, 'un error permanente no programa reintentos inútiles');
       assert.equal(row.evalExhausted, false, 'no es «agotada por 50 intentos»: requiere corrección');
-      // El vocero ve el estado real: fallo permanente (revisión), nunca «puede llegar más adelante».
+      // El vocero ve el estado real: fallo permanente, no un reintento pendiente.
       const state = await (await call('/api/sessions/s1')).json();
       assert.equal(state.evaluation.state, 'failed');
       assert.equal(state.evaluation.errorKind, 'permanent');
@@ -718,7 +718,7 @@ test('un intento que perdió el lease no publica ni programa reintentos (proveed
   }
 });
 
-// ------------------------------------------- modelos evaluadores EN PARALELO (mismo intento)
+// ------------------------------------------- modelos evaluadores EN paralelo (mismo intento)
 // Todas las pruebas de esta sección usan un PROVEEDOR SIMULADO (fetch sustituido): no se llama a
 // NVIDIA. La sonda real está en `scripts/probe-evaluator-models.js` y se ejecuta a mano.
 
@@ -867,7 +867,7 @@ test('5) el informe del ganador NO se sobrescribe con el resultado posterior de 
       assert.equal(store.rows.get('s1').report.audit.model, 'rapido', 'gana el primero VÁLIDO');
       assert.equal(store.rows.get('s1').evalAttempts, 1, 'una carrera paralela = UN intento');
 
-      // El modelo lento termina DESPUÉS de la publicación: no puede cambiar nada.
+      // El modelo lento termina después de la publicación: no puede cambiar nada.
       await sleep(1400);
       assert.equal(JSON.stringify(store.rows.get('s1').report), published, 'el informe publicado no cambia');
       assert.notEqual(store.rows.get('s1').report.resumen, 'del modelo lento');

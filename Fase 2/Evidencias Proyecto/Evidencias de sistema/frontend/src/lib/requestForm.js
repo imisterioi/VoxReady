@@ -1,12 +1,12 @@
 // Formulario dinámico de solicitudes del administrador del cliente.
 //
-// Tipos REALES que admite el backend (no se inventa ninguno):
+// Tipos que admite el backend:
 //   RECORDINGS          → POST /api/deletion-requests   { targetUserId, scope:'RECORDINGS', reason }
 //   ANONYMIZE           → POST /api/deletion-requests   { targetUserId, scope:'ANONYMIZE',  reason }
 //   RETENTION_EXTENSION → POST /api/retention-requests  { requestedDays, reason }
 //
-// El módulo es puro: decide qué campos corresponden a cada tipo, valida y construye el cuerpo que
-// se envía. Así se garantiza que al cambiar de tipo NO se envíen campos del tipo anterior.
+// El módulo es puro: decide qué campos corresponden a cada tipo, valida y construye el cuerpo que se
+// envía, de modo que al cambiar de tipo no se envíen campos del tipo anterior.
 export const MAX_DAYS = 3650; // mismo límite que la configuración de retención del backend
 
 export const REQUEST_TYPES = [
@@ -51,7 +51,7 @@ export function emptyRequestForm(type = DEFAULT_REQUEST_TYPE) {
   return { type, targetUserId: '', requestedDays: '', reason: '' };
 }
 
-// Cambiar de tipo SIEMPRE parte de un formulario limpio del nuevo tipo: los datos del tipo
+// Cambiar de tipo siempre parte de un formulario limpio del nuevo tipo: los datos del tipo
 // anterior (vocero o plazo) no se arrastran ni pueden enviarse por error.
 export function switchRequestType(type) {
   return emptyRequestForm(requestType(type) ? type : DEFAULT_REQUEST_TYPE);
@@ -78,7 +78,7 @@ export function validateRequestForm(form = {}, { currentDays = 0, d = null } = {
   return { ok: true, error: '' };
 }
 
-// Cuerpo de la petición: SOLO los campos del tipo seleccionado (nunca los del tipo anterior).
+// Cuerpo de la petición: solo los campos del tipo seleccionado (nunca los del tipo anterior).
 export function buildRequestPayload(form = {}, { currentDays = 0, d = null } = {}) {
   const type = requestType(form.type);
   if (!type) return null;

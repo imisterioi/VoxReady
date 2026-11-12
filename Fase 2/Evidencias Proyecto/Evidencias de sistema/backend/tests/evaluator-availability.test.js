@@ -20,9 +20,9 @@ const INPUT = {
   lighting: null,
   cfg: resolveConfig(null),
 };
-// Juicio COMPLETO según el patrón activo (`DEFAULT_CONFIG`): coherencia (keyMessages, directness,
-// redLines, clarity) y empatía (impact, warmth, responsibility). Un juicio incompleto ya NO gana la
-// carrera: la validación completa ocurre antes de publicar.
+// Juicio completo según el patrón activo (`DEFAULT_CONFIG`): coherencia (keyMessages, directness,
+// redLines, clarity) y empatía (impact, warmth, responsibility). Un juicio incompleto no gana la
+// carrera: la validación ocurre antes de publicar.
 const JUDGEMENT = {
   coherencia: { keyMessages: 80, directness: 70, redLines: 90, clarity: 75 },
   empatia: { impact: 70, warmth: 65, responsibility: 80 },

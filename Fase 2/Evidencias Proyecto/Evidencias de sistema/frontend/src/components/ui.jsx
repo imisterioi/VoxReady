@@ -147,7 +147,7 @@ export function Segmented({ options, value, onChange, className }) {
 }
 
 export function ChoiceChips({ options, value, onChange, multiple = false, labels = null }) {
-  // `options` son los VALORES (nunca se traducen); `labels` es el texto visible de cada valor.
+  // `options` son los VALORES (no se traducen); `labels` es el texto visible de cada valor.
   const textOf = (o) => (labels && labels[o]) || o;
   const isActive = (o) => (multiple ? value.includes(o) : value === o);
   const toggle = (o) => {

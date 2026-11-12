@@ -1,13 +1,13 @@
-// Clasificación de los errores de evaluación (solo backend). NO cambia la política de reintentos:
-// identifica la naturaleza del fallo para (a) registrarlo con precisión, (b) elegir un mensaje
-// comprensible para el vocero y (c) señalar cuándo hace falta revisión técnica.
+// Clasificación de los errores de evaluación (solo backend). No cambia la política de reintentos:
+// identifica la naturaleza del fallo para registrarlo, elegir el mensaje del vocero y señalar cuándo
+// hace falta revisión técnica.
 //
 // Criterio:
 //  - `transient`: el intento puede tener éxito más adelante (timeout, red, 5xx, 429, respuesta
 //    vacía/truncada o no validable). Se reintenta según la política vigente.
 //  - `permanent`: el mismo error se repetirá mientras no se corrija la configuración o los datos
 //    (credenciales, modelo inexistente/retirado, entrada no evaluable, audio no separable).
-//  - Nunca se exponen al vocero códigos, modelos ni detalles internos.
+//  - Los códigos, modelos y detalles internos no se exponen al vocero.
 const TRANSIENT_PATTERNS = [
   /tiempo agotado/i,
   /\bTIMEOUT\b/i,
@@ -44,7 +44,7 @@ const PERMANENT_MESSAGE = 'No pudimos preparar el informe de esta práctica. Nue
 
 const testAny = (patterns, value) => patterns.some((pattern) => pattern.test(String(value || '')));
 
-// `reasons`: motivos por modelo/intento (p. ej. los de `judgeContent.failed`). Si TODOS son
+// `reasons`: motivos por modelo/intento (p. Ej. Los de `judgeContent.failed`). Si todos son
 // permanentes, el fallo es permanente; cualquier motivo temporal lo mantiene reintentable.
 function classifyEvaluationError({ code = '', reasons = [] } = {}) {
   const list = (Array.isArray(reasons) ? reasons : [reasons]).filter(Boolean).map((item) => item?.reason || item);

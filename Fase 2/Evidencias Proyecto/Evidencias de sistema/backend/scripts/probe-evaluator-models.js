@@ -1,4 +1,4 @@
-// SONDA REAL de modelos evaluadores (llamadas REALES al proveedor: consume créditos).
+// SONDA real de modelos evaluadores (llamadas reales al proveedor: consume créditos).
 //
 //   cd backend
 //   node scripts/probe-evaluator-models.js                     # fase 1: contrato (barato)
@@ -12,7 +12,7 @@
 //
 // QUÉ HACE
 //  - Fase 1 (por defecto): petición mínima (64 tokens) para comprobar disponibilidad real.
-//  - Fase 2 (`--full`): usa EL MISMO prompt que la evaluación real (`buildPrompt`) con la entrada
+//  - Fase 2 (`--full`): usa EL mismo prompt que la evaluación real (`buildPrompt`) con la entrada
 //    sintética de este archivo y valida la respuesta con `validateJudgement` (criterios y puntajes
 //    del patrón activo). Es la única forma de afirmar que un modelo "genera un informe válido".
 //
@@ -112,7 +112,7 @@ function extractJson(text) {
 }
 
 
-// Una llamada real. `timeoutMs` acota SOLO la sonda (no es la política del producto).
+// Una llamada real. `timeoutMs` acota solo la sonda (no es la política del producto).
 async function callModel({ model, messages, maxTokens, timeoutMs, apiKey }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

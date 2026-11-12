@@ -82,7 +82,7 @@ test('la validación autoritativa devuelve null cuando la configuración es vál
   assert.ok(outOfRange.errors.some((issue) => issue.code === 'TURN_LIMIT'), 'también avisa del límite de turnos');
 });
 
-// ------------------------------------------------------- Duración máxima OBLIGATORIA (5 min)
+// ------------------------------------------------------- Duración máxima obligatoria (5 min)
 
 test('duración máxima: sin valor guardado se aplica el predeterminado de 5 minutos', () => {
   // Caso 1: escenario antiguo (interviewConfig = null).

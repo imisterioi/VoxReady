@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+﻿import { Link, useNavigate } from 'react-router-dom';
 import { useI18n } from '../lib/i18n';
 import { getCurrentUser } from '../lib/api';
 import Icon from '../components/Icon';
@@ -137,7 +137,7 @@ export default function VoceroHome() {
           </div>
           <Card padded={false} className="divide-y divide-line overflow-hidden">
             {lessons.map((m) => (
-              <Link key={m.id} to={`/vocero/leccion/${m.id}`} className="group flex items-center gap-4 p-4 hover:bg-subtle/60 transition-colors">
+              <Link key={m.id} to="/vocero/leccion" className="group flex items-center gap-4 p-4 hover:bg-subtle/60 transition-colors">
                 <span className="h-10 w-10 rounded-xl bg-accent-soft text-accent-fg flex items-center justify-center">
                   <Icon name={m.icon} size={18} />
                 </span>

@@ -1,23 +1,19 @@
-// MODELOS DEL EVALUADOR: resolución única, orden efectivo y saneado. Se consultan TODOS EN PARALELO
-// dentro de un mismo intento (ver `ai/evaluator.js#judgeContent`) y gana el PRIMER informe que
+// MODELOS DEL EVALUADOR: resolución única, orden efectivo y saneado. Se consultan todos EN paralelo
+// dentro de un mismo intento (ver `ai/evaluator.js#judgeContent`) y gana el primer informe que
 // supere la validación completa.
 //
 // REGLAS DE ESTE MÓDULO
-//  - Una sola fuente de verdad para la lista de modelos evaluadores (la usa la evaluación final y la
+//  - Una sola fuente de verdad para la lista de modelos evaluadores (la usan la evaluación final y la
 //    comprobación anticipada de disponibilidad).
-//  - Precedencia EXPLÍCITA: variables de entorno > valores por defecto de este archivo.
-//    `AI_EVAL_MODELS` acepta una LISTA separada por comas (es la forma recomendada de habilitar
-//    varios modelos); `AI_EVAL_MODEL` y `AI_EVAL_FALLBACK_MODEL` siguen funcionando.
-//  - Nunca se inventan identificadores: todo valor sale del entorno o de esta lista verificada.
+//  - Precedencia: variables de entorno > valores por defecto de este archivo. `AI_EVAL_MODELS` acepta
+//    una lista separada por comas; `AI_EVAL_MODEL` y `AI_EVAL_FALLBACK_MODEL` siguen funcionando.
+//  - Los identificadores salen del entorno o de esta lista verificada.
 //
-// VALIDACIÓN REAL (sonda manual `scripts/probe-evaluator-models.js`, llamadas reales al proveedor;
-// no toca sesiones ni forma parte de la suite):
-//  - Catálogo del proveedor consultado en vivo: 85 modelos. Estar en el catálogo NO implica que el
-//    modelo acepte `chat/completions`: varios responden 404 (comprobado el 2026-10-24).
-//  - `z-ai/glm-5.3` → único modelo VALIDADO a tamaño real de informe (12/12 criterios, finish=stop).
-//  - Los CANDIDATOS de abajo responden 200 al contrato con `max_tokens` pequeño. Que respondan no
-//    equivale a que completen un informe: los que razonan agotan el presupuesto de tokens y devuelven
-//    `finish_reason: length` (se descartan solos gracias a la validación dentro de la carrera).
+// Notas sobre los modelos:
+//  - Estar en el catálogo del proveedor no implica que el modelo acepte `chat/completions`.
+//  - `z-ai/glm-5.3` es el único validado con un informe de tamaño real (12/12 criterios).
+//  - Los candidatos de abajo responden al contrato con `max_tokens` pequeño; los que razonan agotan
+//    el presupuesto de tokens y devuelven `finish_reason: length`, así que los descarta la validación.
 const VALIDATED_DEFAULTS = ['z-ai/glm-5.3'];
 
 // Candidatos habilitados: existen en el catálogo del proveedor, aceptan `chat/completions` y
@@ -45,7 +41,7 @@ const CANDIDATE_DEFAULTS = [
 const DEFAULT_MODELS = [...VALIDATED_DEFAULTS, ...CANDIDATE_DEFAULTS];
 
 // Tope defensivo: cada modelo habilitado es una solicitud en paralelo (y su coste). Se consulta a
-// TODOS los habilitados; el tope solo impide que una lista mal escrita dispare decenas de peticiones.
+// todos los habilitados; el tope solo impide que una lista mal escrita dispare decenas de peticiones.
 const MAX_MODELS = 6;
 
 // ---------------------------------------------------------------------------------------------
@@ -70,8 +66,8 @@ function cleanList(values = []) {
   return out;
 }
 
-// Lista efectiva de modelos evaluadores, en orden de prioridad. TODOS los devueltos se consultan
-// EN PARALELO dentro de un mismo intento; el orden solo decide el turno en los registros.
+// Lista efectiva de modelos evaluadores, en orden de prioridad. Todos los devueltos se consultan
+// EN paralelo dentro de un mismo intento; el orden solo decide el turno en los registros.
 function evaluatorModels({ env = process.env, defaults = DEFAULT_MODELS } = {}) {
   const fromEnv = cleanList([env.AI_EVAL_MODELS, env.AI_EVAL_MODEL, env.AI_EVAL_FALLBACK_MODEL]);
   const list = [...fromEnv, ...cleanList(defaults)];

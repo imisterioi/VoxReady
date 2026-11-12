@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
@@ -39,7 +39,7 @@ const EXT_STATUS = {
 
 // Política de retención de la organización (GET/PUT /api/tenant/settings).
 //
-// - El plan vigente y las fechas salen del backend, calculadas con la MISMA lógica que aplica la
+// - El plan vigente y las fechas salen del backend, calculadas con la misma lógica que aplica la
 //   retención (no se estiman fechas).
 // - Un cambio de plan se PROGRAMA: no altera retroactivamente las sesiones que ya están bajo el
 //   plan vigente; se aplica al terminar el periodo actual (fecha efectiva que muestra la ventana).
@@ -260,7 +260,7 @@ export default function PoliticaRetencion() {
             <CardHeader title={t.currentPolicyTitle} description={t.currentPolicyDesc} />
             <div className="space-y-3">
               <PlanRow label={t.keepsL} value={modeLabel(currentMode)} />
-              <PlanRow label={t.termChangeL} value={t.daysL(currentDays)} />
+              <PlanRow label={t.termChangeL} value={t.termDaysL(currentDays)} />
               <PlanRow
                 label={t.nextPurgeL}
                 value={plan?.nextPurgeAt ? formatDate(plan.nextPurgeAt, lang) : t.noDataInTerm}
@@ -280,7 +280,7 @@ export default function PoliticaRetencion() {
               <div className="mt-5 rounded-xl bg-accent-soft px-4 py-3">
                 <div className="text-xs font-medium text-accent-fg">{t.scheduledChange}</div>
                 <div className="text-sm text-ink mt-1">
-                  {modeLabel(pendingChange.mode)} · {t.daysL(pendingChange.days)}
+                  {modeLabel(pendingChange.mode)} · {t.termDaysL(pendingChange.days)}
                 </div>
                 <div className="text-xs text-muted mt-1">
                   {t.willApplyOn(pendingChange.effectiveAt ? formatDate(pendingChange.effectiveAt, lang) : '—')}
@@ -305,7 +305,7 @@ export default function PoliticaRetencion() {
               <Icon name="shield" size={18} className="text-muted mt-0.5" />
               <p className="text-xs text-muted leading-relaxed">
                 {t.keepsL} <b className="text-ink font-medium">{modeLabel(currentMode).toLowerCase()}</b>{' '}
-                <b className="text-ink font-medium">{t.daysL(currentDays)}</b>
+                <b className="text-ink font-medium">{t.termDaysL(currentDays)}</b>
                 {t.keptSummaryTail}
               </p>
             </div>
@@ -359,18 +359,18 @@ export default function PoliticaRetencion() {
             <div className="rounded-xl border border-line p-4">
               <div className="text-xs text-muted">{t.currentPlanL}</div>
               <div className="text-sm font-medium text-ink mt-1">{modeLabel(currentMode)}</div>
-              <div className="text-xs text-muted mt-1">{t.daysL(currentDays)}</div>
+              <div className="text-xs text-muted mt-1">{t.termDaysL(currentDays)}</div>
             </div>
             <div className="rounded-xl border border-accent/40 bg-accent-soft p-4">
               <div className="text-xs text-muted">{t.newPlanL}</div>
               <div className="text-sm font-medium text-ink mt-1">{modeLabel(mode)}</div>
-              <div className="text-xs text-muted mt-1">{t.daysL(days)}</div>
+              <div className="text-xs text-muted mt-1">{t.termDaysL(days)}</div>
             </div>
           </div>
 
           <DetailRow
             label={t.termChangeL}
-            value={`${t.daysL(currentDays)} → ${t.daysL(days)}`}
+            value={`${t.termDaysL(currentDays)} → ${t.termDaysL(days)}`}
           />
           <DetailRow label={t.effectiveDateL} value={formatDate(effectiveAt, lang)} />
 
@@ -454,10 +454,10 @@ export default function PoliticaRetencion() {
       >
         {openExtension && (
           <div className="space-y-4">
-            <DetailRow label={t.currentTermAtRequest} value={t.daysL(openExtension.currentDays)} />
-            <DetailRow label={t.requestedTerm} value={t.daysL(openExtension.requestedDays)} />
+            <DetailRow label={t.currentTermAtRequest} value={t.termDaysL(openExtension.currentDays)} />
+            <DetailRow label={t.requestedTerm} value={t.termDaysL(openExtension.requestedDays)} />
             {openExtension.appliedDays ? (
-              <DetailRow label={t.appliedTerm} value={t.daysL(openExtension.appliedDays)} />
+              <DetailRow label={t.appliedTerm} value={t.termDaysL(openExtension.appliedDays)} />
             ) : null}
             <DetailRow label={p.requestedL} value={formatDate(openExtension.createdAt, lang)} />
             <DetailRow label={p.reasonL} value={openExtension.reason || p.noReason} />

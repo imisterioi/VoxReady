@@ -18,7 +18,7 @@
 const { Prisma } = require('@prisma/client');
 
 // `Session.report` es una columna JSON: un `null` literal NO es válido en un `where` de Prisma.
-// Además hay DOS formas de "sin informe": NULL de SQL (cuando el campo nunca se escribió) y JSON
+// Además hay DOS formas de "sin informe": NULL de SQL (cuando el campo no se escribió) y JSON
 // null (cuando alguien escribió `report: null`). `Prisma.AnyNull` cubre las dos; `Prisma.DbNull`
 // solo la primera (comprobado contra la base real: DbNull devolvía 0 filas para una fila JSON null).
 const NO_REPORT = { equals: Prisma.AnyNull };
@@ -27,7 +27,7 @@ const DEFAULT_RETRY_MS = 3 * 60 * 1000;
 const DEFAULT_BATCH_PAUSE_MS = 15 * 60 * 1000;
 const DEFAULT_BATCH_SIZE = 5;
 const DEFAULT_MAX_ATTEMPTS = 50;
-// El lease debe cubrir un intento COMPLETO con los límites reales de cada etapa:
+// El lease debe cubrir un intento completo con los límites reales de cada etapa:
 //   verificación de audio ≤120 s (ASR_CHAIN_BUDGET_MS del proyecto) + generación del informe
 //   (lo que tarde el proveedor; si el operador fija `AI_EVAL_TIMEOUT_MS`, ese valor) + margen.
 // Cuando NO hay límite local, la referencia es el techo del TRANSPORTE: el `fetch` interno de Node
@@ -48,17 +48,16 @@ function num(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-// Techo efectivo de la generación del informe: lo que el operador fije EXPLÍCITAMENTE
-// (`AI_EVAL_TIMEOUT_MS`) o, si no fija nada, el techo documentado del transporte. Sirve para
-// dimensionar el lease: no se puede prometer «sin límites» si una capa técnica sigue cortando.
+// Techo efectivo de la generación del informe: `AI_EVAL_TIMEOUT_MS` si el operador lo fija, o el
+// techo del transporte. Se usa para dimensionar el lease.
 function evalCeilingMs(env = process.env) {
   const configured = Number(env.AI_EVAL_TIMEOUT_MS);
   return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_TRANSPORT_CEILING_MS;
 }
 
 function limits(env = process.env) {
-  // El lease se calcula con los límites reales, de modo que nunca vence mientras el intento sigue
-  // trabajando (audio + generación + margen). `EVAL_RETRY_LEASE_MS` permite fijarlo a mano.
+  // El lease se calcula con los límites reales (audio + generación + margen) para que no venza
+  // mientras el intento sigue trabajando. `EVAL_RETRY_LEASE_MS` permite fijarlo a mano.
   const computedLease = DEFAULT_AUDIO_BUDGET_MS + evalCeilingMs(env) + DEFAULT_LEASE_MARGIN_MS;
   return {
     retryMs: num(env.EVAL_RETRY_MS, DEFAULT_RETRY_MS),
@@ -148,18 +147,16 @@ async function markAttemptFailed(prisma, sessionId, {
 
   const attempts = Number(current.evalAttempts) || 0;
   const delay = nextDelayFor(attempts, env);
-  // Un fallo PERMANENTE (credenciales, configuración, modelo inexistente/retirado, datos no
-  // evaluables) no se reintenta solo: el mismo error se repetiría en cada intento. Se registra para
-  // revisión técnica y se deja de programar. La sesión queda en FAILED (no 'EXHAUSTED', que en la
-  // interfaz significa «puede llegar más adelante»): el vocero ve el mensaje de revisión y el
-  // operador puede relanzarla a mano cuando corrija la causa.
+  // Un fallo permanente (credenciales, configuración, modelo retirado, datos no evaluables) no se
+  // reintenta: se repetiría en cada intento. La sesión queda en FAILED y no en EXHAUSTED, que en la
+  // interfaz significa que el informe todavía puede llegar.
   const permanent = kind === 'permanent';
   const exhausted = delay == null || permanent;
   const previous = current.metrics?.evaluation || {};
   const base = metrics || current.metrics || {};
 
-  // Escritura CONDICIONAL: nunca pisa un informe válido ni el estado de un intento más reciente
-  // (si el lease ya no es el de este intento, otro intento tomó el relevo y este se descarta).
+  // Escritura condicional: no pisa un informe válido ni el estado de un intento más reciente. Si el
+  // lease ya no es el de este intento, otro tomó el relevo y este se descarta.
   const updated = await prisma.session.updateMany({
     where: {
       id: sessionId,
@@ -167,8 +164,7 @@ async function markAttemptFailed(prisma, sessionId, {
       ...(leaseUntil != null ? { evalLeaseUntil: new Date(leaseUntil) } : {}),
     },
     data: {
-      // 'EXHAUSTED' es distinguible de COMPLETED y de un informe disponible. Un fallo permanente se
-      // queda en FAILED: no hay más intentos automáticos, pero tampoco es «puede llegar solo».
+      // Un fallo permanente queda en FAILED; EXHAUSTED se reserva para los reintentos agotados.
       status: exhausted && !permanent ? 'EXHAUSTED' : 'FAILED',
       evalExhausted: exhausted && !permanent,
       evalLastError: String(error || 'ERROR').slice(0, 60),
@@ -182,7 +178,7 @@ async function markAttemptFailed(prisma, sessionId, {
           state: 'failed',
           stage: previous.stage || 'ai',
           error: String(error || 'ERROR').slice(0, 60),
-          // Clasificación del fallo: 'transient' se reintenta; 'permanent' requiere revisión técnica.
+          // Clasificación del fallo: temporal se reintenta; permanente requiere revisión técnica.
           errorKind: kind === 'permanent' ? 'permanent' : 'transient',
           finishedAt: at,
           attempts,

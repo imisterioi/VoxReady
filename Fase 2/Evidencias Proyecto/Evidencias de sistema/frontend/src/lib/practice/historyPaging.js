@@ -4,7 +4,7 @@
 //  - Al entrar se muestran como máximo 10 sesiones (las más recientes, el orden lo pone el backend).
 //  - Si hay más de 10, aparece la flecha para ampliar hasta 20 dentro del bloque actual.
 //  - Si hay más de 20, se añade paginación: el backend devuelve bloques de 20 (no todo el historial).
-//  - Nunca se muestran páginas vacías: la página pedida se acota al rango existente.
+//  - La página pedida se acota al rango existente: no se muestran páginas vacías.
 export const PAGE_SIZE = 20; // filas que se piden al backend por página
 export const COLLAPSED = 10; // filas visibles antes de expandir
 

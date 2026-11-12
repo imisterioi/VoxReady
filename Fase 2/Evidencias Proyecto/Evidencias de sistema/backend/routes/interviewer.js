@@ -49,7 +49,7 @@ function cleanHistory(history) {
 }
 
 // Decide si corresponde REPREGUNTAR (y con qué presupuesto) o AVANZAR a la siguiente principal.
-// Reglas: una respuesta suficiente avanza SIEMPRE; nunca se insiste sin fundamento; el fallo de
+// Reglas: una respuesta suficiente avanza siempre; no se insiste sin fundamento; el fallo de
 // evaluación usa la aclaración de contingencia y, si no queda presupuesto, cierra la línea.
 function decideTurn({ assessment, budget, used = {}, timeLeftMs = null } = {}) {
   const status = assessment?.status || 'unevaluable';
@@ -211,9 +211,8 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           entry.session.seed({ history, kindFor: (index) => turnPlan(cfg, index).kind });
         }
         const before = entry.session.snapshot();
-        // Una entrevista CERRADA (por ejemplo, por tiempo) no vuelve a generar preguntas: se
-        // responde el cierre y NO se consumen reservas precargadas que ya no corresponden a
-        // ningún turno pendiente.
+        // Una entrevista cerrada (por tiempo, por ejemplo) no genera más preguntas: se responde el
+        // cierre y no se consumen reservas precargadas que ya no corresponden a ningún turno.
         if (before.closeReason) {
           return res.status(409).json({
             status: 'error',
@@ -226,9 +225,8 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
             pendingMains: Math.max(0, mainsTotal - before.mainsAsked),
           });
         }
-        // NOTA: aqui NO se cierra por "ya complete todas las principales". Completar las preguntas
-        // principales no termina la entrevista por si solo: antes se evalua la ultima respuesta y
-        // se permite la aclaracion que corresponda (mas abajo, tras la decision del turno).
+        // Completar las preguntas principales no cierra la entrevista: antes se evalúa la última
+        // respuesta y se permite la aclaración que corresponda (más abajo, tras la decisión del turno).
         const context = {
           theme,
           history,
@@ -284,7 +282,7 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           };
         };
         if (before.turn > 0) {
-          // ORDEN OBLIGATORIO: evaluar la respuesta ANTES de entregar pregunta o reserva.
+          // Orden obligatorio: evaluar la respuesta antes de entregar pregunta o reserva.
           assessment = await assess({
             mainQuestion,
             answer,
@@ -304,7 +302,7 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
             assessment,
             budget,
             used: before.usedByBudget,
-            // Cierre por tiempo: SOLO si el escenario define una duración máxima (estimatedMinutes).
+            // Cierre por tiempo: solo si el escenario define una duración máxima (estimatedMinutes).
             // Sin duración configurada NO hay límite: la estimación automática es una referencia.
             timeLeftMs:
               resolved.maxDurationMs == null
@@ -329,13 +327,12 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
         // Cierre decidido por la evaluación (no queda tiempo para otra intervención): se responde el
         // cierre con done=true en vez de pedir una pregunta nueva.
         if (decision.close) return res.json(closeInterview(decision.close, decision.reason));
-        // CIERRE POR TIEMPO: se activa cuando el tiempo transcurrido de la sesion alcanza el maximo
-        // configurado. `before.elapsedMs` es el tiempo medido al llegar esta peticion (justo despues
-        // de registrar la respuesta y antes de evaluarla), de modo que:
-        //  - la respuesta que ya estaba en curso queda registrada y evaluada antes del cierre;
-        //  - el reloj es el de la sesion (no se reinicia por cambio de tema ni por repregunta);
-        //  - no se reserva tiempo para un turno que nunca llega a formularse (`msPerTurn` deja de
-        //    adelantar el cierre y queda como valor informativo de la configuracion).
+        // Cierre por tiempo: se activa cuando el tiempo transcurrido alcanza el máximo configurado.
+        // `before.elapsedMs` es el tiempo medido al llegar esta petición, después de registrar la
+        // respuesta y antes de evaluarla:
+        //  - la respuesta en curso queda registrada y evaluada antes del cierre;
+        //  - el reloj es el de la sesión (no se reinicia por cambio de tema ni por repregunta);
+        //  - `msPerTurn` no adelanta el cierre y queda como valor informativo de la configuración.
         const timeUp =
           before.turn > 0 &&
           resolved.maxDurationMs != null &&
@@ -344,12 +341,11 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           entry.session.setCloseReason('TIME_LIMIT');
           return res.json(closeInterview('TIME_LIMIT', 'sin_tiempo_para_otra_intervencion'));
         }
-        // CIERRE NORMAL (autoritativo): todas las principales ya se entregaron y la evaluacion de
-        // la ultima respuesta NO pide otra aclaracion. Solo aqui termina la entrevista por si
-        // sola; una repregunta adaptativa nunca la cierra mientras queden principales pendientes.
-        // `decideTurn` ya garantiza que no hay bucle: si la respuesta es suficiente o los
-        // presupuestos se agotan (incluida la contingencia cuando la evaluacion falla), devuelve
-        // `advance`.
+        // Único punto donde la entrevista termina por sí sola: todas las preguntas principales ya se
+        // entregaron y la evaluación de la última respuesta no pide otra aclaración. Una repregunta
+        // adaptativa no la cierra mientras queden principales pendientes. `decideTurn` garantiza que
+        // no hay bucle: devuelve `advance` cuando la respuesta es suficiente o los presupuestos se
+        // agotan.
         if (before.mainsAsked >= mainsTotal && decision.action !== 'followup') {
           entry.session.setCloseReason('COMPLETED');
           return res.status(409).json({
@@ -367,7 +363,7 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           result = await entry.session.next({
             needsFollowUp: true,
             originAnswer: answer,
-            // Contexto REAL de la repregunta: pregunta principal en curso, foco detectado por la
+            // Contexto real de la repregunta: pregunta principal en curso, foco detectado por la
             // evaluación y si hay transcripción utilizable. Sin esto, la repregunta se apoyaba en
             // el plan interno y no en lo que el vocero dijo.
             focus: assessment?.focus || null,
