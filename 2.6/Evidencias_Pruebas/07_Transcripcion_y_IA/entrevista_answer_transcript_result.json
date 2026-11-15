@@ -1,0 +1,67 @@
+{
+  "steps": [
+    {
+      "step": "login",
+      "status": 200,
+      "role": "user"
+    },
+    {
+      "step": "scenarios",
+      "status": 200,
+      "count": 18
+    },
+    {
+      "step": "scenario_elegido",
+      "id": "d8135590-2a66-41de-acf5-95872cc626d7",
+      "title": "Prueba integral: corte masivo de suministro",
+      "language": "es"
+    },
+    {
+      "step": "crear_sesion",
+      "status": 200,
+      "sessionId": "6cd2e59d-0451-4fd2-a926-5e8156389d0d"
+    },
+    {
+      "step": "answer_transcript",
+      "status": 200,
+      "wallMs": 4374,
+      "response": {
+        "status": "ok",
+        "text": "Buenos días. Ante el corte de suministro que afectó a nuestros clientes, quiero expresar nuestras disculpas a las personas y familias afectadas. Asumimos la responsabilidad de lo ocurrido y ya pusimos en marcha un plan de contingencia con equipos en terreno. Nuestro compromiso es restablecer el servicio cuanto antes y mantener informada a la comunidad de forma transparente. Agradecemos la",
+        "engine": "nvidia-whisper-large-v3",
+        "ms": 4323,
+        "code": null
+      },
+      "audioBytes": 247117
+    },
+    {
+      "step": "transcription_audit",
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "sessionId": "6cd2e59d-0451-4fd2-a926-5e8156389d0d",
+        "audits": [
+          {
+            "turnIndex": 0,
+            "status": "ok",
+            "engine": "nvidia-whisper-large-v3",
+            "transcript": "Buenos días. Ante el corte de suministro que afectó a nuestros clientes, quiero expresar nuestras disculpas a las personas y familias afectadas. Asumimos la responsabilidad de lo ocurrido y ya pusimos en marcha un plan de contingencia con equipos en terreno. Nuestro compromiso es restablecer el servicio cuanto antes y mantener informada a la comunidad de forma transparente. Agradecemos la",
+            "totalMs": 4323,
+            "reason": "PRIORITY",
+            "attempts": [
+              {
+                "ms": 4323,
+                "code": null,
+                "chars": null,
+                "engine": "nvidia-whisper-large-v3",
+                "status": "success"
+              }
+            ],
+            "createdAt": "2026-11-13T17:18:18.234Z"
+          }
+        ]
+      }
+    }
+  ],
+  "at": "2026-11-13T17:18:13.657Z"
+}

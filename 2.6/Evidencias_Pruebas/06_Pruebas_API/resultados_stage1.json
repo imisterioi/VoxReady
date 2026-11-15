@@ -1,0 +1,195 @@
+{
+  "meta": {
+    "api": "http://127.0.0.1:3000",
+    "startedAt": "2026-11-13T17:22:17.448Z",
+    "ambiente": "Docker compose (postgres 17 + whisper + backend + frontend Vite)"
+  },
+  "results": [
+    {
+      "id": "CP-001",
+      "modulo": "Autenticación",
+      "nombre": "Ingreso de un usuario registrado",
+      "procedimiento": "POST /api/auth/login con credenciales válidas de vocero",
+      "esperado": "El usuario ingresa y obtiene token con su rol",
+      "obtenido": "HTTP 200 · rol=user · token=recibido",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-002",
+      "modulo": "Autenticación",
+      "nombre": "Rechazo de credenciales incorrectas",
+      "procedimiento": "POST /api/auth/login con contraseña incorrecta",
+      "esperado": "HTTP 401 con mensaje de credenciales inválidas",
+      "obtenido": "HTTP 401 · mensaje=\"Correo o contraseña incorrectos.\"",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-003",
+      "modulo": "Gestión de usuarios",
+      "nombre": "Acceso según rol del usuario",
+      "procedimiento": "Se invoca /api/users, /api/patterns y /api/tenants con cada rol",
+      "esperado": "Cada rol accede solo a lo permitido; el resto responde 403",
+      "obtenido": "vocero→/users:403 · admin→/users:200 · master→/patterns:200 · system→/tenants:200 · vocero→/tenants:403",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "E-3-IDIOMA",
+      "modulo": "Plataforma",
+      "nombre": "Disponibilidad de idiomas (es/en)",
+      "procedimiento": "GET /api/languages",
+      "esperado": "El sistema declara idioma por defecto y las opciones disponibles",
+      "obtenido": "HTTP 200 · default=es · idiomas=es/en",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-014",
+      "modulo": "Escenarios",
+      "nombre": "Crear un escenario de práctica",
+      "procedimiento": "POST /api/themes con los campos requeridos (rol ADMIN)",
+      "esperado": "El sistema crea y almacena el escenario",
+      "obtenido": "HTTP 201 · id=e0ee7158-0bde-4a72-950a-0b74b140a4b6",
+      "estado": "APROBADO",
+      "observaciones": "Escenario de prueba: se elimina al final del ciclo."
+    },
+    {
+      "id": "CP-015",
+      "modulo": "Escenarios",
+      "nombre": "Modificar un escenario existente",
+      "procedimiento": "PUT /api/themes/:id modificando el título (rol ADMIN)",
+      "esperado": "El sistema guarda los cambios y muestra la información actualizada",
+      "obtenido": "HTTP 200 · título devuelto=\"[QA] Escenario de prueba 1794590537884 (v2)\"",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "DEF-001",
+      "modulo": "Escenarios",
+      "nombre": "Escenario con título duplicado en el mismo tenant",
+      "procedimiento": "POST /api/themes repitiendo un título ya existente",
+      "esperado": "El sistema debería responder con un error controlado (409/400) indicando el conflicto",
+      "obtenido": "HTTP 500 · respuesta=\"Error interno creando el escenario.\" · error de Prisma P2002 (Unique constraint Theme_tenantId_title_key)",
+      "estado": "DEFECTO",
+      "observaciones": "Defecto: el conflicto de unicidad no se maneja y el cliente recibe un 500 genérico."
+    },
+    {
+      "id": "E-2.10/3.3",
+      "modulo": "Escenarios",
+      "nombre": "Eliminar un escenario de prueba (limpieza QA)",
+      "procedimiento": "DELETE /api/themes/:id (rol ADMIN) y verificación posterior",
+      "esperado": "El escenario deja de estar disponible para los usuarios",
+      "obtenido": "HTTP 200 · visible tras borrar=false",
+      "estado": "APROBADO",
+      "observaciones": "Se eliminó el escenario de prueba creado durante la ejecución."
+    }
+  ],
+  "apiLog": [
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/auth/login",
+      "status": 200,
+      "ms": 134
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/auth/login",
+      "status": 200,
+      "ms": 64
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/auth/login",
+      "status": 200,
+      "ms": 63
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/auth/login",
+      "status": 200,
+      "ms": 55
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/auth/login",
+      "status": 401,
+      "ms": 50
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/users",
+      "status": 403,
+      "ms": 7
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/users",
+      "status": 200,
+      "ms": 11
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/patterns",
+      "status": 200,
+      "ms": 29
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/tenants",
+      "status": 200,
+      "ms": 13
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/tenants",
+      "status": 403,
+      "ms": 5
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/languages",
+      "status": 200,
+      "ms": 3
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/themes",
+      "status": 201,
+      "ms": 9
+    },
+    {
+      "method": "PUT",
+      "url": "http://127.0.0.1:3000/api/themes/e0ee7158-0bde-4a72-950a-0b74b140a4b6",
+      "status": 200,
+      "ms": 16
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/themes",
+      "status": 500,
+      "ms": 14
+    },
+    {
+      "method": "DELETE",
+      "url": "http://127.0.0.1:3000/api/themes/e0ee7158-0bde-4a72-950a-0b74b140a4b6",
+      "status": 200,
+      "ms": 9
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/themes",
+      "status": 200,
+      "ms": 12
+    }
+  ],
+  "tokens": {
+    "vocero": "eyJzdWIiOiIzYjI1NjM1ZC02ZWQyLTQ1NzctOWY1Mi0yNTJkOTFkNWZjMzUiLCJyb2xlIjoiVk9DRVJPIiwiZXhwIjoxNzk1MTk1MzM3NTc2fQ.yAv7bfhdC0p5zsbOZP15QFId70d7GMd-Gsl_j_vvjs4",
+    "admin": "eyJzdWIiOiIzM2I1NzQ5Yi02YWYxLTRhN2YtYjM2ZC0zY2U5ZTRmOWQ5ZWQiLCJyb2xlIjoiQURNSU4iLCJleHAiOjE3OTUxOTUzMzc2NDV9.XQeqj3EW9NFeZrWKvh9shGqGOULtEmELnbnbCf9_Cmo",
+    "master": "eyJzdWIiOiI2ODQ2OGE4My0zMjQwLTQ0ZGEtODUyMC00M2JlNDNiNGRkZDEiLCJyb2xlIjoiTUFTVEVSIiwiZXhwIjoxNzk1MTk1MzM3NzA4fQ.2p8PyiwzOE4Q4Hpl9c5iBdZ9ePRuZ-3ufmO7llCWQBk",
+    "system": "eyJzdWIiOiJlOGYyNDEwNi1mYzljLTQ0OTAtOGJmMi1kYTAwMjE5NWVkNjQiLCJyb2xlIjoiU1lTVEVNIiwiZXhwIjoxNzk1MTk1MzM3NzYzfQ.eVB3kM2u224ce4wY56YVMiHHTBcYCqYKNkTho4oOxF8"
+  },
+  "sessionId": null,
+  "createdId": "e0ee7158-0bde-4a72-950a-0b74b140a4b6"
+}

@@ -1,0 +1,136 @@
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.10.0) to ./node_modules/@prisma/client in 717ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+
+> backend@1.0.0 dev
+> nodemon --legacy-watch index.js
+
+[33m[nodemon] 3.1.10[39m
+[33m[nodemon] to restart at any time, enter `rs`[39m
+[33m[nodemon] watching path(s): *.*[39m
+[33m[nodemon] watching extensions: js,json[39m
+[32m[nodemon] starting `node index.js`[39m
+◇ injected env (0) from .env // tip: ⌘ suppress logs { quiet: true }
+◇ injected env (9) from .env.local // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+Servidor backend de VoxReady corriendo en http://localhost:3000
+[IA] Entrevistador listo (nvidia/nemotron-3.5-lightning-30b-a3b, 2767 ms)
+[Retención] 2 transcripción(es) eliminada(s) según la política de retención
+[Retención] 2 reporte(s) limpiado(s) según la política de retención
+[IA] deepseek-ai/deepseek-v4.1-flash falló: sin respuesta en 20000 ms
+[IA] google/gemma-4-31b-it falló: sin respuesta en 20000 ms
+[IA] z-ai/glm-5.3-flash falló: sin respuesta en 20000 ms
+prisma:error 
+Invalid `prisma.theme.create()` invocation in
+/app/index.js:548:38
+
+  545 const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: req.body.interview !== undefined });
+  546 if (configError) return res.status(422).json(configError);
+  547 
+→ 548 const theme = await prisma.theme.create(
+Unique constraint failed on the constraint: `Theme_tenantId_title_key`
+Error creando escenario: PrismaClientKnownRequestError: 
+Invalid `prisma.theme.create()` invocation in
+/app/index.js:548:38
+
+  545 const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: req.body.interview !== undefined });
+  546 if (configError) return res.status(422).json(configError);
+  547 
+→ 548 const theme = await prisma.theme.create(
+Unique constraint failed on the constraint: `Theme_tenantId_title_key`
+    at vn.handleRequestError (/app/node_modules/@prisma/client/runtime/client.js:65:8643)
+    at vn.handleAndLogRequestError (/app/node_modules/@prisma/client/runtime/client.js:65:7932)
+    at vn.request (/app/node_modules/@prisma/client/runtime/client.js:65:7639)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/app/node_modules/@prisma/client/runtime/client.js:99:6935)
+    at async /app/index.js:548:19 {
+  code: 'P2002',
+  meta: {
+    driverAdapterError: DriverAdapterError: UniqueConstraintViolation
+        at PrismaPgAdapter.onError (/app/node_modules/@prisma/adapter-pg/dist/index.js:702:11)
+        at PrismaPgAdapter.performIO (/app/node_modules/@prisma/adapter-pg/dist/index.js:697:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        at async PrismaPgAdapter.queryRaw (/app/node_modules/@prisma/adapter-pg/dist/index.js:631:30)
+        at async /app/node_modules/@prisma/client/runtime/client.js:11:70479
+        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:70920)
+        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:71857)
+        at async e.run (/app/node_modules/@prisma/client/runtime/client.js:11:69273)
+        at async e.execute (/app/node_modules/@prisma/client/runtime/client.js:57:815)
+        at async yr.request (/app/node_modules/@prisma/client/runtime/client.js:58:2425) {
+      cause: [Object]
+    },
+    modelName: 'Theme'
+  },
+  clientVersion: '7.10.0'
+}
+prisma:error 
+Invalid `prisma.theme.create()` invocation in
+/app/index.js:548:38
+
+  545 const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: req.body.interview !== undefined });
+  546 if (configError) return res.status(422).json(configError);
+  547 
+→ 548 const theme = await prisma.theme.create(
+Unique constraint failed on the constraint: `Theme_tenantId_title_key`
+Error creando escenario: PrismaClientKnownRequestError: 
+Invalid `prisma.theme.create()` invocation in
+/app/index.js:548:38
+
+  545 const configError = invalidInterviewConfigPayload(req.body.interview, { requireDuration: req.body.interview !== undefined });
+  546 if (configError) return res.status(422).json(configError);
+  547 
+→ 548 const theme = await prisma.theme.create(
+Unique constraint failed on the constraint: `Theme_tenantId_title_key`
+    at vn.handleRequestError (/app/node_modules/@prisma/client/runtime/client.js:65:8643)
+    at vn.handleAndLogRequestError (/app/node_modules/@prisma/client/runtime/client.js:65:7932)
+    at vn.request (/app/node_modules/@prisma/client/runtime/client.js:65:7639)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async a (/app/node_modules/@prisma/client/runtime/client.js:99:6935)
+    at async /app/index.js:548:19 {
+  code: 'P2002',
+  meta: {
+    driverAdapterError: DriverAdapterError: UniqueConstraintViolation
+        at PrismaPgAdapter.onError (/app/node_modules/@prisma/adapter-pg/dist/index.js:702:11)
+        at PrismaPgAdapter.performIO (/app/node_modules/@prisma/adapter-pg/dist/index.js:697:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        at async PrismaPgAdapter.queryRaw (/app/node_modules/@prisma/adapter-pg/dist/index.js:631:30)
+        at async /app/node_modules/@prisma/client/runtime/client.js:11:70479
+        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:70920)
+        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:71857)
+        at async e.run (/app/node_modules/@prisma/client/runtime/client.js:11:69273)
+        at async e.execute (/app/node_modules/@prisma/client/runtime/client.js:57:815)
+        at async yr.request (/app/node_modules/@prisma/client/runtime/client.js:58:2425) {
+      cause: [Object]
+    },
+    modelName: 'Theme'
+  },
+  clientVersion: '7.10.0'
+}
+[ASR] fa4538ee-2ce9-416f-b743-1f55a5f329ab reutilizadas:1 
+[ASR] fa4538ee-2ce9-416f-b743-1f55a5f329ab reutilizadas:1 
+Error iniciando la evaluación: La entrevista no tiene preguntas registradas.
+[IA] deepseek-ai/deepseek-v4.1-flash falló: sin respuesta en 20000 ms
+[IA] google/gemma-4-31b-it falló: sin respuesta en 20000 ms
+[IA] z-ai/glm-5.3-flash falló: sin respuesta en 20000 ms
+[IA evaluadora] modelos {"orden":["z-ai/glm-5.3:sin-dato/sin-limite","nvidia/nemotron-3-ultra-550b-a55b:sin-dato/sin-limite","openai/gpt-oss-20b:sin-dato/sin-limite","minimaxai/minimax-m3.1-flash:sin-dato/sin-limite"],"baseTimeoutMs":null}
+[IA evaluadora] z-ai/glm-5.3 falló: HTTP 410 (394 ms)
+[ASR] d0ab9b13-f2c5-480c-9c19-1cb4fb8c40de reutilizadas:1 
+[IA evaluadora] modelos {"orden":["z-ai/glm-5.3:sin-dato/sin-limite","nvidia/nemotron-3-ultra-550b-a55b:sin-dato/sin-limite","openai/gpt-oss-20b:sin-dato/sin-limite","minimaxai/minimax-m3.1-flash:sin-dato/sin-limite"],"baseTimeoutMs":null}
+[IA evaluadora] z-ai/glm-5.3 falló: HTTP 410 (418 ms)
+[IA evaluadora] minimaxai/minimax-m3.1-flash falló: HTTP 503 (544 ms)
+[IA] deepseek-ai/deepseek-v4.1-flash falló: sin respuesta en 20000 ms
+[IA] google/gemma-4-31b-it falló: sin respuesta en 20000 ms
+[IA] z-ai/glm-5.3-flash falló: sin respuesta en 20000 ms
+[ASR] a1646e3a-9751-49cb-a317-d164fcfc6399 reutilizadas:1 
+[IA] deepseek-ai/deepseek-v4.1-flash falló: sin respuesta en 20000 ms
+[IA] google/gemma-4-31b-it falló: sin respuesta en 20000 ms
+[IA] z-ai/glm-5.3-flash falló: sin respuesta en 20000 ms
+[IA evaluadora] modelos {"orden":["z-ai/glm-5.3:sin-dato/sin-limite","nvidia/nemotron-3-ultra-550b-a55b:sin-dato/sin-limite","openai/gpt-oss-20b:sin-dato/sin-limite","minimaxai/minimax-m3.1-flash:sin-dato/sin-limite"],"baseTimeoutMs":null}
+[IA evaluadora] z-ai/glm-5.3 falló: HTTP 410 (123 ms)
+[IA evaluadora] minimaxai/minimax-m3.1-flash falló: HTTP 503 (515 ms)
+Error iniciando la evaluación: La entrevista no tiene preguntas registradas.

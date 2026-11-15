@@ -1,0 +1,12 @@
+﻿[IA] deepseek-ai/deepseek-v4.1-flash fallÃ³: sin respuesta en 20000 ms
+[IA] google/gemma-4-31b-it fallÃ³: sin respuesta en 20000 ms
+[IA] z-ai/glm-5.3-flash fallÃ³: sin respuesta en 20000 ms
+[IA] deepseek-ai/deepseek-v4.1-flash fallÃ³: sin respuesta en 20000 ms
+[IA] google/gemma-4-31b-it fallÃ³: sin respuesta en 20000 ms
+[IA] z-ai/glm-5.3-flash fallÃ³: sin respuesta en 20000 ms
+[IA evaluadora] modelos {"orden":["z-ai/glm-5.3:sin-dato/sin-limite","nvidia/nemotron-3-ultra-550b-a55b:sin-dato/sin-limite","openai/gpt-oss-20b:sin-dato/sin-limite","minimaxai/minimax-m3.1-flash:sin-dato/sin-limite"],"baseTimeoutMs":null}
+[IA evaluadora] z-ai/glm-5.3 fallÃ³: HTTP 410 (394 ms)
+[IA evaluadora] modelos {"orden":["z-ai/glm-5.3:sin-dato/sin-limite","nvidia/nemotron-3-ultra-550b-a55b:sin-dato/sin-limite","openai/gpt-oss-20b:sin-dato/sin-limite","minimaxai/minimax-m3.1-flash:sin-dato/sin-limite"],"baseTimeoutMs":null}
+[IA evaluadora] z-ai/glm-5.3 fallÃ³: HTTP 410 (418 ms)
+[IA evaluadora] minimaxai/minimax-m3.1-flash fallÃ³: HTTP 503 (544 ms)
+[IA] deepseek-ai/deepseek-v4.1-flash fallÃ³: sin respuesta en 20000 ms

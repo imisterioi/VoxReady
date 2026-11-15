@@ -1,0 +1,49 @@
+{
+  "id": "DEF-002",
+  "detectado": "2026-11-13T18:05:13.141Z",
+  "descripcion": "Modelos de IA configurados no disponibles o con errores de conexión/tiempo de espera.",
+  "modelos_con_problema": [
+    {
+      "modelo": "moonshotai/kimi-k3",
+      "rol": "evaluador (AI_EVAL_MODEL)",
+      "error": "HTTP 410 Gone - el modelo alcanzó su fin de vida (2026-10-15)"
+    },
+    {
+      "modelo": "nvidia/nemotron-3-super-120b-a12b",
+      "rol": "evaluador (respaldo)",
+      "error": "HTTP 404 Not Found"
+    },
+    {
+      "modelo": "z-ai/glm-5.3-flash",
+      "rol": "entrevistador (AI_EXTRA_MODELS)",
+      "error": "sin respuesta en 20000 ms (timeout)"
+    },
+    {
+      "modelo": "deepseek-ai/deepseek-v4.1-flash",
+      "rol": "entrevistador principal (AI_MODEL)",
+      "error": "sin respuesta en 20000 ms (timeout)"
+    },
+    {
+      "modelo": "google/gemma-4-31b-it",
+      "rol": "entrevistador (respaldo)",
+      "error": "sin respuesta en 20000 ms (timeout)"
+    },
+    {
+      "modelo": "z-ai/glm-5.3",
+      "rol": "evaluador (AI_EVAL_MODELS)",
+      "error": "HTTP 410 (394 ms)"
+    },
+    {
+      "modelo": "minimaxai/minimax-m3.1-flash",
+      "rol": "evaluador",
+      "error": "HTTP 503"
+    }
+  ],
+  "modelo_que_respondio_correctamente": {
+    "modelo": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "rol": "entrevistador (AI_EXTRA_MODELS)",
+    "evidencia": "[IA] Entrevistador listo (nvidia/nemotron-3.5-lightning-30b-a3b, 2767 ms) y respuesta en 656 ms en CP-007"
+  },
+  "impacto": "El sistema sigue operando porque intenta varios modelos y usa el primero que responde; si el modelo disponible falla, la entrevista o la evaluación pueden no completarse.",
+  "evidencia": "09_Defectos/DEF-002_modelos_ia.json y 10_Registros_y_Logs/log_modelos_ia_errores.txt"
+}

@@ -1,0 +1,331 @@
+TAP version 13
+# Subtest: si el principal funciona, los respaldos se cancelan y no ganan
+ok 1 - si el principal funciona, los respaldos se cancelan y no ganan
+  ---
+  duration_ms: 6.079059
+  type: 'test'
+  ...
+# Subtest: si el principal falla, entra Canary
+ok 2 - si el principal falla, entra Canary
+  ---
+  duration_ms: 1.00966
+  type: 'test'
+  ...
+# Subtest: si fallan los dos NVIDIA, entra el Whisper local
+ok 3 - si fallan los dos NVIDIA, entra el Whisper local
+  ---
+  duration_ms: 0.700941
+  type: 'test'
+  ...
+# Subtest: texto vacío del principal cuenta como fallo y pasa al respaldo
+ok 4 - texto vacío del principal cuenta como fallo y pasa al respaldo
+  ---
+  duration_ms: 0.771446
+  type: 'test'
+  ...
+# Subtest: si los tres fallan no hay texto y se informa ALL_ENGINES_FAILED
+ok 5 - si los tres fallan no hay texto y se informa ALL_ENGINES_FAILED
+  ---
+  duration_ms: 0.756544
+  type: 'test'
+  ...
+# Subtest: un fallo sistémico marca el proveedor como caído para el resto de la sesión
+ok 6 - un fallo sistémico marca el proveedor como caído para el resto de la sesión
+  ---
+  duration_ms: 0.51593
+  type: 'test'
+  ...
+# Subtest: todos los motores reciben EXACTAMENTE el mismo fragmento
+ok 7 - todos los motores reciben EXACTAMENTE el mismo fragmento
+  ---
+  duration_ms: 2.657857
+  type: 'test'
+  ...
+# Subtest: una respuesta puede usar respaldo sin afectar a las demás
+ok 8 - una respuesta puede usar respaldo sin afectar a las demás
+  ---
+  duration_ms: 1.02096
+  type: 'test'
+  ...
+# Subtest: una ventana inválida no llama a ningún motor
+ok 9 - una ventana inválida no llama a ningún motor
+  ---
+  duration_ms: 0.474728
+  type: 'test'
+  ...
+# Subtest: un timeout del principal permite probar el siguiente motor
+ok 10 - un timeout del principal permite probar el siguiente motor
+  ---
+  duration_ms: 0.600536
+  type: 'test'
+  ...
+# Subtest: cada intento informa su duración y el total de la respuesta
+ok 11 - cada intento informa su duración y el total de la respuesta
+  ---
+  duration_ms: 17.778548
+  type: 'test'
+  ...
+# Subtest: el presupuesto global impide iniciar motores cuando ya no queda tiempo
+ok 12 - el presupuesto global impide iniciar motores cuando ya no queda tiempo
+  ---
+  duration_ms: 0.566034
+  type: 'test'
+  ...
+# Subtest: el límite de cada motor se recorta al tiempo restante del presupuesto
+ok 13 - el límite de cada motor se recorta al tiempo restante del presupuesto
+  ---
+  duration_ms: 0.314419
+  type: 'test'
+  ...
+# Subtest: los metadatos quedan asociados al turno correcto
+ok 14 - los metadatos quedan asociados al turno correcto
+  ---
+  duration_ms: 0.661239
+  type: 'test'
+  ...
+# Subtest: con un idioma conocido la cadena por defecto usa los tres motores en orden
+ok 15 - con un idioma conocido la cadena por defecto usa los tres motores en orden
+  ---
+  duration_ms: 0.614536
+  type: 'test'
+  ...
+# Subtest: sin idioma conocido se descartan los motores que no autodetectan
+ok 16 - sin idioma conocido se descartan los motores que no autodetectan
+  ---
+  duration_ms: 0.33822
+  type: 'test'
+  ...
+# Subtest: las respuestas se procesan en serie (no hay concurrencia)
+    # Subtest: Whisper gana aunque Canary termine antes, y se cancela el resto
+    ok 1 - Whisper gana aunque Canary termine antes, y se cancela el resto
+      ---
+      duration_ms: 15.831733
+      type: 'test'
+      ...
+    # Subtest: si Whisper falla, gana Canary
+    ok 2 - si Whisper falla, gana Canary
+      ---
+      duration_ms: 0.821049
+      type: 'test'
+      ...
+    # Subtest: el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+    not ok 3 - el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+      ---
+      duration_ms: 7.337132
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:270:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: los tres fallan: error controlado
+    not ok 4 - los tres fallan: error controlado
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:285:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: al agotarse el presupuesto se abortan los motores en curso
+    not ok 5 - al agotarse el presupuesto se abortan los motores en curso
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:299:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: un resultado tardío no reemplaza la transcripción ya seleccionada
+    not ok 6 - un resultado tardío no reemplaza la transcripción ya seleccionada
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:319:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: Whisper gana aunque Canary termine antes, y se cancela el resto
+    not ok 7 - Whisper gana aunque Canary termine antes, y se cancela el resto
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:243:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: si Whisper falla, gana Canary
+    not ok 8 - si Whisper falla, gana Canary
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:257:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+    not ok 9 - el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:270:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: los tres fallan: error controlado
+    not ok 10 - los tres fallan: error controlado
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:285:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: al agotarse el presupuesto se abortan los motores en curso
+    not ok 11 - al agotarse el presupuesto se abortan los motores en curso
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:299:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: un resultado tardío no reemplaza la transcripción ya seleccionada
+    not ok 12 - un resultado tardío no reemplaza la transcripción ya seleccionada
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:319:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: Whisper gana aunque Canary termine antes, y se cancela el resto
+    not ok 13 - Whisper gana aunque Canary termine antes, y se cancela el resto
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:243:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: si Whisper falla, gana Canary
+    not ok 14 - si Whisper falla, gana Canary
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:257:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+    not ok 15 - el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:270:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: los tres fallan: error controlado
+    not ok 16 - los tres fallan: error controlado
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:285:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: al agotarse el presupuesto se abortan los motores en curso
+    not ok 17 - al agotarse el presupuesto se abortan los motores en curso
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:299:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: un resultado tardío no reemplaza la transcripción ya seleccionada
+    not ok 18 - un resultado tardío no reemplaza la transcripción ya seleccionada
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:319:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    1..18
+not ok 17 - las respuestas se procesan en serie (no hay concurrencia)
+  ---
+  duration_ms: 24.846764
+  type: 'test'
+  location: '/app/lib/asrChain.test.js:218:1'
+  failureType: 'subtestsFailed'
+  error: '16 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: la cadena real respeta el orden Whisper Large v3 -> Canary 1B -> local
+ok 18 - la cadena real respeta el orden Whisper Large v3 -> Canary 1B -> local
+  ---
+  duration_ms: 1.998418
+  type: 'test'
+  ...
+# Subtest: cada motor recibe el código de SU idioma y nunca el de otro
+ok 19 - cada motor recibe el código de SU idioma y nunca el de otro
+  ---
+  duration_ms: 0.772145
+  type: 'test'
+  ...
+# Subtest: sin ningún motor compatible no se transcribe y se informa del motivo
+ok 20 - sin ningún motor compatible no se transcribe y se informa del motivo
+  ---
+  duration_ms: 0.225313
+  type: 'test'
+  ...
+# Subtest: la cadena vacía se propaga como LANGUAGE_UNSUPPORTED (no como fallo puntual)
+ok 21 - la cadena vacía se propaga como LANGUAGE_UNSUPPORTED (no como fallo puntual)
+  ---
+  duration_ms: 0.426325
+  type: 'test'
+  ...
+# Subtest: si fallan los dos NVIDIA, el local resuelve la respuesta
+ok 22 - si fallan los dos NVIDIA, el local resuelve la respuesta
+  ---
+  duration_ms: 0.68164
+  type: 'test'
+  ...
+# Subtest: si los tres motores fallan no hay texto ni informe utilizable
+ok 23 - si los tres motores fallan no hay texto ni informe utilizable
+  ---
+  duration_ms: 0.773946
+  type: 'test'
+  ...
+# Subtest: una transcripcion vacia no es exito y pasa al siguiente motor
+ok 24 - una transcripcion vacia no es exito y pasa al siguiente motor
+  ---
+  duration_ms: 0.424825
+  type: 'test'
+  ...
+1..24
+# tests 42
+# suites 0
+# pass 25
+# fail 1
+# cancelled 16
+# skipped 0
+# todo 0
+# duration_ms 351.533017

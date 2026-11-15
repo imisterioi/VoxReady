@@ -1,0 +1,1520 @@
+TAP version 13
+# Subtest: si el principal funciona, los respaldos se cancelan y no ganan
+ok 1 - si el principal funciona, los respaldos se cancelan y no ganan
+  ---
+  duration_ms: 2.337142
+  type: 'test'
+  ...
+# Subtest: si el principal falla, entra Canary
+ok 2 - si el principal falla, entra Canary
+  ---
+  duration_ms: 0.676941
+  type: 'test'
+  ...
+# Subtest: si fallan los dos NVIDIA, entra el Whisper local
+ok 3 - si fallan los dos NVIDIA, entra el Whisper local
+  ---
+  duration_ms: 0.563634
+  type: 'test'
+  ...
+# Subtest: texto vacío del principal cuenta como fallo y pasa al respaldo
+ok 4 - texto vacío del principal cuenta como fallo y pasa al respaldo
+  ---
+  duration_ms: 0.746646
+  type: 'test'
+  ...
+# Subtest: si los tres fallan no hay texto y se informa ALL_ENGINES_FAILED
+ok 5 - si los tres fallan no hay texto y se informa ALL_ENGINES_FAILED
+  ---
+  duration_ms: 1.103667
+  type: 'test'
+  ...
+# Subtest: un fallo sistémico marca el proveedor como caído para el resto de la sesión
+ok 6 - un fallo sistémico marca el proveedor como caído para el resto de la sesión
+  ---
+  duration_ms: 0.803148
+  type: 'test'
+  ...
+# Subtest: todos los motores reciben EXACTAMENTE el mismo fragmento
+ok 7 - todos los motores reciben EXACTAMENTE el mismo fragmento
+  ---
+  duration_ms: 3.270499
+  type: 'test'
+  ...
+# Subtest: una respuesta puede usar respaldo sin afectar a las demás
+ok 8 - una respuesta puede usar respaldo sin afectar a las demás
+  ---
+  duration_ms: 1.98302
+  type: 'test'
+  ...
+# Subtest: una ventana inválida no llama a ningún motor
+ok 9 - una ventana inválida no llama a ningún motor
+  ---
+  duration_ms: 0.974359
+  type: 'test'
+  ...
+# Subtest: un timeout del principal permite probar el siguiente motor
+ok 10 - un timeout del principal permite probar el siguiente motor
+  ---
+  duration_ms: 1.461988
+  type: 'test'
+  ...
+# Subtest: cada intento informa su duración y el total de la respuesta
+ok 11 - cada intento informa su duración y el total de la respuesta
+  ---
+  duration_ms: 18.121898
+  type: 'test'
+  ...
+# Subtest: el presupuesto global impide iniciar motores cuando ya no queda tiempo
+ok 12 - el presupuesto global impide iniciar motores cuando ya no queda tiempo
+  ---
+  duration_ms: 0.312319
+  type: 'test'
+  ...
+# Subtest: el límite de cada motor se recorta al tiempo restante del presupuesto
+ok 13 - el límite de cada motor se recorta al tiempo restante del presupuesto
+  ---
+  duration_ms: 0.32592
+  type: 'test'
+  ...
+# Subtest: los metadatos quedan asociados al turno correcto
+ok 14 - los metadatos quedan asociados al turno correcto
+  ---
+  duration_ms: 0.709143
+  type: 'test'
+  ...
+# Subtest: con un idioma conocido la cadena por defecto usa los tres motores en orden
+ok 15 - con un idioma conocido la cadena por defecto usa los tres motores en orden
+  ---
+  duration_ms: 0.567334
+  type: 'test'
+  ...
+# Subtest: sin idioma conocido se descartan los motores que no autodetectan
+ok 16 - sin idioma conocido se descartan los motores que no autodetectan
+  ---
+  duration_ms: 0.350621
+  type: 'test'
+  ...
+# Subtest: las respuestas se procesan en serie (no hay concurrencia)
+    # Subtest: Whisper gana aunque Canary termine antes, y se cancela el resto
+    ok 1 - Whisper gana aunque Canary termine antes, y se cancela el resto
+      ---
+      duration_ms: 15.785057
+      type: 'test'
+      ...
+    # Subtest: si Whisper falla, gana Canary
+    ok 2 - si Whisper falla, gana Canary
+      ---
+      duration_ms: 0.737745
+      type: 'test'
+      ...
+    # Subtest: el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+    not ok 3 - el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+      ---
+      duration_ms: 6.616601
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:270:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: los tres fallan: error controlado
+    not ok 4 - los tres fallan: error controlado
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:285:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: al agotarse el presupuesto se abortan los motores en curso
+    not ok 5 - al agotarse el presupuesto se abortan los motores en curso
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:299:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: un resultado tardío no reemplaza la transcripción ya seleccionada
+    not ok 6 - un resultado tardío no reemplaza la transcripción ya seleccionada
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:319:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: Whisper gana aunque Canary termine antes, y se cancela el resto
+    not ok 7 - Whisper gana aunque Canary termine antes, y se cancela el resto
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:243:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: si Whisper falla, gana Canary
+    not ok 8 - si Whisper falla, gana Canary
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:257:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+    not ok 9 - el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:270:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: los tres fallan: error controlado
+    not ok 10 - los tres fallan: error controlado
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:285:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: al agotarse el presupuesto se abortan los motores en curso
+    not ok 11 - al agotarse el presupuesto se abortan los motores en curso
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:299:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: un resultado tardío no reemplaza la transcripción ya seleccionada
+    not ok 12 - un resultado tardío no reemplaza la transcripción ya seleccionada
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:319:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: Whisper gana aunque Canary termine antes, y se cancela el resto
+    not ok 13 - Whisper gana aunque Canary termine antes, y se cancela el resto
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:243:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: si Whisper falla, gana Canary
+    not ok 14 - si Whisper falla, gana Canary
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:257:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+    not ok 15 - el resultado local se conserva pero no gana mientras NVIDIA siga pendiente
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:270:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: los tres fallan: error controlado
+    not ok 16 - los tres fallan: error controlado
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:285:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: al agotarse el presupuesto se abortan los motores en curso
+    not ok 17 - al agotarse el presupuesto se abortan los motores en curso
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:299:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    # Subtest: un resultado tardío no reemplaza la transcripción ya seleccionada
+    not ok 18 - un resultado tardío no reemplaza la transcripción ya seleccionada
+      ---
+      duration_ms: 0
+      type: 'test'
+      location: '/app/lib/asrChain.test.js:319:1'
+      failureType: 'cancelledByParent'
+      error: 'test did not finish before its parent and was cancelled'
+      code: 'ERR_TEST_FAILURE'
+      ...
+    1..18
+not ok 17 - las respuestas se procesan en serie (no hay concurrencia)
+  ---
+  duration_ms: 23.883248
+  type: 'test'
+  location: '/app/lib/asrChain.test.js:218:1'
+  failureType: 'subtestsFailed'
+  error: '16 subtests failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: la cadena real respeta el orden Whisper Large v3 -> Canary 1B -> local
+ok 18 - la cadena real respeta el orden Whisper Large v3 -> Canary 1B -> local
+  ---
+  duration_ms: 6.809013
+  type: 'test'
+  ...
+# Subtest: cada motor recibe el código de SU idioma y nunca el de otro
+ok 19 - cada motor recibe el código de SU idioma y nunca el de otro
+  ---
+  duration_ms: 0.961558
+  type: 'test'
+  ...
+# Subtest: sin ningún motor compatible no se transcribe y se informa del motivo
+ok 20 - sin ningún motor compatible no se transcribe y se informa del motivo
+  ---
+  duration_ms: 0.179311
+  type: 'test'
+  ...
+# Subtest: la cadena vacía se propaga como LANGUAGE_UNSUPPORTED (no como fallo puntual)
+ok 21 - la cadena vacía se propaga como LANGUAGE_UNSUPPORTED (no como fallo puntual)
+  ---
+  duration_ms: 0.699043
+  type: 'test'
+  ...
+# Subtest: si fallan los dos NVIDIA, el local resuelve la respuesta
+ok 22 - si fallan los dos NVIDIA, el local resuelve la respuesta
+  ---
+  duration_ms: 0.581935
+  type: 'test'
+  ...
+# Subtest: si los tres motores fallan no hay texto ni informe utilizable
+ok 23 - si los tres motores fallan no hay texto ni informe utilizable
+  ---
+  duration_ms: 0.623038
+  type: 'test'
+  ...
+# Subtest: una transcripcion vacia no es exito y pasa al siguiente motor
+ok 24 - una transcripcion vacia no es exito y pasa al siguiente motor
+  ---
+  duration_ms: 0.484229
+  type: 'test'
+  ...
+# Subtest: isTransientError: detecta códigos Prisma transitorios
+ok 25 - isTransientError: detecta códigos Prisma transitorios
+  ---
+  duration_ms: 1.511291
+  type: 'test'
+  ...
+# Subtest: isTransientError: detecta mensajes de error de red/DNS
+ok 26 - isTransientError: detecta mensajes de error de red/DNS
+  ---
+  duration_ms: 0.765147
+  type: 'test'
+  ...
+# Subtest: isTransientError: error nulo o indefinido no es transitorio
+ok 27 - isTransientError: error nulo o indefinido no es transitorio
+  ---
+  duration_ms: 0.216113
+  type: 'test'
+  ...
+# Subtest: withRetry: tiene éxito en el primer intento
+ok 28 - withRetry: tiene éxito en el primer intento
+  ---
+  duration_ms: 0.308919
+  type: 'test'
+  ...
+# Subtest: withRetry: reintenta tras error transitorio y tiene éxito
+ok 29 - withRetry: reintenta tras error transitorio y tiene éxito
+  ---
+  duration_ms: 36.567218
+  type: 'test'
+  ...
+# Subtest: withRetry: no reintenta errores no transitorios
+ok 30 - withRetry: no reintenta errores no transitorios
+  ---
+  duration_ms: 1.920417
+  type: 'test'
+  ...
+# Subtest: withRetry: lanza el último error tras agotar intentos
+ok 31 - withRetry: lanza el último error tras agotar intentos
+  ---
+  duration_ms: 32.943297
+  type: 'test'
+  ...
+# Subtest: withRetry: respeta maxAttempts y baseDelayMs
+ok 32 - withRetry: respeta maxAttempts y baseDelayMs
+  ---
+  duration_ms: 36.2771
+  type: 'test'
+  ...
+# Subtest: ningún archivo del backend contiene mojibake de doble codificación
+ok 33 - ningún archivo del backend contiene mojibake de doble codificación
+  ---
+  duration_ms: 1249.390118
+  type: 'test'
+  ...
+# Subtest: el texto de referencia del proyecto está correctamente codificado
+ok 34 - el texto de referencia del proyecto está correctamente codificado
+  ---
+  duration_ms: 11.979352
+  type: 'test'
+  ...
+# Subtest: un timeout del proveedor es un fallo temporal
+ok 35 - un timeout del proveedor es un fallo temporal
+  ---
+  duration_ms: 3.62962
+  type: 'test'
+  ...
+# Subtest: un error 5xx, 429 o de red es un fallo temporal
+ok 36 - un error 5xx, 429 o de red es un fallo temporal
+  ---
+  duration_ms: 0.398924
+  type: 'test'
+  ...
+# Subtest: un modelo inexistente o credenciales rechazadas son un fallo permanente
+ok 37 - un modelo inexistente o credenciales rechazadas son un fallo permanente
+  ---
+  duration_ms: 0.761446
+  type: 'test'
+  ...
+# Subtest: la falta de clave o de modelos es un fallo de configuración (permanente)
+ok 38 - la falta de clave o de modelos es un fallo de configuración (permanente)
+  ---
+  duration_ms: 1.614698
+  type: 'test'
+  ...
+# Subtest: un audio no separable es un problema de datos (permanente)
+ok 39 - un audio no separable es un problema de datos (permanente)
+  ---
+  duration_ms: 0.50033
+  type: 'test'
+  ...
+# Subtest: si algún motivo es temporal, el fallo se mantiene reintentable
+ok 40 - si algún motivo es temporal, el fallo se mantiene reintentable
+  ---
+  duration_ms: 0.314119
+  type: 'test'
+  ...
+# Subtest: sin motivos y con código desconocido se asume temporal
+ok 41 - sin motivos y con código desconocido se asume temporal
+  ---
+  duration_ms: 3.186493
+  type: 'test'
+  ...
+# Subtest: los mensajes al vocero no exponen detalles técnicos
+ok 42 - los mensajes al vocero no exponen detalles técnicos
+  ---
+  duration_ms: 0.82095
+  type: 'test'
+  ...
+# Subtest: la espera normal es de 3 minutos
+ok 43 - la espera normal es de 3 minutos
+  ---
+  duration_ms: 1.415986
+  type: 'test'
+  ...
+# Subtest: cada 5 intentos fallidos se aplica la pausa de 15 minutos
+ok 44 - cada 5 intentos fallidos se aplica la pausa de 15 minutos
+  ---
+  duration_ms: 0.324719
+  type: 'test'
+  ...
+# Subtest: a los 50 intentos no se programa nada más
+ok 45 - a los 50 intentos no se programa nada más
+  ---
+  duration_ms: 0.15871
+  type: 'test'
+  ...
+# Subtest: retryState resume el estado persistido de la sesión
+ok 46 - retryState resume el estado persistido de la sesión
+  ---
+  duration_ms: 0.730644
+  type: 'test'
+  ...
+# Subtest: un modelo que responde con JSON válido se marca disponible
+ok 47 - un modelo que responde con JSON válido se marca disponible
+  ---
+  duration_ms: 3.452509
+  type: 'test'
+  ...
+# Subtest: HTTP 404, HTTP 410 y timeout se marcan como no disponibles (fallo duro)
+ok 48 - HTTP 404, HTTP 410 y timeout se marcan como no disponibles (fallo duro)
+  ---
+  duration_ms: 8.710928
+  type: 'test'
+  ...
+# Subtest: una respuesta truncada o sin JSON no es un fallo duro (el modelo puede servir con más tokens)
+ok 49 - una respuesta truncada o sin JSON no es un fallo duro (el modelo puede servir con más tokens)
+  ---
+  duration_ms: 0.31992
+  type: 'test'
+  ...
+# Subtest: sin clave no se emite ninguna solicitud
+ok 50 - sin clave no se emite ninguna solicitud
+  ---
+  duration_ms: 0.609637
+  type: 'test'
+  ...
+# [IA evaluadora] disponibilidad {"reason":"prewarm","models":"m1:ok(7ms)"}
+# [IA evaluadora] disponibilidad {"reason":"a","models":"m1:ok(1ms)"}
+# [IA evaluadora] disponibilidad {"reason":"nueva","models":"m1:HTTP_410(0ms)"}
+# [IA evaluadora] disponibilidad {"reason":"antigua","models":"m1:ok(0ms)"}
+# [IA evaluadora] disponibilidad {"reason":"x","models":"caido:HTTP_404(0ms) ok:ok(1ms)"}
+# [IA evaluadora] disponibilidad {"reason":"x","models":"m1:HTTP_410(0ms)"}
+# Subtest: la comprobación no bloquea: devuelve enseguida mientras la sonda sigue en vuelo
+ok 51 - la comprobación no bloquea: devuelve enseguida mientras la sonda sigue en vuelo
+  ---
+  duration_ms: 8.652525
+  type: 'test'
+  ...
+# Subtest: no se duplican comprobaciones: una tanda en vuelo y un intervalo mínimo
+ok 52 - no se duplican comprobaciones: una tanda en vuelo y un intervalo mínimo
+  ---
+  duration_ms: 1.002961
+  type: 'test'
+  ...
+# Subtest: una sonda antigua no sobrescribe un resultado más reciente
+ok 53 - una sonda antigua no sobrescribe un resultado más reciente
+  ---
+  duration_ms: 6.224078
+  type: 'test'
+  ...
+# Subtest: la disponibilidad se reutiliza SOLO para ordenar: disponibles primero, los caídos siguen
+ok 54 - la disponibilidad se reutiliza SOLO para ordenar: disponibles primero, los caídos siguen
+  ---
+  duration_ms: 6.10627
+  type: 'test'
+  ...
+# Subtest: un resultado antiguo deja de usarse para priorizar (TTL)
+ok 55 - un resultado antiguo deja de usarse para priorizar (TTL)
+  ---
+  duration_ms: 1.232075
+  type: 'test'
+  ...
+# Subtest: el registro técnico no expone clave, prompt ni contenido
+ok 56 - el registro técnico no expone clave, prompt ni contenido
+  ---
+  duration_ms: 1.532493
+  type: 'test'
+  ...
+# Subtest: las variables de entorno tienen prioridad sobre los valores por defecto
+ok 57 - las variables de entorno tienen prioridad sobre los valores por defecto
+  ---
+  duration_ms: 3.201794
+  type: 'test'
+  ...
+# Subtest: sin variables de entorno se usan el modelo validado y los candidatos verificados
+ok 58 - sin variables de entorno se usan el modelo validado y los candidatos verificados
+  ---
+  duration_ms: 0.49813
+  type: 'test'
+  ...
+# Subtest: los identificadores obsoletos del incidente no reaparecen por ningún camino
+ok 59 - los identificadores obsoletos del incidente no reaparecen por ningún camino
+  ---
+  duration_ms: 0.623438
+  type: 'test'
+  ...
+# Subtest: la lista se sanea: espacios, vacíos, duplicados y tope
+ok 60 - la lista se sanea: espacios, vacíos, duplicados y tope
+  ---
+  duration_ms: 0.399324
+  type: 'test'
+  ...
+# Subtest: AI_EVAL_MODELS habilita varios modelos en paralelo (lista separada por comas)
+ok 61 - AI_EVAL_MODELS habilita varios modelos en paralelo (lista separada por comas)
+  ---
+  duration_ms: 0.441427
+  type: 'test'
+  ...
+# Subtest: los modelos en paralelo NO cambian el número de intentos (un intento = una carrera)
+ok 62 - los modelos en paralelo NO cambian el número de intentos (un intento = una carrera)
+  ---
+  duration_ms: 2.601758
+  type: 'test'
+  ...
+# Subtest: consulta a todos los modelos en paralelo
+ok 63 - consulta a todos los modelos en paralelo
+  ---
+  duration_ms: 12.177438
+  type: 'test'
+  ...
+# Subtest: no se cancelan las demás solicitudes al ganar la primera
+ok 64 - no se cancelan las demás solicitudes al ganar la primera
+  ---
+  duration_ms: 20.45054
+  type: 'test'
+  ...
+# Subtest: una respuesta tardía no avanza el turno
+ok 65 - una respuesta tardía no avanza el turno
+  ---
+  duration_ms: 1.281078
+  type: 'test'
+  ...
+# Subtest: una pregunta reservada se consume una sola vez
+ok 66 - una pregunta reservada se consume una sola vez
+  ---
+  duration_ms: 1.461189
+  type: 'test'
+  ...
+# Subtest: las respuestas del vocero entran en el contexto de los respaldos
+ok 67 - las respuestas del vocero entran en el contexto de los respaldos
+  ---
+  duration_ms: 0.891454
+  type: 'test'
+  ...
+# Subtest: la repregunta se genera tras la respuesta real
+ok 68 - la repregunta se genera tras la respuesta real
+  ---
+  duration_ms: 2.771468
+  type: 'test'
+  ...
+# Subtest: cambio de modelo activo sin perder contexto
+ok 69 - cambio de modelo activo sin perder contexto
+  ---
+  duration_ms: 2.183333
+  type: 'test'
+  ...
+# Subtest: un error definitivo desactiva solo ese modelo
+ok 70 - un error definitivo desactiva solo ese modelo
+  ---
+  duration_ms: 4.440269
+  type: 'test'
+  ...
+# Subtest: el límite de inicio no cancela lo pendiente
+ok 71 - el límite de inicio no cancela lo pendiente
+  ---
+  duration_ms: 1.46999
+  type: 'test'
+  ...
+# Subtest: sesiones distintas no comparten estado
+ok 72 - sesiones distintas no comparten estado
+  ---
+  duration_ms: 0.966959
+  type: 'test'
+  ...
+# Subtest: al terminar la sesión se limpia y se ignoran resultados tardíos
+ok 73 - al terminar la sesión se limpia y se ignoran resultados tardíos
+  ---
+  duration_ms: 3.746527
+  type: 'test'
+  ...
+# Subtest: si todos fallan hay error recuperable y luego se puede reintentar
+ok 74 - si todos fallan hay error recuperable y luego se puede reintentar
+  ---
+  duration_ms: 0.877654
+  type: 'test'
+  ...
+# Subtest: la misma pregunta no se reserva ni se formula dos veces
+ok 75 - la misma pregunta no se reserva ni se formula dos veces
+  ---
+  duration_ms: 2.169331
+  type: 'test'
+  ...
+# Subtest: 16) el contexto de next() conserva cfg/theme (regresion aggressiveness)
+ok 76 - 16) el contexto de next() conserva cfg/theme (regresion aggressiveness)
+  ---
+  duration_ms: 26.628615
+  type: 'test'
+  ...
+# Subtest: 17) la repregunta despacha pregunta principal, foco y estado de transcripción
+ok 77 - 17) la repregunta despacha pregunta principal, foco y estado de transcripción
+  ---
+  duration_ms: 26.920833
+  type: 'test'
+  ...
+# Subtest: 18) sin transcripción la repregunta viaja igual, con el estado explícito
+ok 78 - 18) sin transcripción la repregunta viaja igual, con el estado explícito
+  ---
+  duration_ms: 25.467244
+  type: 'test'
+  ...
+# Subtest: solo se admiten los idiomas soportados
+ok 79 - solo se admiten los idiomas soportados
+  ---
+  duration_ms: 1.629399
+  type: 'test'
+  ...
+# Subtest: normalizeLanguage acepta variantes de mayúsculas y locales
+ok 80 - normalizeLanguage acepta variantes de mayúsculas y locales
+  ---
+  duration_ms: 0.300518
+  type: 'test'
+  ...
+# Subtest: normalizeLanguage rechaza idiomas no soportados o vacíos
+ok 81 - normalizeLanguage rechaza idiomas no soportados o vacíos
+  ---
+  duration_ms: 0.132708
+  type: 'test'
+  ...
+# Subtest: resolveLanguage: la preferencia individual manda sobre el idioma de la organización
+ok 82 - resolveLanguage: la preferencia individual manda sobre el idioma de la organización
+  ---
+  duration_ms: 0.199812
+  type: 'test'
+  ...
+# Subtest: resolveLanguage: sin preferencia individual se hereda el idioma de la organización
+ok 83 - resolveLanguage: sin preferencia individual se hereda el idioma de la organización
+  ---
+  duration_ms: 0.531032
+  type: 'test'
+  ...
+# Subtest: resolveLanguage: sin datos válidos cae al idioma predeterminado
+ok 84 - resolveLanguage: sin datos válidos cae al idioma predeterminado
+  ---
+  duration_ms: 0.354921
+  type: 'test'
+  ...
+# Subtest: asrLanguage devuelve el código ISO o multi para autodetección
+ok 85 - asrLanguage devuelve el código ISO o multi para autodetección
+  ---
+  duration_ms: 0.611337
+  type: 'test'
+  ...
+# Subtest: el registro expone los idiomas habilitados y valida los admitidos
+ok 86 - el registro expone los idiomas habilitados y valida los admitidos
+  ---
+  duration_ms: 0.503431
+  type: 'test'
+  ...
+# Subtest: asrLanguage resuelve el código de cada motor desde el registro central
+ok 87 - asrLanguage resuelve el código de cada motor desde el registro central
+  ---
+  duration_ms: 0.896855
+  type: 'test'
+  ...
+# Subtest: asrLanguage nunca devuelve el código de OTRO idioma
+ok 88 - asrLanguage nunca devuelve el código de OTRO idioma
+  ---
+  duration_ms: 0.992961
+  type: 'test'
+  ...
+# Subtest: supportsLanguage y enginesForLanguage informan de la compatibilidad real
+ok 89 - supportsLanguage y enginesForLanguage informan de la compatibilidad real
+  ---
+  duration_ms: 0.763546
+  type: 'test'
+  ...
+# Subtest: sessionLanguage: el idioma congelado en la sesión manda sobre la preferencia actual
+ok 90 - sessionLanguage: el idioma congelado en la sesión manda sobre la preferencia actual
+  ---
+  duration_ms: 0.266616
+  type: 'test'
+  ...
+# Subtest: sessionLanguage: en sesiones históricas (sin idioma) se usa el del vocero o su organización
+ok 91 - sessionLanguage: en sesiones históricas (sin idioma) se usa el del vocero o su organización
+  ---
+  duration_ms: 1.6437
+  type: 'test'
+  ...
+# Subtest: scenarioLanguageAllowed: solo se puede practicar con un escenario del idioma activo
+ok 92 - scenarioLanguageAllowed: solo se puede practicar con un escenario del idioma activo
+  ---
+  duration_ms: 1.584497
+  type: 'test'
+  ...
+# Subtest: scenarioLanguageAllowed: un escenario sin idioma válido nunca se acepta (no se sustituye)
+ok 93 - scenarioLanguageAllowed: un escenario sin idioma válido nunca se acepta (no se sustituye)
+  ---
+  duration_ms: 0.482229
+  type: 'test'
+  ...
+# Subtest: asigna cada segmento a la ventana donde cae
+ok 94 - asigna cada segmento a la ventana donde cae
+  ---
+  duration_ms: 4.374965
+  type: 'test'
+  ...
+# Subtest: une varios segmentos del mismo turno en orden
+ok 95 - une varios segmentos del mismo turno en orden
+  ---
+  duration_ms: 0.66224
+  type: 'test'
+  ...
+# Subtest: gana la ventana con más solapamiento, no la primera
+ok 96 - gana la ventana con más solapamiento, no la primera
+  ---
+  duration_ms: 0.449127
+  type: 'test'
+  ...
+# Subtest: un segmento fuera de toda ventana queda huérfano y no se atribuye
+ok 97 - un segmento fuera de toda ventana queda huérfano y no se atribuye
+  ---
+  duration_ms: 0.431827
+  type: 'test'
+  ...
+# Subtest: sin marcas de tiempo válidas no se inventa asignación
+ok 98 - sin marcas de tiempo válidas no se inventa asignación
+  ---
+  duration_ms: 0.49353
+  type: 'test'
+  ...
+# Subtest: un segmento sin tiempos o vacío se descarta sin romper
+ok 99 - un segmento sin tiempos o vacío se descarta sin romper
+  ---
+  duration_ms: 0.393024
+  type: 'test'
+  ...
+# Subtest: tolera entradas vacías
+ok 100 - tolera entradas vacías
+  ---
+  duration_ms: 0.225214
+  type: 'test'
+  ...
+# Subtest: el catálogo sólo marca como llamables los modelos con host y function-id
+ok 101 - el catálogo sólo marca como llamables los modelos con host y function-id
+  ---
+  duration_ms: 1.568395
+  type: 'test'
+  ...
+# Subtest: Nemotron VoiceChat queda como acceso temprano, sin endpoint inventado
+ok 102 - Nemotron VoiceChat queda como acceso temprano, sin endpoint inventado
+  ---
+  duration_ms: 0.390724
+  type: 'test'
+  ...
+# Subtest: sin NVIDIA_API_KEY no se lanza ningún proceso
+ok 103 - sin NVIDIA_API_KEY no se lanza ningún proceso
+  ---
+  duration_ms: 0.48133
+  type: 'test'
+  ...
+# Subtest: un modelo no llamable se rechaza antes de ejecutar
+ok 104 - un modelo no llamable se rechaza antes de ejecutar
+  ---
+  duration_ms: 0.389724
+  type: 'test'
+  ...
+# Subtest: un modelo desconocido no ejecuta nada
+ok 105 - un modelo desconocido no ejecuta nada
+  ---
+  duration_ms: 1.286078
+  type: 'test'
+  ...
+# Subtest: parsea la respuesta JSON del cliente y le añade el modelo
+ok 106 - parsea la respuesta JSON del cliente y le añade el modelo
+  ---
+  duration_ms: 14.728193
+  type: 'test'
+  ...
+# Subtest: una salida no interpretable se informa, no se ignora
+ok 107 - una salida no interpretable se informa, no se ignora
+  ---
+  duration_ms: 1.48459
+  type: 'test'
+  ...
+# Subtest: si Python no existe se informa PYTHON_MISSING
+ok 108 - si Python no existe se informa PYTHON_MISSING
+  ---
+  duration_ms: 1.473289
+  type: 'test'
+  ...
+# Subtest: un proceso colgado se corta por timeout y se informa
+ok 109 - un proceso colgado se corta por timeout y se informa
+  ---
+  duration_ms: 20.525045
+  type: 'test'
+  ...
+# Subtest: resolvePython prioriza PYTHON_EXECUTABLE y limpia comillas y espacios
+ok 110 - resolvePython prioriza PYTHON_EXECUTABLE y limpia comillas y espacios
+  ---
+  duration_ms: 0.81345
+  type: 'test'
+  ...
+# Subtest: resolvePython usa NVIDIA_PYTHON como alternativa y python como último recurso
+ok 111 - resolvePython usa NVIDIA_PYTHON como alternativa y python como último recurso
+  ---
+  duration_ms: 0.362222
+  type: 'test'
+  ...
+# Subtest: runAsr lanza el intérprete configurado, con rutas que tienen espacios
+ok 112 - runAsr lanza el intérprete configurado, con rutas que tienen espacios
+  ---
+  duration_ms: 2.662762
+  type: 'test'
+  ...
+# Subtest: un intérprete inexistente informa la ruta intentada
+ok 113 - un intérprete inexistente informa la ruta intentada
+  ---
+  duration_ms: 1.15357
+  type: 'test'
+  ...
+# Subtest: las ventanas respetan los tiempos y añaden margen sin pisar al vecino
+ok 114 - las ventanas respetan los tiempos y añaden margen sin pisar al vecino
+  ---
+  duration_ms: 3.182593
+  type: 'test'
+  ...
+# Subtest: tiempos inválidos o ausentes no generan ventana
+ok 115 - tiempos inválidos o ausentes no generan ventana
+  ---
+  duration_ms: 1.236375
+  type: 'test'
+  ...
+# Subtest: una respuesta vacía no se inventa: se reporta como no transcribible
+ok 116 - una respuesta vacía no se inventa: se reporta como no transcribible
+  ---
+  duration_ms: 0.521031
+  type: 'test'
+  ...
+# Subtest: transcribe en serie y asigna cada texto a su turno
+ok 117 - transcribe en serie y asigna cada texto a su turno
+  ---
+  duration_ms: 13.579623
+  type: 'test'
+  ...
+# Subtest: un fallo parcial no produce evaluación: lo marca y no atribuye texto
+ok 118 - un fallo parcial no produce evaluación: lo marca y no atribuye texto
+  ---
+  duration_ms: 0.638939
+  type: 'test'
+  ...
+# Subtest: una respuesta vacía de NVIDIA cuenta como fallo
+ok 119 - una respuesta vacía de NVIDIA cuenta como fallo
+  ---
+  duration_ms: 0.408124
+  type: 'test'
+  ...
+# Subtest: sin pausas, la sesión vence al cumplirse el plazo
+ok 120 - sin pausas, la sesión vence al cumplirse el plazo
+  ---
+  duration_ms: 2.093627
+  type: 'test'
+  ...
+# Subtest: una pausa dentro del plazo corre el vencimiento lo que duró la pausa
+ok 121 - una pausa dentro del plazo corre el vencimiento lo que duró la pausa
+  ---
+  duration_ms: 0.395424
+  type: 'test'
+  ...
+# Subtest: una pausa abierta detiene el reloj: la sesión no vence mientras esté suspendido
+ok 122 - una pausa abierta detiene el reloj: la sesión no vence mientras esté suspendido
+  ---
+  duration_ms: 0.345221
+  type: 'test'
+  ...
+# Subtest: isExpired usa la misma comparación que el proceso automático (tiempo efectivo > plazo)
+ok 123 - isExpired usa la misma comparación que el proceso automático (tiempo efectivo > plazo)
+  ---
+  duration_ms: 0.203812
+  type: 'test'
+  ...
+# Subtest: sin cambio programado el plan efectivo es el vigente
+ok 124 - sin cambio programado el plan efectivo es el vigente
+  ---
+  duration_ms: 3.812432
+  type: 'test'
+  ...
+# Subtest: un cambio programado para el futuro NO se aplica todavía
+ok 125 - un cambio programado para el futuro NO se aplica todavía
+  ---
+  duration_ms: 0.277817
+  type: 'test'
+  ...
+# Subtest: al llegar la fecha, el cambio programado pasa a ser el vigente (y se marca para persistir)
+ok 126 - al llegar la fecha, el cambio programado pasa a ser el vigente (y se marca para persistir)
+  ---
+  duration_ms: 0.318119
+  type: 'test'
+  ...
+# Subtest: el fin del periodo es el vencimiento de la sesión más reciente
+ok 127 - el fin del periodo es el vencimiento de la sesión más reciente
+  ---
+  duration_ms: 0.525232
+  type: 'test'
+  ...
+# Subtest: las sesiones ya vencidas no cuentan como próxima eliminación
+ok 128 - las sesiones ya vencidas no cuentan como próxima eliminación
+  ---
+  duration_ms: 0.626138
+  type: 'test'
+  ...
+# Subtest: sin sesiones no hay periodo: el cambio se puede aplicar de inmediato
+ok 129 - sin sesiones no hay periodo: el cambio se puede aplicar de inmediato
+  ---
+  duration_ms: 0.66754
+  type: 'test'
+  ...
+# Subtest: la fecha efectiva es el fin del periodo y nunca queda en el pasado
+ok 130 - la fecha efectiva es el fin del periodo y nunca queda en el pasado
+  ---
+  duration_ms: 0.440927
+  type: 'test'
+  ...
+# Subtest: una extensión nunca deja un cambio programado por debajo del plazo extendido
+ok 131 - una extensión nunca deja un cambio programado por debajo del plazo extendido
+  ---
+  duration_ms: 0.307318
+  type: 'test'
+  ...
+# Subtest: la media ponderada reproduce la regla de la rúbrica (peso de lo no medido se reparte)
+ok 132 - la media ponderada reproduce la regla de la rúbrica (peso de lo no medido se reparte)
+  ---
+  duration_ms: 1.898915
+  type: 'test'
+  ...
+# Subtest: clampScore acepta 0-100, redondea y descarta lo inválido
+ok 133 - clampScore acepta 0-100, redondea y descarta lo inválido
+  ---
+  duration_ms: 0.459228
+  type: 'test'
+  ...
+# Subtest: normalizar un borrador vacío no inventa cambios
+ok 134 - normalizar un borrador vacío no inventa cambios
+  ---
+  duration_ms: 4.053646
+  type: 'test'
+  ...
+# Subtest: un comentario vacío BORRA el anterior; no enviarlo lo conserva
+ok 135 - un comentario vacío BORRA el anterior; no enviarlo lo conserva
+  ---
+  duration_ms: 0.32992
+  type: 'test'
+  ...
+# Subtest: la retroalimentación de un subcriterio se ignora: solo se acepta su puntuación
+ok 136 - la retroalimentación de un subcriterio se ignora: solo se acepta su puntuación
+  ---
+  duration_ms: 0.217613
+  type: 'test'
+  ...
+# Subtest: normalizar acepta los textos y los subcriterios; la puntuación de área se ignora
+ok 137 - normalizar acepta los textos y los subcriterios; la puntuación de área se ignora
+  ---
+  duration_ms: 0.613137
+  type: 'test'
+  ...
+# Subtest: cambiar un subcriterio recalcula la puntuación del área con la rúbrica
+ok 138 - cambiar un subcriterio recalcula la puntuación del área con la rúbrica
+  ---
+  duration_ms: 0.341121
+  type: 'test'
+  ...
+# Subtest: la puntuación de un área NO se acepta del cliente: se deriva de sus subcriterios
+ok 139 - la puntuación de un área NO se acepta del cliente: se deriva de sus subcriterios
+  ---
+  duration_ms: 5.271419
+  type: 'test'
+  ...
+# Subtest: cambiar un subcriterio deriva la puntuación del área con la rúbrica (el global se recalcula)
+ok 140 - cambiar un subcriterio deriva la puntuación del área con la rúbrica (el global se recalcula)
+  ---
+  duration_ms: 0.747546
+  type: 'test'
+  ...
+# Subtest: un subcriterio enviado con el MISMO valor no altera el área
+ok 141 - un subcriterio enviado con el MISMO valor no altera el área
+  ---
+  duration_ms: 0.713143
+  type: 'test'
+  ...
+# Subtest: sin cambios se conserva la puntuación de la IA
+ok 142 - sin cambios se conserva la puntuación de la IA
+  ---
+  duration_ms: 0.259315
+  type: 'test'
+  ...
+# Subtest: el diff destaca solo la parte modificada del texto
+ok 143 - el diff destaca solo la parte modificada del texto
+  ---
+  duration_ms: 1.176271
+  type: 'test'
+  ...
+# Subtest: sin cambios reales no se marca nada; un texto nuevo se marca entero
+ok 144 - sin cambios reales no se marca nada; un texto nuevo se marca entero
+  ---
+  duration_ms: 0.261615
+  type: 'test'
+  ...
+# Subtest: el borrador guarda los fragmentos de los textos editados
+ok 145 - el borrador guarda los fragmentos de los textos editados
+  ---
+  duration_ms: 0.356021
+  type: 'test'
+  ...
+# Subtest: el puntaje global se recalcula con los pesos del informe y nunca se acepta del cliente
+ok 146 - el puntaje global se recalcula con los pesos del informe y nunca se acepta del cliente
+  ---
+  duration_ms: 0.255715
+  type: 'test'
+  ...
+# Subtest: el acuerdo IA-humano se conserva por área (campo histórico)
+ok 147 - el acuerdo IA-humano se conserva por área (campo histórico)
+  ---
+  duration_ms: 0.203613
+  type: 'test'
+  ...
+# Subtest: el global ignora las áreas sin puntuación (reparte su peso)
+ok 148 - el global ignora las áreas sin puntuación (reparte su peso)
+  ---
+  duration_ms: 0.615937
+  type: 'test'
+  ...
+# Subtest: el vocero consulta siempre sus propias prácticas
+ok 149 - el vocero consulta siempre sus propias prácticas
+  ---
+  duration_ms: 2.383044
+  type: 'test'
+  ...
+# Subtest: el vocero no puede consultar las prácticas de otro vocero
+ok 150 - el vocero no puede consultar las prácticas de otro vocero
+  ---
+  duration_ms: 0.618338
+  type: 'test'
+  ...
+# Subtest: el administrador consulta a un vocero de su organización
+ok 151 - el administrador consulta a un vocero de su organización
+  ---
+  duration_ms: 0.423825
+  type: 'test'
+  ...
+# Subtest: el administrador NO puede consultar voceros de otra organización
+ok 152 - el administrador NO puede consultar voceros de otra organización
+  ---
+  duration_ms: 0.740545
+  type: 'test'
+  ...
+# Subtest: el administrador debe indicar el vocero (sin id no se asume ninguno)
+ok 153 - el administrador debe indicar el vocero (sin id no se asume ninguno)
+  ---
+  duration_ms: 0.457428
+  type: 'test'
+  ...
+# Subtest: un objetivo que no es vocero (o no existe) no es consultable
+ok 154 - un objetivo que no es vocero (o no existe) no es consultable
+  ---
+  duration_ms: 0.550934
+  type: 'test'
+  ...
+# Subtest: master y system pueden consultar a cualquier vocero
+ok 155 - master y system pueden consultar a cualquier vocero
+  ---
+  duration_ms: 4.207055
+  type: 'test'
+  ...
+# Subtest: un rol ausente o desconocido se trata como el más restrictivo (solo lo propio)
+ok 156 - un rol ausente o desconocido se trata como el más restrictivo (solo lo propio)
+  ---
+  duration_ms: 0.290218
+  type: 'test'
+  ...
+# Subtest: el administrador de otra organización tampoco entra por el id del vocero
+ok 157 - el administrador de otra organización tampoco entra por el id del vocero
+  ---
+  duration_ms: 0.528332
+  type: 'test'
+  ...
+# [ASR] no se pudo guardar la auditoría: prisma.transcriptionAudit.create is not a function
+# Subtest: mapea una fila por turno con motor, texto y motivo
+ok 158 - mapea una fila por turno con motor, texto y motivo
+  ---
+  duration_ms: 1.862013
+  type: 'test'
+  ...
+# Subtest: los intentos distinguen éxito, timeout y no necesario
+ok 159 - los intentos distinguen éxito, timeout y no necesario
+  ---
+  duration_ms: 1.618898
+  type: 'test'
+  ...
+# Subtest: el texto vacío nunca se marca como éxito
+ok 160 - el texto vacío nunca se marca como éxito
+  ---
+  duration_ms: 1.376284
+  type: 'test'
+  ...
+# Subtest: dos turnos conservan motores distintos y no se mezclan
+ok 161 - dos turnos conservan motores distintos y no se mezclan
+  ---
+  duration_ms: 0.527832
+  type: 'test'
+  ...
+# Subtest: la persistencia crea una fila por (sesión, turno) y reintentar no duplica
+ok 162 - la persistencia crea una fila por (sesión, turno) y reintentar no duplica
+  ---
+  duration_ms: 0.625338
+  type: 'test'
+  ...
+# Subtest: un fallo previo se completa cuando el reintento sí transcribe
+ok 163 - un fallo previo se completa cuando el reintento sí transcribe
+  ---
+  duration_ms: 0.460528
+  type: 'test'
+  ...
+# Subtest: una auditoría ya completada no se reescribe
+ok 164 - una auditoría ya completada no se reescribe
+  ---
+  duration_ms: 0.515431
+  type: 'test'
+  ...
+# Subtest: los intentos no guardan texto transcrito (sólo caracteres)
+ok 165 - los intentos no guardan texto transcrito (sólo caracteres)
+  ---
+  duration_ms: 0.516031
+  type: 'test'
+  ...
+# Subtest: un fallo de la base no tumba la evaluación
+ok 166 - un fallo de la base no tumba la evaluación
+  ---
+  duration_ms: 1.733805
+  type: 'test'
+  ...
+# [IA evaluadora] modelos {"orden":["modelo-ganador:sin-dato/sin-limite","z-ai/glm-5.3:sin-dato/sin-limite","nvidia/nemotron-3-ultra-550b-a55b:sin-dato/sin-limite","openai/gpt-oss-20b:sin-dato/sin-limite","minimaxai/minimax-m3.1-flash:sin-dato/sin-limite"],"baseTimeoutMs":null}
+# [IA evaluadora] z-ai/glm-5.3 falló: HTTP 503 (1 ms)
+# [IA evaluadora] nvidia/nemotron-3-ultra-550b-a55b falló: HTTP 503 (1 ms)
+# [IA evaluadora] openai/gpt-oss-20b falló: HTTP 503 (1 ms)
+# [IA evaluadora] minimaxai/minimax-m3.1-flash falló: HTTP 503 (1 ms)
+# [IA evaluadora] modelos {"orden":["z-ai/glm-5.3:sin-dato/sin-limite","nvidia/nemotron-3-ultra-550b-a55b:sin-dato/sin-limite","openai/gpt-oss-20b:sin-dato/sin-limite","minimaxai/minimax-m3.1-flash:sin-dato/sin-limite"],"baseTimeoutMs":null}
+# [IA evaluadora] z-ai/glm-5.3 falló: HTTP 500 (1 ms)
+# [IA evaluadora] nvidia/nemotron-3-ultra-550b-a55b falló: HTTP 500 (1 ms)
+# [IA evaluadora] openai/gpt-oss-20b falló: HTTP 500 (1 ms)
+# [IA evaluadora] minimaxai/minimax-m3.1-flash falló: HTTP 500 (1 ms)
+# [IA evaluadora] ningún modelo respondió {"intentos":[{"model":"z-ai/glm-5.3","reason":"HTTP 500","invalid":false,"ms":1},{"model":"nvidia/nemotron-3-ultra-550b-a55b","reason":"HTTP 500","invalid":false,"ms":1},{"model":"openai/gpt-oss-20b","reason":"HTTP 500","invalid":false,"ms":1},{"model":"minimaxai/minimax-m3.1-flash","reason":"HTTP 500","invalid":false,"ms":1}],"totalMs":1}
+# Subtest: métricas válidas: se conservan y se marca la procedencia de cada una
+ok 167 - métricas válidas: se conservan y se marca la procedencia de cada una
+  ---
+  duration_ms: 6.126672
+  type: 'test'
+  ...
+# Subtest: valores negativos o fuera de rango se descartan y quedan marcados
+ok 168 - valores negativos o fuera de rango se descartan y quedan marcados
+  ---
+  duration_ms: 0.434226
+  type: 'test'
+  ...
+# Subtest: NaN, Infinity y valores no numéricos no puntúan ni llegan al JSON
+ok 169 - NaN, Infinity y valores no numéricos no puntúan ni llegan al JSON
+  ---
+  duration_ms: 2.046224
+  type: 'test'
+  ...
+# Subtest: manipular palabras, muletillas y WPM no cambia lo que puntúa el servidor
+ok 170 - manipular palabras, muletillas y WPM no cambia lo que puntúa el servidor
+  ---
+  duration_ms: 0.48923
+  type: 'test'
+  ...
+# Subtest: el cliente no puede activar el área de voz sin una duración de habla válida
+ok 171 - el cliente no puede activar el área de voz sin una duración de habla válida
+  ---
+  duration_ms: 0.369023
+  type: 'test'
+  ...
+# Subtest: una entrevista vacía o sin texto no es evaluable
+ok 172 - una entrevista vacía o sin texto no es evaluable
+  ---
+  duration_ms: 1.826511
+  type: 'test'
+  ...
+# Subtest: un payload antiguo (solo pregunta y respuesta) sigue siendo evaluable
+ok 173 - un payload antiguo (solo pregunta y respuesta) sigue siendo evaluable
+  ---
+  duration_ms: 0.411525
+  type: 'test'
+  ...
+# Subtest: métricas ausentes o incompletas: el área queda sin medir, no se inventa un puntaje
+ok 174 - métricas ausentes o incompletas: el área queda sin medir, no se inventa un puntaje
+  ---
+  duration_ms: 0.933157
+  type: 'test'
+  ...
+# Subtest: la IA con puntajes fuera de rango se rechaza (no se recorta a 100)
+ok 175 - la IA con puntajes fuera de rango se rechaza (no se recorta a 100)
+  ---
+  duration_ms: 0.955158
+  type: 'test'
+  ...
+# Subtest: la IA incompleta o con estructura incorrecta se rechaza
+ok 176 - la IA incompleta o con estructura incorrecta se rechaza
+  ---
+  duration_ms: 0.755546
+  type: 'test'
+  ...
+# Subtest: se registra el modelo que produjo la evaluación y no los errores de los demás
+ok 177 - se registra el modelo que produjo la evaluación y no los errores de los demás
+  ---
+  duration_ms: 3.334502
+  type: 'test'
+  ...
+# Subtest: si todos los modelos fallan no hay resultado ni modelo ganador
+ok 178 - si todos los modelos fallan no hay resultado ni modelo ganador
+  ---
+  duration_ms: 1.79901
+  type: 'test'
+  ...
+# Subtest: el informe conserva la estructura que consume la interfaz y añade la auditoría
+ok 179 - el informe conserva la estructura que consume la interfaz y añade la auditoría
+  ---
+  duration_ms: 2.381345
+  type: 'test'
+  ...
+# Subtest: una respuesta inválida de la IA no produce informe
+ok 180 - una respuesta inválida de la IA no produce informe
+  ---
+  duration_ms: 0.967659
+  type: 'test'
+  ...
+# Subtest: la lista de muletillas del backend no diverge de la del frontend
+not ok 181 - la lista de muletillas del backend no diverge de la del frontend
+  ---
+  duration_ms: 0.247515
+  type: 'test'
+  location: '/app/tests/evaluation-integrity.test.js:407:1'
+  failureType: 'testCodeFailure'
+  error: "ENOENT: no such file or directory, open '/frontend/src/lib/practice/speech.js'"
+  code: 'ENOENT'
+  stack: |-
+    Object.readFileSync (node:fs:440:20)
+    TestContext.<anonymous> (/app/tests/evaluation-integrity.test.js:408:21)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: los campos no críticos inválidos se descartan sin romper el informe
+ok 182 - los campos no críticos inválidos se descartan sin romper el informe
+  ---
+  duration_ms: 0.254816
+  type: 'test'
+  ...
+# [IA evaluadora] disponibilidad {"reason":"test","models":"caido:HTTP_404(1ms) ok:ok(0ms)"}
+# [IA evaluadora] disponibilidad {"reason":"test","models":"caido:HTTP_404(0ms) ok:ok(0ms)"}
+# [IA evaluadora] ningún modelo respondió {"intentos":[{"model":"z-ai/glm-5.3","reason":"HTTP 410 del proveedor nvidia (modelo retirado)","invalid":false,"ms":1},{"model":"nvidia/nemotron-3-ultra-550b-a55b","reason":"HTTP 410 del proveedor nvidia (modelo retirado)","invalid":false,"ms":2},{"model":"openai/gpt-oss-20b","reason":"HTTP 410 del proveedor nvidia (modelo retirado)","invalid":false,"ms":2},{"model":"minimaxai/minimax-m3.1-flash","reason":"HTTP 410 del proveedor nvidia (modelo retirado)","invalid":false,"ms":2}],"totalMs":2}
+# Subtest: la evaluación usa el orden de la comprobación anticipada, sin límites distintos por modelo
+ok 183 - la evaluación usa el orden de la comprobación anticipada, sin límites distintos por modelo
+  ---
+  duration_ms: 6.853515
+  type: 'test'
+  ...
+# Subtest: un modelo que falló en la comprobación NO se excluye: se reintenta y puede ganar
+ok 184 - un modelo que falló en la comprobación NO se excluye: se reintenta y puede ganar
+  ---
+  duration_ms: 1.585796
+  type: 'test'
+  ...
+# Subtest: si todos fallan: error AI_UNAVAILABLE con mensaje genérico y detalle solo interno
+ok 185 - si todos fallan: error AI_UNAVAILABLE con mensaje genérico y detalle solo interno
+  ---
+  duration_ms: 2.365044
+  type: 'test'
+  ...
+# Subtest: sin comprobación previa la evaluación funciona igual (orden configurado) y sin límite artificial
+ok 186 - sin comprobación previa la evaluación funciona igual (orden configurado) y sin límite artificial
+  ---
+  duration_ms: 0.735045
+  type: 'test'
+  ...
+# Subtest: un límite configurado EXPLÍCITAMENTE sí se aplica (y nunca es un presupuesto de 60 s)
+ok 187 - un límite configurado EXPLÍCITAMENTE sí se aplica (y nunca es un presupuesto de 60 s)
+  ---
+  duration_ms: 0.806549
+  type: 'test'
+  ...
+# Subtest: normalizeTokens quita tildes, mayúsculas y puntuación
+ok 188 - normalizeTokens quita tildes, mayúsculas y puntuación
+  ---
+  duration_ms: 5.015304
+  type: 'test'
+  ...
+# Subtest: sanitizeSegments descarta tiempos inválidos sin lanzar
+ok 189 - sanitizeSegments descarta tiempos inválidos sin lanzar
+  ---
+  duration_ms: 1.869014
+  type: 'test'
+  ...
+# Subtest: sanitizeSegments ordena por tiempo y descarta palabras inválidas
+ok 190 - sanitizeSegments ordena por tiempo y descarta palabras inválidas
+  ---
+  duration_ms: 0.739945
+  type: 'test'
+  ...
+# Subtest: speechIntervals descuenta pausas internas mayores que PAUSE_GAP_MS
+ok 191 - speechIntervals descuenta pausas internas mayores que PAUSE_GAP_MS
+  ---
+  duration_ms: 0.538533
+  type: 'test'
+  ...
+# Subtest: speechIntervals mantiene los huecos cortos (respiración) como habla
+ok 192 - speechIntervals mantiene los huecos cortos (respiración) como habla
+  ---
+  duration_ms: 0.302718
+  type: 'test'
+  ...
+# Subtest: mergeIntervals fusiona solapamientos y recorta a la duración conocida
+ok 193 - mergeIntervals fusiona solapamientos y recorta a la duración conocida
+  ---
+  duration_ms: 0.49603
+  type: 'test'
+  ...
+# Subtest: mergeIntervals ignora intervalos vacíos, negativos o no finitos
+ok 194 - mergeIntervals ignora intervalos vacíos, negativos o no finitos
+  ---
+  duration_ms: 0.425926
+  type: 'test'
+  ...
+# Subtest: una sesión con audio suficiente produce WPM verificado
+ok 195 - una sesión con audio suficiente produce WPM verificado
+  ---
+  duration_ms: 2.730565
+  type: 'test'
+  ...
+# Subtest: los segmentos del entrevistador no cuentan como habla del vocero
+ok 196 - los segmentos del entrevistador no cuentan como habla del vocero
+  ---
+  duration_ms: 3.568716
+  type: 'test'
+  ...
+# Subtest: un segmento no se reutiliza para dos respuestas
+ok 197 - un segmento no se reutiliza para dos respuestas
+  ---
+  duration_ms: 1.514592
+  type: 'test'
+  ...
+# Subtest: sin respuestas no hay evidencia
+ok 198 - sin respuestas no hay evidencia
+  ---
+  duration_ms: 0.438626
+  type: 'test'
+  ...
+# Subtest: una transcripción sin segmentos queda no verificada, no lanza
+ok 199 - una transcripción sin segmentos queda no verificada, no lanza
+  ---
+  duration_ms: 0.183511
+  type: 'test'
+  ...
+# Subtest: timestamps inválidos no producen error 500: quedan como unverified
+ok 200 - timestamps inválidos no producen error 500: quedan como unverified
+  ---
+  duration_ms: 0.674941
+  type: 'test'
+  ...
+# Subtest: segmentos sin marcas por palabra no aportan tiempo
+ok 201 - segmentos sin marcas por palabra no aportan tiempo
+  ---
+  duration_ms: 0.296618
+  type: 'test'
+  ...
+# Subtest: si el texto del cliente no aparece en el audio, no se verifica
+ok 202 - si el texto del cliente no aparece en el audio, no se verifica
+  ---
+  duration_ms: 0.230514
+  type: 'test'
+  ...
+# Subtest: cobertura de sesión insuficiente (menos de la mitad de respuestas) no verifica
+ok 203 - cobertura de sesión insuficiente (menos de la mitad de respuestas) no verifica
+  ---
+  duration_ms: 0.264316
+  type: 'test'
+  ...
+# Subtest: una respuesta demasiado corta no se verifica
+ok 204 - una respuesta demasiado corta no se verifica
+  ---
+  duration_ms: 0.187711
+  type: 'test'
+  ...
+# Subtest: respeta el tope de segmentos por respuesta
+ok 205 - respeta el tope de segmentos por respuesta
+  ---
+  duration_ms: 0.379323
+  type: 'test'
+  ...
+# Subtest: la duración total no se confunde con el tiempo de habla
+ok 206 - la duración total no se confunde con el tiempo de habla
+  ---
+  duration_ms: 0.306518
+  type: 'test'
+  ...
+# node:fs:440
+#     return binding.readFileUtf8(path, stringToFlags(options.flag));
+#                    ^
+# Error: ENOENT: no such file or directory, open '/frontend/src/components/MetricsDashboard.jsx'
+#     at Object.readFileSync (node:fs:440:20)
+#     at Object.<anonymous> (/app/tests/ui-labels.test.js:9:19)
+#     at Module._compile (node:internal/modules/cjs/loader:1781:14)
+#     at Object..js (node:internal/modules/cjs/loader:1913:10)
+#     at Module.load (node:internal/modules/cjs/loader:1505:32)
+#     at Function._load (node:internal/modules/cjs/loader:1309:12)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+#     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+#     at node:internal/main/run_main_module:36:49 {
+#   errno: -2,
+#   code: 'ENOENT',
+#   syscall: 'open',
+#   path: '/frontend/src/components/MetricsDashboard.jsx'
+# }
+# Node.js v22.23.5
+# Subtest: tests/ui-labels.test.js
+not ok 20 - tests/ui-labels.test.js
+  ---
+  duration_ms: 119.764162
+  type: 'test'
+  location: '/app/tests/ui-labels.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# node:fs:440
+#     return binding.readFileUtf8(path, stringToFlags(options.flag));
+#                    ^
+# Error: ENOENT: no such file or directory, open '/frontend/src/pages/sistema/Organizaciones.jsx'
+#     at Object.readFileSync (node:fs:440:20)
+#     at read (/app/tests/ui-navigation.test.js:12:31)
+#     at Object.<anonymous> (/app/tests/ui-navigation.test.js:14:24)
+#     at Module._compile (node:internal/modules/cjs/loader:1781:14)
+#     at Object..js (node:internal/modules/cjs/loader:1913:10)
+#     at Module.load (node:internal/modules/cjs/loader:1505:32)
+#     at Function._load (node:internal/modules/cjs/loader:1309:12)
+#     at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+#     at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)
+#     at node:internal/main/run_main_module:36:49 {
+#   errno: -2,
+#   code: 'ENOENT',
+#   syscall: 'open',
+#   path: '/frontend/src/pages/sistema/Organizaciones.jsx'
+# }
+# Node.js v22.23.5
+# Subtest: tests/ui-navigation.test.js
+not ok 21 - tests/ui-navigation.test.js
+  ---
+  duration_ms: 79.935546
+  type: 'test'
+  location: '/app/tests/ui-navigation.test.js:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..208
+# tests 226
+# suites 0
+# pass 206
+# fail 4
+# cancelled 16
+# skipped 0
+# todo 0
+# duration_ms 1475.771912

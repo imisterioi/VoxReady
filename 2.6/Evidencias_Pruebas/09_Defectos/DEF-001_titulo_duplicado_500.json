@@ -1,0 +1,10 @@
+{
+  "id": "DEF-001",
+  "detectado": "2026-11-13T18:05:06.281Z",
+  "peticion": "POST /api/themes (rol ADMIN) con el título de un escenario existente de la misma organización",
+  "titulo_usado": "Cambio de política interna",
+  "resultado_esperado": "Error controlado (HTTP 409 o 400) indicando que ya existe un escenario con ese título",
+  "resultado_obtenido": "HTTP 500 · cuerpo: {\"error\":\"Error interno creando el escenario.\"}",
+  "causa_observada": "Excepción de Prisma P2002 (Unique constraint Theme_tenantId_title_key) no capturada por el manejador",
+  "registros_creados": 0
+}

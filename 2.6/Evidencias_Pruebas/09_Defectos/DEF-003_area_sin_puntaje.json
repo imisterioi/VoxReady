@@ -1,0 +1,8 @@
+{
+  "id": "DEF-003",
+  "detectado": "2026-11-13T18:05:06.381Z",
+  "sesion": "a1646e3a-9751-49cb-a317-d164fcfc6399",
+  "resultado_esperado": "Las cuatro áreas del informe presentan un puntaje, o la interfaz indica explícitamente cuál no pudo medirse",
+  "resultado_obtenido": "Expresión: null · Tono de voz: 96 · Coherencia: 59 · Empatía: 63",
+  "observacion": "El área \"Expresión\" queda con puntaje nulo cuando no hay métricas de vídeo válidas; el sistema reparte su peso entre las demás áreas y no lo advierte en la interfaz."
+}

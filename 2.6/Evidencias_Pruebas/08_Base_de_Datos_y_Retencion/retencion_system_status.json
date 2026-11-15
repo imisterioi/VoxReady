@@ -1,0 +1,96 @@
+{
+  "status": "ok",
+  "startedAt": "2026-11-13T17:15:41.180Z",
+  "uptimeSeconds": 2621,
+  "down": 0,
+  "processes": [
+    {
+      "key": "api",
+      "name": "API VoxReady",
+      "state": "ok",
+      "uptimeSeconds": 2621
+    },
+    {
+      "key": "database",
+      "name": "Base de datos",
+      "state": "ok",
+      "ms": 0
+    },
+    {
+      "key": "storage",
+      "name": "Almacenamiento de grabaciones",
+      "state": "ok",
+      "recordings": 12,
+      "megabytes": 18.4
+    },
+    {
+      "key": "interviewer",
+      "name": "IA entrevistadora",
+      "state": "ok",
+      "lastOkAt": "2026-11-13T17:23:35.554Z",
+      "lastErrorAt": null,
+      "lastModel": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "lastMs": 650,
+      "calls": 4,
+      "failures": 0,
+      "detail": null
+    },
+    {
+      "key": "evaluator",
+      "name": "IA evaluadora",
+      "state": "ok",
+      "lastOkAt": "2026-11-13T17:24:34.482Z",
+      "lastErrorAt": null,
+      "lastModel": "nvidia/nemotron-3-ultra-550b-a55b",
+      "lastMs": 72543,
+      "calls": 3,
+      "failures": 0,
+      "detail": null
+    },
+    {
+      "name": "Retención de datos (borrado por vencimiento)",
+      "label": "Retención de datos (borrado por vencimiento)",
+      "state": "ok",
+      "everyMinutes": 360,
+      "runs": 4,
+      "lastRunAt": "2026-11-13T17:24:34.516Z",
+      "lastOkAt": "2026-11-13T17:24:34.516Z",
+      "lastMs": 27,
+      "lastError": null,
+      "lastResult": {
+        "videosRemoved": 0,
+        "audiosRemoved": 0,
+        "transcriptsCleared": 0,
+        "reportsCleaned": 0
+      },
+      "key": "job-retention"
+    },
+    {
+      "name": "Eliminación de organizaciones",
+      "label": "Eliminación de organizaciones",
+      "state": "ok",
+      "everyMinutes": 5,
+      "runs": 9,
+      "lastRunAt": "2026-11-13T17:55:42.273Z",
+      "lastOkAt": "2026-11-13T17:55:42.273Z",
+      "lastMs": 2,
+      "lastError": null,
+      "lastResult": {
+        "total": 0,
+        "done": 0,
+        "pending": 0
+      },
+      "key": "job-tenant-deletion"
+    }
+  ],
+  "connected": {
+    "total": 1,
+    "byRole": {
+      "VOCERO": 0,
+      "ADMIN": 0,
+      "MASTER": 0,
+      "SYSTEM": 1
+    },
+    "windowMinutes": 5
+  }
+}

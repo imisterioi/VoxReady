@@ -1,0 +1,131 @@
+{
+  "status": "ok",
+  "jobs": [
+    {
+      "name": "retention",
+      "label": "Retención de datos (borrado por vencimiento)",
+      "state": "ok",
+      "everyMinutes": 360,
+      "runs": 4,
+      "lastRunAt": "2026-11-13T17:24:34.516Z",
+      "lastOkAt": "2026-11-13T17:24:34.516Z",
+      "lastMs": 27,
+      "lastError": null,
+      "lastResult": {
+        "videosRemoved": 0,
+        "audiosRemoved": 0,
+        "transcriptsCleared": 0,
+        "reportsCleaned": 0
+      }
+    },
+    {
+      "name": "tenant-deletion",
+      "label": "Eliminación de organizaciones",
+      "state": "ok",
+      "everyMinutes": 5,
+      "runs": 9,
+      "lastRunAt": "2026-11-13T17:55:42.273Z",
+      "lastOkAt": "2026-11-13T17:55:42.273Z",
+      "lastMs": 2,
+      "lastError": null,
+      "lastResult": {
+        "total": 0,
+        "done": 0,
+        "pending": 0
+      }
+    }
+  ],
+  "tenants": [
+    {
+      "id": "d0000000-0000-4000-8000-000000000002",
+      "name": "Banco Meridiano",
+      "status": "ACTIVE",
+      "retentionMode": "FULL",
+      "retentionDays": 90,
+      "deletionRequestedAt": null,
+      "sessions": 18,
+      "expiredSessions": 1,
+      "recordings": 0,
+      "anonymizedUsers": 0,
+      "openDeletionRequests": 0
+    },
+    {
+      "id": "d0000000-0000-4000-8000-000000000003",
+      "name": "Clínica Salud Vital",
+      "status": "ACTIVE",
+      "retentionMode": "FULL",
+      "retentionDays": 90,
+      "deletionRequestedAt": null,
+      "sessions": 11,
+      "expiredSessions": 0,
+      "recordings": 0,
+      "anonymizedUsers": 0,
+      "openDeletionRequests": 0
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Empresa Demo",
+      "status": "ACTIVE",
+      "retentionMode": "FULL",
+      "retentionDays": 90,
+      "deletionRequestedAt": null,
+      "sessions": 10,
+      "expiredSessions": 0,
+      "recordings": 5,
+      "anonymizedUsers": 0,
+      "openDeletionRequests": 0
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "name": "Energía Andes",
+      "status": "ACTIVE",
+      "retentionMode": "FULL",
+      "retentionDays": 90,
+      "deletionRequestedAt": null,
+      "sessions": 0,
+      "expiredSessions": 0,
+      "recordings": 0,
+      "anonymizedUsers": 0,
+      "openDeletionRequests": 0
+    },
+    {
+      "id": "d0000000-0000-4000-8000-000000000001",
+      "name": "Energía Litoral",
+      "status": "ACTIVE",
+      "retentionMode": "FULL",
+      "retentionDays": 90,
+      "deletionRequestedAt": null,
+      "sessions": 27,
+      "expiredSessions": 5,
+      "recordings": 0,
+      "anonymizedUsers": 1,
+      "openDeletionRequests": 0
+    },
+    {
+      "id": "43db79c1-3b48-48c2-8a45-3365fd3a14b1",
+      "name": "[test-mw00n4l4] Nuevo",
+      "status": "ACTIVE",
+      "retentionMode": "FULL",
+      "retentionDays": 90,
+      "deletionRequestedAt": null,
+      "sessions": 0,
+      "expiredSessions": 0,
+      "recordings": 0,
+      "anonymizedUsers": 0,
+      "openDeletionRequests": 0
+    },
+    {
+      "id": "d0000000-0000-4000-8000-000000000004",
+      "name": "Transportes Norte",
+      "status": "SUSPENDED",
+      "retentionMode": "FULL",
+      "retentionDays": 90,
+      "deletionRequestedAt": null,
+      "sessions": 6,
+      "expiredSessions": 0,
+      "recordings": 0,
+      "anonymizedUsers": 0,
+      "openDeletionRequests": 0
+    }
+  ]
+}

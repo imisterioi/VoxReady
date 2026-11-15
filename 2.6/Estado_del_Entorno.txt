@@ -1,0 +1,28 @@
+﻿ESTADO DEL ENTORNO LOCAL DE VOXREADY - 2026-11-13 15:08
+
+Sistema probado: Fase 2\Evidencias Proyecto\Evidencias de sistema (implementacion funcional).
+Docker: 29.8.0 | Docker Compose: 5.5.1
+
+CONTENEDORES (compose voxready-dev):
+voxready-dev-frontend-1 | Up 53 minutes (healthy) | 0.0.0.0:5173->5173/tcp, [::]:5173->5173/tcp
+voxready-dev-backend-1 | Up 53 minutes (healthy) | 0.0.0.0:3000->3000/tcp, [::]:3000->3000/tcp
+voxready-dev-whisper-1 | Up 53 minutes (healthy) | 0.0.0.0:8001->8001/tcp, [::]:8001->8001/tcp
+voxready-dev-postgres-1 | Up 53 minutes (healthy) | 0.0.0.0:5432->5432/tcp, [::]:5432->5432/tcp
+
+SERVICIOS Y DIRECCIONES:
+  Frontend:   http://127.0.0.1:5173
+  API:        http://127.0.0.1:3000  (/api/health)
+  Whisper:    http://127.0.0.1:8001  (/health)
+  PostgreSQL: 127.0.0.1:5432  (base voxready_db)
+
+TRABAJOS AUTOMATICOS (consultados en modo lectura):
+  retention: ejecucion cada 6 h; ultimo resultado sin eliminaciones (0 videos, 0 audios, 0 transcripciones, 0 informes).
+  tenant-deletion: ejecucion cada 5 min; sin eliminaciones pendientes.
+
+NOTAS:
+  - Base de datos del proyecto reutilizada; no se reconstruyo ni se vacio.
+  - Las peticiones de prueba de esta etapa fueron de solo lectura (la de titulo duplicado fallo sin crear registro).
+  - La verificacion de interfaz (recorrido de la entrevista con camara simulada) creo 1 practica de prueba en estado CREATED (id 1950ca23-0533-4db2-8125-068d4b8f20fe), que quedo sin informe. Es el unico registro generado por las pruebas de esta etapa y se deja documentado; no se elimino ningun registro.
+  - La investigacion de retencion se realizo en modo solo lectura (no se ejecutaron borrados).
+  - Los contenedores quedan EN EJECUCION y saludables al finalizar el trabajo.
+

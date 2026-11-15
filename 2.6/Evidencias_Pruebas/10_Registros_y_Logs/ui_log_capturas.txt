@@ -1,0 +1,12 @@
+shot: CP-002_Login_Errores/01_credenciales_invalidas.png
+Ana Torres -> http://127.0.0.1:5173/vocero
+shot: CP-001_Login_Vocero/01_home_vocero.png
+Carlos Ruiz -> http://127.0.0.1:5173/admin
+shot: CP-003_Roles_Admin/01_home_admin.png
+Marta Vidal -> http://127.0.0.1:5173/maestro
+shot: CP-003_Roles_Maestro/01_home_maestro.png
+Sofía Reyes -> http://127.0.0.1:5173/sistema
+shot: CP-003_Roles_Sistema/01_home_sistema.png
+shot: CP-004_Escenarios/01_lista_escenarios.png
+shot: CP-005_CheckTecnico/01_comprobacion_tecnica.png
+shot: CP-012_Informe_Progreso/01_progreso_vocero.png

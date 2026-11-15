@@ -1,0 +1,27 @@
+{
+  "title": "VoxReady",
+  "url": "http://127.0.0.1:5173/login",
+  "buttons": [
+    "",
+    "Iniciar sesión",
+    "AT\nAna Torres\nVocero · vocero@demo.com",
+    "CR\nCarlos Ruiz\nAdministrador · admin@demo.com",
+    "MV\nMarta Vidal\nConfigurador maestro · marta@voxready.io",
+    "SR\nSofía Reyes\nAdministrador del sistema · sofia@voxready.io"
+  ],
+  "inputs": [
+    {
+      "type": "email",
+      "name": "",
+      "id": "",
+      "placeholder": "tu@empresa.com"
+    },
+    {
+      "type": "password",
+      "name": "",
+      "id": "",
+      "placeholder": "••••••••"
+    }
+  ],
+  "errors": []
+}

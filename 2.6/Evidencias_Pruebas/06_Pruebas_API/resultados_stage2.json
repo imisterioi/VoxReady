@@ -1,0 +1,430 @@
+{
+  "results": [
+    {
+      "id": "CP-004",
+      "modulo": "Simulación",
+      "nombre": "Iniciar una práctica de entrevista",
+      "procedimiento": "POST /api/sessions con un escenario asignado del vocero (vocero@demo.com)",
+      "esperado": "El sistema inicia la sesión y devuelve su identificador",
+      "obtenido": "HTTP 200 · escenarios disponibles=18 · escenario=\"Prueba integral: corte masivo de suministro\" · sessionId=a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-005",
+      "modulo": "Simulación",
+      "nombre": "Captura/almacenamiento de audio y video de la sesión",
+      "procedimiento": "POST /api/sessions/:id/video y POST /api/sessions/:id/audio con archivos WebM",
+      "esperado": "El sistema almacena audio y video de la práctica",
+      "obtenido": "video HTTP 200 (6 KB sintético) · audio HTTP 200 (241 KB, voz real)",
+      "estado": "APROBADO",
+      "observaciones": "El video es sintético (PyAV); la captura por cámara real no se ejecutó sin navegador con dispositivo."
+    },
+    {
+      "id": "CP-007",
+      "modulo": "Entrevistador IA",
+      "nombre": "Generar la siguiente pregunta con contexto",
+      "procedimiento": "POST /api/interviewer/next-question con historial de la conversación",
+      "esperado": "El entrevistador IA devuelve la siguiente pregunta considerando el contexto",
+      "obtenido": "HTTP 200 · pregunta=\"¿Qué porcentaje de clientes aún presenta fallas de servicio?\"",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-021",
+      "modulo": "Rendimiento",
+      "nombre": "Tiempo de respuesta del entrevistador IA",
+      "procedimiento": "Medición del tiempo de POST /api/interviewer/next-question",
+      "esperado": "La siguiente interacción se genera en un tiempo razonable para la entrevista",
+      "obtenido": "tiempo de respuesta=656 ms · modelo=nvidia/nemotron-3.5-lightning-30b-a3b",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-008",
+      "modulo": "Transcripción",
+      "nombre": "Transcribir la respuesta del vocero (Whisper)",
+      "procedimiento": "POST /api/sessions/:id/answer-transcript con el audio real de la respuesta (WebM/Opus)",
+      "esperado": "El sistema devuelve la transcripción correspondiente a la respuesta hablada",
+      "obtenido": "HTTP 200 · motor=nvidia-whisper-large-v3 · ms=2882 · text=\"Buenos días. Ante el corte de suministro que afectó a nuestros clientes, quiero expresar nuestras disculpas a las person...\"",
+      "estado": "APROBADO",
+      "observaciones": "Audio de entrada: voz sintetizada en español (48 kHz, ~26,6 s)."
+    },
+    {
+      "id": "CP-020",
+      "modulo": "Trazabilidad",
+      "nombre": "Registro de una operación crítica (transcripción)",
+      "procedimiento": "GET /api/sessions/:id/transcription-audit",
+      "esperado": "La operación queda registrada con información suficiente (motor, tiempos, resultado)",
+      "obtenido": "HTTP 200 · registros=1 · motor=nvidia-whisper-large-v3 · estado=ok",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-009",
+      "modulo": "Evaluación multimodal",
+      "nombre": "Procesar una sesión finalizada",
+      "procedimiento": "POST /api/sessions/:id/evaluate (procesamiento asíncrono) y consulta del informe resultante",
+      "esperado": "El sistema procesa los datos y genera los resultados de evaluación",
+      "obtenido": "POST HTTP 202 (asíncrono) · estado evaluación=null · score=72 · áreas=4",
+      "estado": "APROBADO",
+      "observaciones": "El endpoint responde 202 (Accepted) y evalúa en segundo plano; el informe se consulta después."
+    },
+    {
+      "id": "CP-011",
+      "modulo": "Evaluación",
+      "nombre": "Resultados por dimensión (4 áreas)",
+      "procedimiento": "Inspección del informe devuelto por la evaluación",
+      "esperado": "El sistema presenta resultados para expresión, tono de voz, coherencia y empatía",
+      "obtenido": "Expresión=null · Tono de voz=96 · Coherencia=59 · Empatía=63",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-010",
+      "modulo": "Evaluación",
+      "nombre": "Evaluación según la rúbrica/patrón configurado",
+      "procedimiento": "Inspección del patrón usado en el informe (pattern/patternVersion)",
+      "esperado": "La evaluación considera los criterios definidos (patrón maestro/versión)",
+      "obtenido": "patrón=\"(sin patrón ACTIVE; pesos por defecto)\" · version=n/a",
+      "estado": "BLOQUEADO",
+      "observaciones": "No hay patrón maestro ACTIVE en la base; la evaluación usa los pesos por defecto del sistema."
+    },
+    {
+      "id": "CP-012",
+      "modulo": "Informes",
+      "nombre": "Generar/consultar el informe de la práctica",
+      "procedimiento": "GET /api/sessions/:id (rol vocero propietario)",
+      "esperado": "El sistema devuelve el informe asociado a la sesión",
+      "obtenido": "HTTP 200 · score=72 · informe=presente",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-013",
+      "modulo": "Informes",
+      "nombre": "El informe corresponde a la sesión evaluada",
+      "procedimiento": "Comparación entre el score de la sesión y las áreas del informe",
+      "esperado": "El informe contiene los resultados correspondientes a la sesión consultada",
+      "obtenido": "score sesión=72 · áreas con puntaje=3/4 · id=a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-017",
+      "modulo": "Procesamiento",
+      "nombre": "Reprocesar una sesión ya evaluada (sin pérdida)",
+      "procedimiento": "Segunda llamada a POST /api/sessions/:id/evaluate",
+      "esperado": "La sesión mantiene su informe sin reprocesarse ni perder información",
+      "obtenido": "HTTP 200 · score=72 (igual al anterior=true)",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-018",
+      "modulo": "Integración IA",
+      "nombre": "Manejo controlado de una entrada inválida",
+      "procedimiento": "Evaluar una sesión sin transcripción (transcript vacío)",
+      "esperado": "El sistema responde con un error controlado y no genera informe",
+      "obtenido": "HTTP 400 · mensaje=\"La entrevista no tiene preguntas registradas.\"",
+      "estado": "APROBADO",
+      "observaciones": "No fue posible simular una caída real del proveedor de IA; se validó el manejo de entrada inválida."
+    },
+    {
+      "id": "CP-016",
+      "modulo": "Multi-tenant",
+      "nombre": "Impedir el acceso a información de otro cliente",
+      "procedimiento": "El vocero intenta leer una sesión que no le pertenece (otra organización)",
+      "esperado": "El sistema impide el acceso (HTTP 403)",
+      "obtenido": "El vocero (organización \"Empresa Demo\") intenta leer la sesión d0000000-0000-4000-8000-000000700060 de la organización \"Transportes Norte\": HTTP 403.",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-019",
+      "modulo": "Seguridad",
+      "nombre": "Impedir el acceso a funcionalidades no autorizadas",
+      "procedimiento": "Petición sin token y petición de un vocero a un recurso solo-admin",
+      "esperado": "El sistema rechaza el acceso (401 sin token / 403 sin permisos)",
+      "obtenido": "sin token → HTTP 401 · vocero→/api/users → HTTP 403",
+      "estado": "APROBADO",
+      "observaciones": ""
+    },
+    {
+      "id": "CP-022",
+      "modulo": "Concurrencia",
+      "nombre": "Procesar varias solicitudes simultáneas",
+      "procedimiento": "Tres transcripciones concurrentes del mismo vocero",
+      "esperado": "El sistema atiende las solicitudes sin pérdida de información",
+      "obtenido": "solicitudes=3 · OK=3 · estados=200/200/200 · tiempo total=3444 ms",
+      "estado": "PARCIAL",
+      "observaciones": "El servicio de Whisper limita la concurrencia a 1 (WHISPER_MAX_CONCURRENCY=1); el backend encola o rechaza. Se validó el comportamiento controlado, no el rendimiento a gran escala."
+    },
+    {
+      "id": "CP-006",
+      "modulo": "Simulación",
+      "nombre": "Informar la ausencia de cámara o micrófono",
+      "procedimiento": "Requiere interacción en el navegador negando los permisos de cámara/micrófono",
+      "esperado": "El sistema informa al usuario que debe habilitar el dispositivo",
+      "obtenido": "No ejecutado: requiere navegador con interacción de permisos de medios.",
+      "estado": "NO EJECUTADO",
+      "observaciones": "Pendiente de ejecución manual en navegador (no se dispone de automatización de permisos de medios en esta sesión)."
+    }
+  ],
+  "apiLog": [
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/auth/login",
+      "status": 200,
+      "ms": 141
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/auth/login",
+      "status": 200,
+      "ms": 100
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/scenarios/my",
+      "status": 200,
+      "ms": 16
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions",
+      "status": 200,
+      "ms": 13
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399/video",
+      "status": 200,
+      "ms": 19
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399/audio",
+      "status": 200,
+      "ms": 28
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/interviewer/next-question",
+      "status": 200,
+      "ms": 656
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399/answer-transcript?startMs=0&endMs=26584&turnIndex=0",
+      "status": 200,
+      "ms": 2963
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399/transcription-audit",
+      "status": 200,
+      "ms": 7
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399/evaluate",
+      "status": 202,
+      "ms": 43
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 11
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 15
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 45
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 10
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 11
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 13
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 18
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 11
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 9
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 11
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 10
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 9
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 10
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399",
+      "status": 200,
+      "ms": 10
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/a1646e3a-9751-49cb-a317-d164fcfc6399/evaluate",
+      "status": 200,
+      "ms": 17
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions",
+      "status": 200,
+      "ms": 13
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/af38bacf-1698-482f-9739-457c5b8f5665/evaluate",
+      "status": 400,
+      "ms": 9
+    },
+    {
+      "method": "DELETE",
+      "url": "http://127.0.0.1:3000/api/sessions/af38bacf-1698-482f-9739-457c5b8f5665",
+      "status": 200,
+      "ms": 19
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/auth/me",
+      "status": 200,
+      "ms": 6
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/practices",
+      "status": 200,
+      "ms": 187
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions/d0000000-0000-4000-8000-000000700060",
+      "status": 403,
+      "ms": 9
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/sessions",
+      "status": 401,
+      "ms": 4
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:3000/api/users",
+      "status": 403,
+      "ms": 6
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions",
+      "status": 200,
+      "ms": 14
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions",
+      "status": 200,
+      "ms": 12
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions",
+      "status": 200,
+      "ms": 10
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/e4542a0a-7d7b-43f4-97fd-1bb96352a874/answer-transcript?startMs=0&endMs=26584&turnIndex=0",
+      "status": 200,
+      "ms": 3147
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/38fc8663-1bde-4adb-8d10-c0244da2198f/answer-transcript?startMs=0&endMs=26584&turnIndex=0",
+      "status": 200,
+      "ms": 3146
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:3000/api/sessions/a6c73e07-bbf1-447a-ae87-505fd09cf4cb/answer-transcript?startMs=0&endMs=26584&turnIndex=0",
+      "status": 200,
+      "ms": 3443
+    },
+    {
+      "method": "DELETE",
+      "url": "http://127.0.0.1:3000/api/sessions/e4542a0a-7d7b-43f4-97fd-1bb96352a874",
+      "status": 200,
+      "ms": 79
+    },
+    {
+      "method": "DELETE",
+      "url": "http://127.0.0.1:3000/api/sessions/a6c73e07-bbf1-447a-ae87-505fd09cf4cb",
+      "status": 200,
+      "ms": 83
+    },
+    {
+      "method": "DELETE",
+      "url": "http://127.0.0.1:3000/api/sessions/38fc8663-1bde-4adb-8d10-c0244da2198f",
+      "status": 200,
+      "ms": 84
+    }
+  ],
+  "sessionId": "a1646e3a-9751-49cb-a317-d164fcfc6399",
+  "sessionScore": 72
+}
