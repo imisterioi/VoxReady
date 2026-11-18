@@ -933,10 +933,10 @@ const I = {
       cfg: {
         aggressivenessL: 'Nivel de agresividad del entrevistador',
         levels: {
-          BAJA: { label: 'Baja', help: 'Cordial: da espacio para explicarse y no confronta.' },
-          MEDIA: { label: 'Media', help: 'Incisivo pero respetuoso: no acepta respuestas genéricas.' },
-          ALTA: { label: 'Alta', help: 'Confrontacional: cuestiona la versión oficial y presiona por responsables y cifras.' },
-          EXTREMA: { label: 'Extrema', help: 'Hostil: toma las palabras del vocero en su peor interpretación. Ej.: “¿Dice entonces que…?”' },
+          BAJA: { label: 'Baja', help: 'Cordial y abierta: da espacio para explicarse y solo pide aclaraciones simples.' },
+          MEDIA: { label: 'Media', help: 'Profesional y directa: pide precisión cuando faltan datos relevantes.' },
+          ALTA: { label: 'Alta', help: 'Incisiva: cuestiona evasivas y exige explicaciones, cifras y responsables.' },
+          EXTREMA: { label: 'Extrema', help: 'Muy incisiva: preguntas difíciles y respuestas directas, sin insultos ni acusaciones sin base.' },
         },
         invalidTitle: 'Esta configuración no se puede guardar ni iniciar:',
         issues: {
@@ -1018,6 +1018,13 @@ const I = {
         calibHintNoImage: 'La cámara no entrega imagen: comprueba que no esté tapada y que ningún otro programa la esté usando.',
         calibHintFraming: 'Colócate frente a la cámara con el rostro y los hombros dentro del encuadre.',
         calibHintNoise: 'Se detecta ruido de fondo: intenta reducir el ruido ambiental.',
+        // La calibración se cerró sin completar la ventana normal (watchdog, error o cancelación).
+        calibInterrupted: 'La calibración no llegó a completarse: vuelve a intentarlo antes de comenzar.',
+        // Medidor de postura (MediaPipe): se prepara al activar la cámara, antes de calibrar.
+        trackerPreparing: 'Preparando el medidor de postura… puedes seguir con la cámara activada.',
+        trackerReady: 'Medidor de postura listo.',
+        trackerFailed:
+          'No se pudo preparar el medidor de postura: puedes calibrar igualmente (no se evaluará tu postura).',
         recalibrate: 'Volver a calibrar',
         status: 'Estado', statusOf: (done, total) => `${done} de ${total}`,
         ready: 'Listo', insufficient: 'Insuficiente', inProgress: 'En curso', pending: 'Pendiente',

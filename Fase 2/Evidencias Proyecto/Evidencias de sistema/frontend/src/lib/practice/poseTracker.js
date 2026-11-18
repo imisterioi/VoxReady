@@ -4,6 +4,10 @@
 // y además dirección de los ojos y sonrisa/risa (Face, para el análisis de sensibilidad).
 import { FaceLandmarker, FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 
+// Dependencias reales de MediaPipe, agrupadas para que `load()` pueda recibir un sustituto en las
+// pruebas (contrato verificable sin red ni navegador). En producción siempre se usan estas.
+const MEDIAPIPE = { FaceLandmarker, FilesetResolver, PoseLandmarker };
+
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/wasm';
 const MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task';
@@ -51,11 +55,16 @@ export default class PoseTracker {
     this.prev = null;
   }
 
-  async load() {
+  // Carga los modelos. `face: false` carga SOLO el corporal (lo usa la calibración, que únicamente
+  // necesita `personNow`): evita descargar/compilar el modelo facial y ejecutar su inferencia.
+  // La entrevista sigue llamando `load()` sin argumentos ⇒ mismo comportamiento que siempre.
+  // `deps` es un punto de inyección EXCLUSIVO para las pruebas (nunca se usa desde la interfaz).
+  async load({ face = true, deps = null } = {}) {
+    const { FilesetResolver: resolveFileset, PoseLandmarker: Pose, FaceLandmarker: Face } = deps || MEDIAPIPE;
     try {
-      const vision = await FilesetResolver.forVisionTasks(WASM_URL);
+      const vision = await resolveFileset.forVisionTasks(WASM_URL);
       const create = (delegate) =>
-        PoseLandmarker.createFromOptions(vision, {
+        Pose.createFromOptions(vision, {
           baseOptions: { modelAssetPath: MODEL_URL, delegate },
           runningMode: 'VIDEO',
           numPoses: 1,
@@ -63,9 +72,16 @@ export default class PoseTracker {
       this.landmarker = await create('GPU').catch(() => create('CPU'));
       this.ready = true;
 
+      // Sin rostro pedido no se crea FaceLandmarker: `readFace()` ya devuelve null en ese caso y el
+      // resto de la medición (presencia, mirada por pose, hombros, manos, iluminación) no lo usa.
+      if (!face) {
+        this.faceLandmarker = null;
+        return this.ready;
+      }
+
       // Rostro: opcional. Si no carga, se sigue midiendo el cuerpo (sin risa ni dirección de los ojos)
       const createFace = (delegate) =>
-        FaceLandmarker.createFromOptions(vision, {
+        Face.createFromOptions(vision, {
           baseOptions: { modelAssetPath: FACE_MODEL_URL, delegate },
           runningMode: 'VIDEO',
           numFaces: 1,

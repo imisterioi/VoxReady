@@ -68,6 +68,12 @@ const ASSESSMENT_TEXTS = {
     contradiction:
       'Usa "contradiction" solo si el vocero se contradice con una declaracion ANTERIOR suya y cita los fragmentos en "evidence".',
     sufficient: 'Usa "sufficient" si lo solicitado ya esta respondido, aunque falten detalles que nadie pidio.',
+    // A4: como rellenar los campos que NO son el estado. Aclara el contrato; no cambia estados,
+    // evidencias, deteccion de contradicciones ni la logica de repreguntas.
+    focusRule:
+      'El campo "focus" describe la INFORMACION CONCRETA que sigue pendiente de la respuesta (dato, cifra, plazo, causa, responsable, medida, compromiso o alcance), redactado como aspecto por aclarar. No describas en "focus" la conducta del vocero ni diagnostiques que evadio, que no entendio o que no respondio: ese diagnostico va en "reason". Si el estado es "sufficient", "focus" queda vacio.',
+    extraordinaryRule:
+      'El campo "justify_extraordinary" se pone en true SOLO si la respuesta no es suficiente, queda un punto pendiente concreto y una repregunta adicional aportaria una aclaracion sustantiva que el presupuesto habitual no cubre; ademas, su efecto depende de que la linea de extraordinarias muestre margen disponible. Se deja en false por defecto: no lo uses para insistir sin un punto pendiente concreto, no lo uses cuando el estado es "sufficient" y no lo uses como sustituto del estado "contradiction" (una contradiccion se marca en "status" con sus citas).',
     interviewer: 'ENTREVISTADOR',
     respondent: 'VOCERO',
     mainQuestion: (question) => `PREGUNTA PRINCIPAL ACTUAL: ${question}`,
@@ -88,6 +94,11 @@ const ASSESSMENT_TEXTS = {
     contradiction:
       'Use "contradiction" only if the spokesperson contradicts an EARLIER statement of their own and quote the fragments in "evidence".',
     sufficient: 'Use "sufficient" if what was asked is already answered, even if details nobody requested are missing.',
+    // A4: how to fill the fields that are NOT the status (contract clarification only).
+    focusRule:
+      'The "focus" field describes the CONCRETE information still missing from the answer (figure, date, cause, owner, measure, commitment or scope), written as the point to clarify. Do not describe the spokesperson behaviour in "focus" and do not diagnose that they evaded, misunderstood or did not answer: that diagnosis belongs in "reason". When the status is "sufficient", "focus" stays empty.',
+    extraordinaryRule:
+      'Set "justify_extraordinary" to true ONLY if the answer is not sufficient, a concrete point remains pending, and one extra follow-up would add a substantive clarification that the standard budget does not cover; its effect also depends on the extraordinary line showing room left. It stays false by default: do not use it to insist without a concrete pending point, do not use it when the status is "sufficient", and do not use it as a substitute for the "contradiction" status (a contradiction is reported in "status" with its quotes).',
     interviewer: 'INTERVIEWER',
     respondent: 'SPOKESPERSON',
     mainQuestion: (question) => `CURRENT MAIN QUESTION: ${question}`,
@@ -117,6 +128,10 @@ function buildMessages({ mainQuestion, answer, history = [], cfg, followUpsUsed 
     '{"status":"sufficient|partial|evasive|contradiction","focus":"informacion pendiente (vacio si sufficient)","evidence":["fragmento literal del vocero"],"justify_extraordinary":false,"reason":"motivo breve"}',
     T.contradiction,
     T.sufficient,
+    // A4: guia de los campos que acompanan al estado. Se anade al final del prompt para no alterar
+    // el orden de las instrucciones existentes ni el contrato JSON.
+    T.focusRule,
+    T.extraordinaryRule,
   ].join('\n');
   const user = [
     T.mainQuestion(String(mainQuestion || '').slice(0, 600)),
@@ -171,6 +186,27 @@ function validateAssessment(parsed, { answer = '', history = [] } = {}) {
   return base;
 }
 
+// Motivo representativo de un conjunto de fallos. Con la seleccion "el primero valido que llega",
+// los fallos terminan en CUALQUIER orden, asi que el motivo se calcula por FRECUENCIA (y, en
+// empate, por un orden fijo de prioridad) para que no dependa de una carrera entre modelos.
+// Solo usa el vocabulario que ya existia: timeout, error_proveedor y formato_invalido.
+const FAILURE_PRIORITY = ['timeout', 'error_proveedor', 'formato_invalido'];
+
+function summarizeFailure(failures = []) {
+  const counts = new Map();
+  for (const failure of failures) counts.set(failure, (counts.get(failure) || 0) + 1);
+  let best = null;
+  let bestCount = 0;
+  for (const kind of FAILURE_PRIORITY) {
+    const count = counts.get(kind) || 0;
+    if (count > bestCount) {
+      best = kind;
+      bestCount = count;
+    }
+  }
+  return best || failures[0] || 'sin_respuesta';
+}
+
 async function assessAnswer({
   mainQuestion = '',
   answer = '',
@@ -198,28 +234,45 @@ async function assessAnswer({
 
   const messages = buildMessages({ mainQuestion, answer, history, cfg, followUpsUsed, extraordinaryUsed, budget, lang });
   let lastFailure = 'sin_respuesta';
+  // Motivos de fallo observados, en cualquier orden de llegada. Se resumen al final con
+  // `summarizeFailure`, que no depende del orden: el motivo no puede ser producto de una carrera.
+  const failures = [];
   try {
-    // Se consultan todos en paralelo; gana el primer resultado valido segun el orden de la cadena
-    // (un resultado rapido pero invalido no gana). Los perdedores no se cancelan.
+    // Cada modelo compite por su cuenta: cuando llega su respuesta se valida de inmediato y, si
+    // supera TODAS las validaciones, gana la carrera. Gana el PRIMER resultado VALIDO que llegue
+    // (no el primero de la lista) y en ese momento se deja de esperar al resto. Un resultado rapido
+    // pero invalido NO gana: se descarta y los demas siguen compitiendo. Las solicitudes perdedoras
+    // NO se cancelan: siguen ejecutandose y su resultado se ignora.
     const attempts = models.map((model) =>
       Promise.resolve()
         .then(() => askModel(model, messages, { timeoutMs }))
-        .then((raw) => ({ ok: true, model, raw: typeof raw === 'string' ? raw : raw?.text ?? raw?.content }))
-        .catch((error) => ({ ok: false, model, error })),
+        .then((raw) => {
+          const valid = parseAssessment(typeof raw === 'string' ? raw : raw?.text ?? raw?.content, { answer, history });
+          if (valid) return { ...valid, source: `ai:${model}`, ms: now() - startedAt };
+          const rejected = new Error('respuesta descartada: no supera la validacion');
+          rejected.failure = 'formato_invalido';
+          throw rejected;
+        })
+        .catch((error) => {
+          // Motivo del fallo: el modelo respondio pero no cumple el contrato (formato_invalido) o no
+          // respondio (error_proveedor / timeout). Se registra y se propaga para dejarlo fuera de la
+          // competencia; los demas modelos siguen compitiendo.
+          failures.push(error?.failure || (error?.name === 'AbortError' ? 'timeout' : 'error_proveedor'));
+          throw error;
+        }),
     );
     attempts.forEach((attempt) => attempt.catch(() => {}));
-    const results = await Promise.all(attempts);
-    for (const item of results) {
-      if (!item.ok) {
-        lastFailure = item.error?.name === 'AbortError' ? 'timeout' : 'error_proveedor';
-        continue;
-      }
-      const valid = parseAssessment(item.raw, { answer, history });
-      if (valid) return { ...valid, source: `ai:${item.model}`, ms: now() - startedAt };
-      lastFailure = 'formato_invalido';
-    }
+    // `Promise.any`: resuelve con el PRIMER resultado que cumpla el contrato y solo rechaza si TODOS
+    // fallan (AggregateError), que es exactamente el caso "ningun modelo entrego un resultado valido".
+    return await Promise.any(attempts);
   } catch (error) {
-    lastFailure = error?.name === 'AbortError' ? 'timeout' : 'error_inesperado';
+    const everyModelFailed = error?.name === 'AggregateError' || Array.isArray(error?.errors);
+    lastFailure =
+      everyModelFailed && failures.length
+        ? summarizeFailure(failures)
+        : error?.name === 'AbortError'
+          ? 'timeout'
+          : 'error_inesperado';
   }
   return { status: 'unevaluable', source: 'ai-failed', reason: lastFailure, ms: now() - startedAt, evidence: [], focus: '' };
 }

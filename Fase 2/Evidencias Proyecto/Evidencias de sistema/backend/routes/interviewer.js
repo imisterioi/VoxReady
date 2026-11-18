@@ -18,8 +18,24 @@ const {
   invalidInterviewConfigPayload,
   INTERVIEW_TIMING,
 } = require('../ai/interviewConfig');
-const { generateQuestion, askModelFromContext, interviewModels, interviewTimeoutMs } = require('../ai/interviewer');
+const {
+  generateQuestion,
+  // Transporte de BAJO NIVEL (recibe el ARRAY de mensajes): lo usa SOLO el clasificador.
+  // OJO: se importa con ALIAS porque mas abajo `askModel` es la dependencia de sesion
+  // (destructurada de `deps`, por defecto `askModelFromContext`) y taparia este import.
+  askModel: askModelLowLevel,
+  // Adaptador de CONTEXTO (construye el prompt del entrevistador): despacho normal de preguntas.
+  askModelFromContext,
+  interviewModels,
+  interviewTimeoutMs,
+  isReservedQuestionStale,
+  // Temas del `TOPIC_LADDER` de una pregunta: lo usa la instrumentacion B1 (solo claves de tema,
+  // nunca el texto de la pregunta).
+  detectTopics,
+} = require('../ai/interviewer');
 const { assessAnswer } = require('../ai/answerAssessment');
+// Auditoria tecnica OPCIONAL de la entrevista (archivo JSONL; apagada por defecto: INTERVIEW_AUDIT=1).
+const audit = require('../lib/interviewAudit');
 const { preflight: preflightEvaluators, shouldProbe } = require('../lib/evaluatorHealth');
 const { createInterviewSession, START_WAIT_MS } = require('../lib/interviewSession');
 const { resolveLanguage, sessionLanguage } = require('../lib/language');
@@ -96,6 +112,11 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
     // Evaluación de suficiencia: cadena de modelos del entrevistador en modo `raw` (JSON) y
     // timeout propio, independiente del de generación de preguntas.
     assess = assessAnswer,
+    // Transporte del CLASIFICADOR: `assessAnswer` entrega un ARRAY de mensajes ya construidos, asi
+    // que su transporte es `askModel` (mensajes), NO `askModelFromContext` (objeto de contexto).
+    // Es una dependencia PROPIA para poder inyectar un doble en las pruebas sin tocar el despacho
+    // normal de preguntas, que sigue usando `askModelFromContext`.
+    assessAskModel = askModelLowLevel,
     assessTimeoutMs = () => Number(process.env.AI_ASSESS_TIMEOUT_MS) || 15000,
   } = deps;
 
@@ -117,8 +138,29 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
         sessionId: key,
         models: models(),
         timeoutMs: timeoutFor(),
-        askModel: (model, context) => askModel(model, context, { timeoutMs: timeoutFor() }),
+        // Auditoria (opcional): cada solicitud REAL al proveedor se anota con el contexto del
+        // despacho (sesion, turno, tipo y nivel). Apagada, la llamada es exactamente la de antes.
+        askModel: (model, context) => {
+          const auditedFetch = audit.isEnabled()
+            ? audit.fetchRecorder({
+                kind: 'generation',
+                sessionId: key,
+                // El despacho de arranque no trae `turn` (el contexto inicial no lo lleva): el
+                // primer turno es, por definicion, el 0.
+                turn: Number.isFinite(context?.turn) ? context.turn : context?.phase === 'start' ? 0 : null,
+                level: context?.cfg?.aggressiveness || null,
+                model,
+                dispatchKind: context?.kind || null,
+                phase: context?.phase || null,
+              })
+            : null;
+          return askModel(model, context, { timeoutMs: timeoutFor(), ...(auditedFetch ? { fetchImpl: auditedFetch } : {}) });
+        },
         logger: (event) => trace(key, event),
+        // Una reserva generada antes de la última respuesta puede haber quedado obsoleta: si su
+        // tema ya quedó respondido de forma suficiente (y repite el enunciado), se descarta y se
+        // genera otra con la memoria actualizada. Solo se mira el estado `sufficient`.
+        isObsolete: (item, sessionState) => isReservedQuestionStale(item, sessionState),
         ...(now ? { now } : {}),
         ...(sleep ? { sleep } : {}),
       });
@@ -234,6 +276,10 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           plan,
           // Idioma efectivo del vocero: el entrevistador pregunta y repregunta en ese idioma.
           lang,
+          // Organización del vocero: ya viene cargada en `req.user` (requireAuth incluye el
+          // tenant), así que no hace falta ninguna consulta adicional. El prompt solo la usa si
+          // existe y nunca inventa datos de la organización.
+          tenant: req.user?.tenant ? { name: req.user.tenant.name, sector: req.user.tenant.sector } : null,
           timing: { targetMs: resolved.estimatedMinutes * 60000, marginMs: INTERVIEW_TIMING.extraMarginMs },
         };
         // Última respuesta del vocero. `spoke` y `hasTranscript` distinguen el silencio real de un
@@ -249,6 +295,36 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
         // Cierre de la entrevista (por tiempo). La respuesta de ESTA petición ya quedó registrada
         // y evaluada; el cierre solo evita pedir otra intervención. `pendingMains` conserva las
         // preguntas principales que no se realizaron (no se marcan como respondidas).
+        // Auditoria (opcional): resumen del turno (clasificacion, decision, presupuestos y pregunta
+        // entregada). Se escribe tambien en los caminos de cierre.
+        const auditTurn = (extra = {}) => {
+          const snap = entry.session.snapshot();
+          return audit.writeTurn({
+            sessionId: key,
+            turn: before.turn,
+            level: cfg.aggressiveness,
+            planKind: plan.kind,
+            mainQuestion,
+            answer,
+            assessment: assessment
+              ? {
+                  status: assessment.status,
+                  source: assessment.source,
+                  reason: assessment.reason || null,
+                  focus: assessment.focus || null,
+                  evidence: assessment.evidence || [],
+                }
+              : null,
+            decision,
+            budgetConfig: budget,
+            usedBudget: snap.usedByBudget,
+            followUpsForMain: snap.followUpsForMain,
+            mainsAsked: snap.mainsAsked,
+            mainsTotal,
+            elapsedMs: snap.elapsedMs,
+            ...extra,
+          });
+        };
         const closeInterview = (reason, detail) => {
           const after = entry.session.snapshot();
           const pending = Math.max(0, mainsTotal - after.mainsAsked);
@@ -262,6 +338,7 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
             mainsTotal,
             pendingMains: pending,
           });
+          auditTurn({ event: 'close', closeReason: reason, detail: detail || null, question: null });
           return {
             status: 'ok',
             question: null,
@@ -295,7 +372,19 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
             extraordinaryUsed: before.usedByBudget.extraordinary,
             budget,
             models: models(),
-            askModel: (model, messages, options = {}) => askModel(model, messages, { ...options, raw: true, timeoutMs: assessTimeoutMs(), lang }),
+            askModel: (model, messages, options = {}) => {
+              // Auditoria (opcional): el clasificador entra aqui una vez por modelo consultado.
+              const auditedFetch = audit.isEnabled()
+                ? audit.fetchRecorder({ kind: 'classification', sessionId: key, turn: before.turn, level: cfg.aggressiveness, model })
+                : null;
+              return assessAskModel(model, messages, {
+                ...options,
+                raw: true,
+                timeoutMs: assessTimeoutMs(),
+                lang,
+                ...(auditedFetch ? { fetchImpl: auditedFetch } : {}),
+              });
+            },
             timeoutMs: assessTimeoutMs(),
           });
           decision = decideTurn({
@@ -312,6 +401,13 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           entry.session.recordResolution({ status: assessment.status, reason: assessment.reason || decision.reason });
           if (decision.close) entry.session.setCloseReason(decision.close);
         }
+        // Estado de la última respuesta (ya calculado por el clasificador existente): viaja en el
+        // contexto para que el prompt lo use según el nivel. No se recalcula nada aquí.
+        context.assessmentStatus = assessment?.status || null;
+        // Estado por turno del clasificador (ya registrado por la sesión): permite que la memoria
+        // del prompt distinga "ya lo pregunté" de "ya me lo respondió". Sin datos, el prompt deja
+        // el tema solo como preguntado.
+        context.resolutions = entry.session.snapshot().resolutions;
         trace(key, {
           event: 'assessment',
           status: assessment ? assessment.status : null,
@@ -348,6 +444,7 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
         // agotan.
         if (before.mainsAsked >= mainsTotal && decision.action !== 'followup') {
           entry.session.setCloseReason('COMPLETED');
+          auditTurn({ event: 'close', closeReason: 'COMPLETED', detail: null, question: null });
           return res.status(409).json({
             status: 'error',
             code: 'INTERVIEW_DONE',
@@ -396,6 +493,59 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
           };
         }
         result = { ...result, plan, assessment, decision };
+        // Instrumentacion B1/B3: estado del pool, origen de la pregunta entregada y trazabilidad
+        // del foco. Solo tamanos, claves de tema y contadores: sin textos de preguntas, respuestas
+        // del vocero ni prompts. Es puro registro: no altera ninguna decision.
+        const afterSnap = sessionSnapshot || entry.session.snapshot();
+        const poolLogMark = (before.poolLog || []).reduce((max, item) => Math.max(max, item.n || 0), 0);
+        const poolCandidates = (snap) =>
+          (snap.reserved || []).map((candidate) => ({
+            forMain: candidate.forMain ?? null,
+            historyLen: candidate.historyLen ?? null,
+            topics: detectTopics([candidate.question]),
+          }));
+        const lastMainAskedBefore = [...(before.asked || [])].reverse().find((item) => item.kind !== 'followup') || null;
+        auditTurn({
+          event: 'turn',
+          ok: result.ok !== false,
+          error: result.code || null,
+          question: result.question || null,
+          deliveredKind: result.kind || null,
+          model: result.model || null,
+          // B1: que habia en el pool, de donde salio la pregunta entregada y con cuanta antiguedad.
+          pool: {
+            before: (before.reserved || []).length,
+            after: (afterSnap.reserved || []).length,
+            candidates: poolCandidates(afterSnap),
+            log: (afterSnap.poolLog || []).filter((item) => (item.n || 0) > poolLogMark).slice(0, 8),
+          },
+          delivery: {
+            origin: result?.origin || null,
+            fromPool: result?.origin === 'reserva_previa',
+            answersAtReserve: result?.historyLenAtReserve ?? null,
+            answersAtDelivery: result?.answersAtDelivery ?? null,
+          },
+          // B3: enlace estable entre la evaluacion, el foco del clasificador y la repregunta.
+          // Identificadores: `followUpId` = evento evaluado (sesion + turno de la respuesta),
+          // `mainQuestionId` = principal en curso, `followUpQuestionId` = repregunta asociada.
+          focusTrace: {
+            followUpId: `${key}:${before.turn}`,
+            mainNumber: before.mainsAsked,
+            mainQuestionId: `${key}:main-${before.mainsAsked}`,
+            mainQuestionAskedTurn: lastMainAskedBefore ? lastMainAskedBefore.turn : null,
+            followUpQuestionId:
+              decision.action === 'followup' && assessment?.focus
+                ? `${key}:fu-${before.mainsAsked}.${before.followUpsForMain + 1}`
+                : null,
+            followUpTurn: result?.question && (result?.kind || null) === 'followup' ? afterSnap.turn : null,
+            focusPresent: Boolean(assessment?.focus),
+            focusChars: assessment?.focus ? String(assessment.focus).length : 0,
+            focusFromModel: assessment?.focus ? assessment.source || null : null,
+            followUpRequested: decision.action === 'followup',
+            focusUsedInPrompt: decision.action === 'followup' && Boolean(assessment?.focus),
+            followUpGenerated: Boolean(result?.question) && (result?.kind || null) === 'followup',
+          },
+        });
       } else {
         result = { ...(await generate({ theme, history })), ok: true };
       }
@@ -467,17 +617,46 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
       }
 
       const result = await entry.session.prewarm({
-        context: { theme: session.theme, history, cfg: normalizeInterviewConfig(session.theme.interviewConfig) },
+        context: {
+          theme: session.theme,
+          history,
+          cfg: normalizeInterviewConfig(session.theme.interviewConfig),
+          // Estado por turno del clasificador: las reservas se generan sabiendo qué temas ya se
+          // preguntaron y cuáles ya quedaron respondidos.
+          resolutions: entry.session.snapshot().resolutions,
+        },
       });
       // Comprobación anticipada de los modelos EVALUADORES: se lanza en segundo plano y NO se
       // espera (no bloquea la preparación ni la entrevista). El módulo la deduplica y limita el
       // intervalo, así que repetir el precalentamiento no multiplica solicitudes.
       preflightEvaluators({ reason: 'prewarm' });
+      // Instrumentacion B1: estado del pool al terminar el prewarm (evento relevante). Solo
+      // contadores y claves de tema; el texto de las preguntas no se registra aqui.
+      const prewarmSnap = entry.session.snapshot();
+      if (audit.isEnabled()) {
+        audit.append({
+          type: 'pool',
+          event: 'prewarm',
+          sessionId: key,
+          reserved: prewarmSnap.reserved.length,
+          answersAtReserve: prewarmSnap.answers.length,
+          rounds: result.rounds ?? null,
+          candidates: prewarmSnap.reserved.map((item) => ({
+            forMain: item.forMain ?? null,
+            historyLen: item.historyLen ?? null,
+            topics: detectTopics([item.question]),
+          })),
+          log: prewarmSnap.poolLog.slice(-8),
+        });
+      }
       return res.json({
         status: 'ok',
         reserved: result.reserved ?? 0,
         pending: result.pending ?? 0,
         already: Boolean(result.already),
+        // Informativo para el operador (campos nuevos: el contrato previo no cambia).
+        poolTopics: prewarmSnap.reserved.map((item) => detectTopics([item.question])),
+        answers: prewarmSnap.answers.length,
       });
     } catch (error) {
       console.error('Error en el precalentamiento del entrevistador:', error.message);

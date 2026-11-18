@@ -4,11 +4,20 @@
 #   docker compose logs -f        # logs de todos
 #   docker compose down           # detiene (conserva volúmenes y datos)
 #
-# Recarga automática:
-#   frontend -> HMR de Vite (bind mount + CHOKIDAR_USEPOLLING)
-#   backend  -> nodemon --legacy-watch (sondeo, fiable en bind mounts de Windows)
-#   whisper  -> uvicorn --reload (recarga el proceso; los modelos se leen de la caché)
+# Recarga automática (NO desactivar: es requisito del entorno de desarrollo):
+#   frontend -> HMR de Vite (bind mount + CHOKIDAR_USEPOLLING; sondeo cada 1,5 s)
+#   backend  -> nodemon --legacy-watch (sondeo cada 1,5 s, fiable en bind mounts de Windows)
+#   whisper  -> uvicorn --reload --reload-delay 2 (recarga el proceso; los modelos se
+#               leen de la caché)
 #   postgres -> no se reinicia por cambios de código
+#
+# Rendimiento (medido): el sondeo de chokidar a 100 ms (valor por defecto) sobre el
+# bind mount de Windows costaba ~27 % de un núcleo POR VIGILANTE (Vite y nodemon) y
+# ~7 % más el StatReload de uvicorn, en reposo y sin nadie usando la aplicación.
+# Con CHOKIDAR_INTERVAL=1500 y --reload-delay 2 se mantienen exactamente las mismas
+# capacidades de recarga consumiendo una fracción de CPU. El sondeo (y no inotify) es
+# obligatorio mientras el código viva en el sistema de archivos de Windows: en WSL2
+# inotify no propaga eventos desde el host (docker/for-win#12766, microsoft/WSL#4739).
 #
 # AVISO IMPORTANTE sobre el volumen de PostgreSQL:
 #   El entorno actual (contenedores manuales) guarda los datos en el volumen anónimo
@@ -35,7 +44,7 @@ services:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-voxready_db}"]
-      interval: 5s
+      interval: 30s
       timeout: 5s
       retries: 12
       start_period: 10s
@@ -56,6 +65,9 @@ services:
       PYTHONDONTWRITEBYTECODE: "1"
     # --reload vigila /app (código montado). Sin watchfiles, uvicorn usa StatReload
     # (sondeo), que funciona con bind mounts de Windows.
+    # --reload-delay 2: StatReload hace rglob("*.py") + stat de cada archivo en cada
+    # ciclo. El valor por defecto (0,25 s) costaba ~7 % de un núcleo en reposo sobre el
+    # bind mount; con 2 s sigue recargando automáticamente, con 8x menos sondeos.
     command:
       - python
       - -m
@@ -68,6 +80,8 @@ services:
       - --reload
       - --reload-dir
       - /app
+      - --reload-delay
+      - "2"
     volumes:
       - ./backend/whisper:/app
       # Caché de modelos ya descargada: no se vuelve a descargar al reiniciar.
@@ -80,7 +94,8 @@ services:
         - python
         - -c
         - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3).status==200 else 1)"
-      interval: 10s
+      # 30 s: se conserva la comprobación y el criterio de salud; solo cambia la frecuencia.
+      interval: 30s
       timeout: 5s
       retries: 12
       start_period: 20s
@@ -96,9 +111,20 @@ services:
       # Compose gana a dotenv (dotenv no sobreescribe variables ya definidas).
       DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-voxready_db}?schema=public
       WHISPER_URL: http://whisper:8001
+      # OBLIGATORIO mientras el código se monte desde Windows: en WSL2 inotify no
+      # propaga eventos desde el sistema de archivos del host, así que el sondeo es
+      # la única forma de que nodemon detecte cambios (ver README/notas del entorno).
       CHOKIDAR_USEPOLLING: "true"
+      # Sondeo cada 1,5 s en lugar de cada 100 ms (el valor por defecto de chokidar).
+      # nodemon pasa `interval: undefined` a chokidar y chokidar lee CHOKIDAR_INTERVAL
+      # al final, así que esta variable SÍ manda. Reduce ~15x los stat() sobre el bind
+      # mount de Windows sin desactivar la recarga automática.
+      CHOKIDAR_INTERVAL: "1500"
     # Regenera el cliente Prisma (por si cambió el schema montado) y arranca nodemon.
-    command: sh -c "npx prisma generate && npm run dev"
+    # `exec` sustituye el shell por nodemon: así nodemon pasa a ser el PID 1 del contenedor
+    # y recibe directamente las señales de Docker (p. ej. SIGTERM al parar), sin los
+    # envoltorios `npm run dev` y `sh -c nodemon` que había antes.
+    command: sh -c "npx prisma generate && exec node /app/node_modules/nodemon/bin/nodemon.js --legacy-watch index.js"
     volumes:
       # Código del host: incluye uploads/ (los videos existentes se conservan).
       - ./backend:/app
@@ -117,7 +143,8 @@ services:
         - node
         - -e
         - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-      interval: 10s
+      # 30 s: misma comprobación; el arranque lo cubre start_period y depends_on.
+      interval: 30s
       timeout: 5s
       retries: 12
       start_period: 20s
@@ -129,8 +156,17 @@ services:
     restart: unless-stopped
     environment:
       CHOKIDAR_USEPOLLING: "true"
+      # Igual que en el backend: chokidar es el vigilante que usa Vite (por debajo de
+      # server.watch) y lee CHOKIDAR_INTERVAL, así que basta esta variable para sondear
+      # cada 1,5 s en lugar de cada 100 ms. La recarga en caliente (HMR) sigue activa.
+      CHOKIDAR_INTERVAL: "1500"
       # Lo usa el NAVEGADOR, por eso apunta al puerto publicado del backend.
       VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    # Se ejecuta Vite directamente (en lugar del CMD de la imagen, que era
+    # `npm run dev -- --host 0.0.0.0`): elimina los procesos `npm`/`sh` que solo hacían
+    # de intermediarios y deja a Vite como PID 1 (recibe las señales de Docker él mismo).
+    # La recarga en caliente no cambia: sigue gobernada por CHOKIDAR_USEPOLLING/INTERVAL.
+    command: ["node", "/app/node_modules/vite/bin/vite.js", "--host", "0.0.0.0"]
     volumes:
       - ./frontend:/app
       - /app/node_modules
@@ -145,7 +181,8 @@ services:
         - node
         - -e
         - "fetch('http://127.0.0.1:5173/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-      interval: 10s
+      # 30 s: misma comprobación; el arranque lo cubre start_period.
+      interval: 30s
       timeout: 5s
       retries: 12
       start_period: 15s

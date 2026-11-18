@@ -14,7 +14,7 @@ export default function PracticeSteps({ className }) {
 
   return (
     <nav aria-label={d.practiceSteps} className={cx('mb-10 overflow-x-auto', className)}>
-      <ol className="flex items-center gap-2 min-w-max">
+      <ol className="flex items-center gap-2 w-max mx-auto">
         {steps.map((s, i) => {
           const done = i < current;
           const active = i === current;

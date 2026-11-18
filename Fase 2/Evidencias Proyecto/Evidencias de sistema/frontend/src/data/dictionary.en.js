@@ -929,10 +929,10 @@ const en = {
     cfg: {
       aggressivenessL: 'Interviewer aggressiveness level',
       levels: {
-        BAJA: { label: 'Low', help: 'Cordial: gives room to explain and does not confront.' },
-        MEDIA: { label: 'Medium', help: 'Incisive but respectful: does not accept generic answers.' },
-        ALTA: { label: 'High', help: 'Confrontational: questions the official version and presses for accountability and figures.' },
-        EXTREMA: { label: 'Extreme', help: 'Hostile: takes the spokesperson words in their worst interpretation. E.g.: “So you are saying that…?”' },
+        BAJA: { label: 'Low', help: 'Cordial and open: gives room to explain and only asks simple clarifications.' },
+        MEDIA: { label: 'Medium', help: 'Professional and direct: asks for precision when relevant facts are missing.' },
+        ALTA: { label: 'High', help: 'Incisive: questions evasions and demands explanations, figures and accountability.' },
+        EXTREMA: { label: 'Extreme', help: 'Very incisive: hard questions and direct answers, with no insults or baseless accusations.' },
       },
       invalidTitle: 'This configuration cannot be saved or started:',
       issues: {
@@ -1014,6 +1014,12 @@ const en = {
       calibHintNoImage: 'The camera is not delivering an image: check that it is not covered and that no other app is using it.',
       calibHintFraming: 'Place yourself in front of the camera with your face and shoulders inside the frame.',
       calibHintNoise: 'Background noise detected: try to reduce the ambient noise.',
+      // The calibration closed before finishing the normal window (watchdog, error or cancel).
+      calibInterrupted: 'The calibration did not finish: try again before you start.',
+      // Posture meter (MediaPipe): prepared when the camera starts, before calibrating.
+      trackerPreparing: 'Preparing the posture meter… you can keep the camera on.',
+      trackerReady: 'Posture meter ready.',
+      trackerFailed: 'The posture meter could not be prepared: you can still calibrate (your posture will not be measured).',
       recalibrate: 'Calibrate again',
       status: 'Status', statusOf: (done, total) => `${done} of ${total}`,
       ready: 'Ready', insufficient: 'Insufficient', inProgress: 'In progress', pending: 'Pending',

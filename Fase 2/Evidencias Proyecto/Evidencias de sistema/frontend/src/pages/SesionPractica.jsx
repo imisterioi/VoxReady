@@ -756,14 +756,17 @@ export default function SesionPractica() {
 
   return (
     <>
-      <PracticeSteps />
+      <PracticeSteps className="!mb-6" />
 
       {/* Dos pantallas del mismo tamaño, una al lado de la otra:
-          entrevistador virtual a la izquierda y cámara del vocero a la derecha */}
+          entrevistador virtual a la izquierda y cámara del vocero a la derecha.
+          En escritorio (lg) la altura de las pantallas sigue la altura disponible del viewport
+          (`34dvh`, acotada entre 12rem y 32rem) para que toda la sesión quepa sin desplazarse;
+          en pantallas estrechas se apilan y conservan la proporción 4:3 original. */}
       <div className="rounded-[28px] bg-[#0B1118] p-3 md:p-4 ring-1 ring-black/5 shadow-lift">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {/* Entrevistador IA */}
-          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-gradient-to-br from-[#16263A] to-[#0E1824] flex items-center justify-center">
+          <div className="relative aspect-[4/3] lg:aspect-auto lg:h-[clamp(12rem,34dvh,32rem)] rounded-2xl overflow-hidden bg-gradient-to-br from-[#16263A] to-[#0E1824] flex items-center justify-center">
             <div className="relative">
               {phase === 'speaking' && <span className="absolute inset-0 rounded-full bg-accent/30 animate-pulse-ring" />}
               <span
@@ -788,7 +791,7 @@ export default function SesionPractica() {
           </div>
 
           {/* Cámara del vocero */}
-          <div className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-black">
+          <div className="relative aspect-[4/3] lg:aspect-auto lg:h-[clamp(12rem,34dvh,32rem)] rounded-2xl overflow-hidden bg-black">
           <video ref={videoRef} autoPlay muted playsInline className="absolute inset-0 w-full h-full object-cover -scale-x-100" />
 
           {phase === 'loading' && !error && (
@@ -837,8 +840,10 @@ export default function SesionPractica() {
           </div>
         </div>
 
-        {/* Pregunta y respuesta en vivo: centradas debajo de ambas pantallas */}
-        <div className="px-4 md:px-8 pt-8 pb-6 text-center min-h-[180px]">
+        {/* Pregunta y respuesta en vivo: centradas debajo de ambas pantallas.
+            `min-h` reservado algo menor (9.5rem) y padding vertical ajustado para que el conjunto
+            quepa en el viewport sin perder legibilidad en el texto de la pregunta. */}
+        <div className="px-4 md:px-8 pt-6 pb-5 text-center min-h-[9.5rem]">
           <div className="text-[11px] uppercase tracking-[0.14em] text-white/40 mb-4">
             {phase === 'loading' ? tb.preparingShort : mainLabel}
           </div>
@@ -948,7 +953,7 @@ export default function SesionPractica() {
         </div>
       </div>
 
-      <p className="text-center text-xs text-faint mt-6 flex items-center justify-center gap-1.5">
+      <p className="text-center text-xs text-faint mt-4 flex items-center justify-center gap-1.5">
         <Icon name="info" size={13} /> {tb.headphones}
       </p>
     </>

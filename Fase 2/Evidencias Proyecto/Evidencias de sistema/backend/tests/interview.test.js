@@ -69,7 +69,16 @@ function configTests() {
   const low = prompt({ aggressiveness: 'BAJA', followUps: 1 }, 0);
   const extreme = prompt({ aggressiveness: 'EXTREMA', followUps: 1 }, 1);
   ok(low.includes('cordial') && !low.includes('líneas rojas con preguntas') && low.includes('pregunta NUEVA'), '7. Presión baja: tono cordial, no tienta a cruzar líneas rojas');
-  ok(extreme.includes('hostil') && extreme.includes('REPREGUNTA') && extreme.includes('peor interpretación'), '8. Presión extrema: la repregunta devuelve la respuesta en su peor interpretación');
+  // R4 (Etapa 2): EXTREMA ya no pide suponer mala fe. Se comprueba la exigencia real y que la
+  // instrucción retirada ("peor interpretación") no vuelva al prompt.
+  ok(
+    extreme.includes('muy exigente') &&
+      extreme.includes('REPREGUNTA') &&
+      extreme.includes('respuestas inequívocas') &&
+      !extreme.includes('peor interpretación') &&
+      !/Eres hostil/.test(extreme),
+    '8. Presión extrema: la repregunta exige una respuesta inequívoca, sin suponer mala fe',
+  );
   ok(prompt({ interviewerRole: 'un dirigente sindical' }, 0).startsWith('Eres un dirigente sindical'), '9. Se puede definir quién entrevista');
 
   const cfgHigh = normalizeInterviewConfig({ aggressiveness: 'ALTA', followUps: 1 });

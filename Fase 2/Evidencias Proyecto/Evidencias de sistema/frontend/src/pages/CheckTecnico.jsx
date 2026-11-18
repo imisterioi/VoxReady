@@ -6,15 +6,19 @@ import PracticeSteps from '../components/PracticeSteps';
 import { Badge, Button, Card, Checkbox, Field, PageHeader, Progress, cx } from '../components/ui';
 import { ScenarioBriefModal } from '../components/ScenarioBrief';
 import PoseTracker from '../lib/practice/poseTracker';
-import {
-  CALIBRATION_MS,
-  SAMPLE_MS,
-  addSample,
-  calibrationResult,
-  createCalibration,
-  isFinished,
-  progress as calibrationProgressOf,
-} from '../lib/practice/calibration';
+import { CALIBRATION_MS } from '../lib/practice/calibration';
+import { FINISH_REASONS, createCalibrationRun } from '../lib/practice/calibrationRun';
+import { TRACKER_STATES, createTrackerPreload } from '../lib/practice/trackerPreload';
+
+// Los medidores visuales (nivel de micrófono e iluminación) se publican ~10 veces por segundo aunque
+// sus bucles vayan a la frecuencia de refresco: así la pantalla no se re-renderiza en cada cuadro.
+// La calibración no depende de esto: mide el audio y la imagen por su cuenta.
+const UI_PUBLISH_MS = 100;
+
+// Marca de tiempo para los medidores. Vive fuera del componente a propósito: los bucles de animación
+// son los únicos que la usan y así la regla de pureza de React no marca una llamada impura dentro del
+// componente (lo que impediría optimizarlo).
+const frameNow = () => performance.now();
 
 // El escenario (contexto, mensajes clave y líneas rojas) se muestra en una
 // ventana emergente al entrar; se puede volver a abrir con "Ver escenario".
@@ -75,16 +79,32 @@ export default function CheckTecnico() {
   const microphoneSourceRef = useRef(null);
   const microphoneAnimationRef = useRef(null);
 
-  const calibrationTimerRef = useRef(null);
+  // Ciclo de vida protegido de la calibración (intervalo + watchdog + cierre idempotente).
+  const calibrationRunRef = useRef(null);
+  // Marca de la última publicación de los medidores visuales (ver UI_PUBLISH_MS).
+  const micPublishAtRef = useRef(0);
+  const brightnessPublishAtRef = useRef(0);
 
   const brightnessCanvasRef = useRef(null);
   const brightnessAnimationRef = useRef(null);
 
-  // Calibración real (≈10 s): acumula muestras de micrófono, imagen y presencia.
-  const calibrationRef = useRef(null);
   const micBufferRef = useRef(null);
-  const poseTrackerRef = useRef(null);
   const [calibrationOutcome, setCalibrationOutcome] = useState(null);
+  // La calibración terminó sin completar la ventana normal (watchdog, error o cancelación): la
+  // pantalla lo explica y NUNCA se aprueba por ello (los criterios siguen en `calibration.js`).
+  const [calibrationInterrupted, setCalibrationInterrupted] = useState(false);
+  // Estado de preparación del medidor de postura (previo a la calibración): idle | loading | ready | failed.
+  const [trackerStatus, setTrackerStatus] = useState(TRACKER_STATES.idle);
+
+  // Precarga del medidor de postura (C1): una instancia por pantalla, una carga por elemento <video>.
+  // Se crea con un inicializador perezoso de estado (no se leen refs durante el render) y publica su
+  // estado para explicar la preparación y bloquear el botón mientras MediaPipe se inicializa.
+  const [preload] = useState(() =>
+    createTrackerPreload({
+      createTracker: (video) => new PoseTracker(video),
+      onState: (state) => setTrackerStatus(state),
+    }),
+  );
 
   // -----------------------------------------
   // Activar cámara
@@ -136,6 +156,13 @@ export default function CheckTecnico() {
       return;
     }
 
+    // El bucle pide cuadros a la frecuencia de refresco, pero el medidor solo trabaja y publica
+    // ~10 veces por segundo: así no se re-renderiza la pantalla en cada cuadro. La calibración no
+    // pierde precisión por esto (mide el audio y la imagen por su cuenta).
+    const nowMs = frameNow();
+    const publishing = nowMs - brightnessPublishAtRef.current >= UI_PUBLISH_MS;
+    if (publishing) brightnessPublishAtRef.current = nowMs;
+
     if (!brightnessCanvasRef.current) {
       brightnessCanvasRef.current = document.createElement('canvas');
       brightnessCanvasRef.current.width = 64;
@@ -147,47 +174,45 @@ export default function CheckTecnico() {
       willReadFrequently: true,
     });
 
-    if (!context) return;
+    if (context && publishing) {
+      context.drawImage(
+        video,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
 
-    context.drawImage(
-      video,
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+      const imageData = context.getImageData(
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
 
-    const imageData = context.getImageData(
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
+      const pixels = imageData.data;
 
-    const pixels = imageData.data;
+      let totalBrightness = 0;
+      const pixelCount = pixels.length / 4;
 
-    let totalBrightness = 0;
-    const pixelCount = pixels.length / 4;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const r = pixels[i];
+        const g = pixels[i + 1];
+        const b = pixels[i + 2];
 
-    for (let i = 0; i < pixels.length; i += 4) {
-      const r = pixels[i];
-      const g = pixels[i + 1];
-      const b = pixels[i + 2];
+        // Luminosidad percibida
+        const pixelBrightness =
+          0.299 * r +
+          0.587 * g +
+          0.114 * b;
 
-      // Luminosidad percibida
-      const pixelBrightness =
-        0.299 * r +
-        0.587 * g +
-        0.114 * b;
+        totalBrightness += pixelBrightness;
+      }
 
-      totalBrightness += pixelBrightness;
+      setBrightness(totalBrightness / pixelCount);
     }
 
-    const averageBrightness =
-      totalBrightness / pixelCount;
-
-    setBrightness(averageBrightness);
-
+    // Sin contexto el bucle sigue vivo (antes se cortaba y la iluminación quedaba congelada).
     brightnessAnimationRef.current =
       requestAnimationFrame(measureBrightness);
   };
@@ -224,19 +249,25 @@ export default function CheckTecnico() {
       const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
       const updateMicrophoneLevel = () => {
-        analyser.getByteFrequencyData(dataArray);
+        // Igual que la iluminación: el bucle va a la frecuencia de refresco, pero el nivel se
+        // publica ~10 veces por segundo (el medidor de la entrevista es otro y no se toca).
+        const nowMs = frameNow();
+        if (nowMs - micPublishAtRef.current >= UI_PUBLISH_MS) {
+          micPublishAtRef.current = nowMs;
+          analyser.getByteFrequencyData(dataArray);
 
-        let total = 0;
+          let total = 0;
 
-        for (const value of dataArray) {
-          total += value;
+          for (const value of dataArray) {
+            total += value;
+          }
+
+          const average = total / dataArray.length;
+
+          const level = Math.min((average / 50) * 100, 100);
+
+          setMicrophoneLevel(level);
         }
-
-        const average = total / dataArray.length;
-
-        const level = Math.min((average / 50) * 100, 100);
-
-        setMicrophoneLevel(level);
 
         microphoneAnimationRef.current = requestAnimationFrame(updateMicrophoneLevel);
       };
@@ -255,8 +286,85 @@ export default function CheckTecnico() {
   // -----------------------------------------
 
   // Calibración real (≈10 s): durante la ventana se recogen muestras del micrófono (RMS), de la
-  // imagen de la cámara y de la presencia (MediaPipe, el mismo mecanismo que usa la entrevista), y
-  // al terminar se clasifican en un resultado sencillo. No es un temporizador: mide de verdad.
+  // imagen de la cámara y de la presencia (MediaPipe, el mismo mecanismo que usa la entrevista), y al
+  // terminar se clasifican en un resultado sencillo. No es un temporizador: mide de verdad.
+  //
+  // El ciclo de vida (temporizadores, watchdog y cierre único) vive en `lib/practice/calibrationRun`:
+  // aquí solo se conecta con la pantalla. Así la calibración SIEMPRE termina —con el resultado real—
+  // aunque una medición falle, y ninguna excepción puede dejar la pantalla en «Calibrando…».
+
+  // Una muestra: lo que se pueda medir ahora mismo.
+  //  - Audio: si el contexto está suspendido se intenta reanudar; si no se puede leer, el nivel queda
+  //    `null` y el resultado dirá «no disponible» (nunca se aprueba con el micrófono sin medir).
+  //  - Imagen y presencia: igual que antes (la presencia solo se juzga si el modelo está cargado).
+  const readCalibrationSample = () => {
+    let micLevel = null;
+    const analyser = analyserRef.current;
+    const context = audioContextRef.current;
+    if (context && context.state === 'suspended') {
+      // La política del navegador puede suspenderlo (pestaña en segundo plano): se intenta reanudar
+      // sin bloquear; si no se puede, la calibración sigue midiendo el resto.
+      Promise.resolve(context.resume?.()).catch(() => {});
+    }
+    if (analyser && (!context || context.state !== 'closed')) {
+      try {
+        if (!micBufferRef.current || micBufferRef.current.length !== analyser.fftSize) {
+          micBufferRef.current = new Float32Array(analyser.fftSize);
+        }
+        analyser.getFloatTimeDomainData(micBufferRef.current);
+        let sum = 0;
+        for (const value of micBufferRef.current) sum += value * value;
+        micLevel = Math.sqrt(sum / micBufferRef.current.length);
+      } catch (error) {
+        // Este ciclo no se pudo medir: se registra y se sigue (el resultado no se inventa).
+        console.warn('No se pudo medir el audio de la calibración:', error);
+        micLevel = null;
+      }
+    }
+
+    const video = videoRef.current;
+    const hasImage = Boolean(video && video.readyState >= 2 && video.videoWidth > 0);
+    const tracker = preload.current();
+    const person = tracker?.ready ? Boolean(tracker.personNow) : null;
+    return { micLevel, hasImage, person };
+  };
+
+  // Cierre ÚNICO de la calibración: lo llama la ejecución protegida al completar los 10 s, al vencer
+  // el watchdog, ante un error de medición o cuando el vocero cancela.
+  const handleCalibrationFinished = ({ result, reason, errorCount }) => {
+    // Detiene la medición de postura (el tracker queda preparado para la siguiente calibración).
+    preload.stop();
+    setCalibrating(false);
+    if (reason === FINISH_REASONS.cancelled) {
+      // Cancelación: no hay resultado que mostrar y se puede empezar de cero.
+      setCalibrationProgress(0);
+      setCalibrationOutcome(null);
+      setCalibrationInterrupted(false);
+      return;
+    }
+    setCalibrationOutcome(result);
+    if (reason === FINISH_REASONS.completed) {
+      // Ventana completa: el progreso llega al 100 %. Si hubo fallos de medición, se explica igual.
+      setCalibrationProgress(1);
+      setCalibrationInterrupted(errorCount > 0);
+    } else {
+      // Cierre sin la ventana completa: el progreso queda en lo realmente medido (nunca se finge un
+      // 100 %) y la pantalla explica que no se completó.
+      setCalibrationInterrupted(true);
+    }
+  };
+
+  // Cierre manual (botón «Cancelar»): usa el mismo camino protegido, así no queda nada en marcha.
+  const finishCalibration = (reason = FINISH_REASONS.interrupted) => {
+    const run = calibrationRunRef.current;
+    if (run && !run.isFinished()) {
+      run.finish(reason);
+      return;
+    }
+    // Sin ejecución activa no hay nada que cerrar, pero el estado nunca debe quedar en «calibrando».
+    setCalibrating(false);
+  };
+
   const startCalibration = () => {
     if (!cameraActive) {
       setError(tb.errCameraFirst);
@@ -266,56 +374,36 @@ export default function CheckTecnico() {
       setError(tb.errMicFirst);
       return;
     }
+    if (trackerStatus === TRACKER_STATES.loading) {
+      // Defensa: con el medidor preparándose el botón ya está deshabilitado, pero el estado debe
+      // quedar claro también si se llega por aquí sin poder pulsarlo.
+      setError(tb.trackerPreparing);
+      return;
+    }
+
+    // Si quedara una ejecución anterior viva, se cierra antes de abrir la nueva (cierre idempotente).
+    finishCalibration(FINISH_REASONS.cancelled);
 
     setError('');
     setCalibrating(true);
     setCalibrationProgress(0);
     setCalibrationOutcome(null);
-    const clock = () => performance.now();
-    calibrationRef.current = createCalibration({ now: clock });
+    setCalibrationInterrupted(false);
 
-    // Presencia frente a la cámara con el mecanismo existente. Si el modelo no está listo a tiempo,
-    // la calibración NO se bloquea: se evalúa que la cámara entregue imagen.
-    if (!poseTrackerRef.current && videoRef.current) {
-      const tracker = new PoseTracker(videoRef.current);
-      poseTrackerRef.current = tracker;
-      tracker
-        .load()
-        .then((ready) => {
-          if (ready && !tracker.running) tracker.start();
-        })
-        .catch(() => {});
-    }
+    // El medidor de postura YA está preparado (precarga al activar la cámara): aquí no se crea ni se
+    // carga nada. `beginRun` lo deja sin datos de la ejecución anterior; si no hay medidor (falló la
+    // carga), la calibración sigue midiendo micrófono y cámara según los criterios de siempre.
+    preload.beginRun();
 
-    calibrationTimerRef.current = setInterval(() => {
-      const analyser = analyserRef.current;
-      let micLevel = null;
-      if (analyser) {
-        if (!micBufferRef.current || micBufferRef.current.length !== analyser.fftSize) {
-          micBufferRef.current = new Float32Array(analyser.fftSize);
-        }
-        analyser.getFloatTimeDomainData(micBufferRef.current);
-        let sum = 0;
-        for (const value of micBufferRef.current) sum += value * value;
-        micLevel = Math.sqrt(sum / micBufferRef.current.length);
-      }
-
-      const video = videoRef.current;
-      const hasImage = Boolean(video && video.readyState >= 2 && video.videoWidth > 0);
-      const tracker = poseTrackerRef.current;
-      const person = tracker?.ready ? Boolean(tracker.personNow) : null;
-
-      calibrationRef.current = addSample(calibrationRef.current, { micLevel, hasImage, person });
-      setCalibrationProgress(calibrationProgressOf(calibrationRef.current, clock));
-
-      if (isFinished(calibrationRef.current, clock)) {
-        clearInterval(calibrationTimerRef.current);
-        calibrationTimerRef.current = null;
-        setCalibrating(false);
-        setCalibrationOutcome(calibrationResult(calibrationRef.current));
-        poseTrackerRef.current?.stop?.();
-      }
-    }, SAMPLE_MS);
+    // Ejecución protegida: intervalo + watchdog + cierre idempotente. El resultado se publica en
+    // `handleCalibrationFinished` pase lo que pase (completar, error, watchdog o cancelación).
+    const run = createCalibrationRun({
+      sample: readCalibrationSample,
+      onSample: ({ progress }) => setCalibrationProgress(progress),
+      onFinish: handleCalibrationFinished,
+    });
+    calibrationRunRef.current = run;
+    run.start();
   };
 
   // -----------------------------------------
@@ -359,9 +447,10 @@ export default function CheckTecnico() {
         audioStreamRef.current.getTracks().forEach((track) => track.stop());
       }
 
-      if (calibrationTimerRef.current) {
-        clearInterval(calibrationTimerRef.current);
-      }
+      // La calibración en curso se cierra EN SILENCIO (sin tocar estado de una pantalla que se va):
+      // limpia intervalo y watchdog y marca la ejecución como cerrada.
+      calibrationRunRef.current?.dispose();
+      calibrationRunRef.current = null;
 
       if (microphoneAnimationRef.current) {
         cancelAnimationFrame(microphoneAnimationRef.current);
@@ -376,17 +465,43 @@ export default function CheckTecnico() {
         audioContextRef.current.close();
       }
 
-      // La calibración no debe dejar la cámara ni el micrófono abiertos al abandonar la pantalla.
-      if (poseTrackerRef.current) {
-        poseTrackerRef.current.destroy();
-        poseTrackerRef.current = null;
-      }
+      // El medidor de postura se cierra aquí: si la carga quedó a medias, sus recursos (grafos de
+      // MediaPipe) se liberan cuando termine, sin quedarse abiertos tras abandonar la pantalla.
+      preload.dispose();
     };
-  }, []);
+  }, [preload]);
 
   useEffect(() => {
     loadDevices();
   }, []);
+
+  // C1: prepara MediaPipe en cuanto la cámara entrega imagen, para que el clic «Iniciar calibración»
+  // no cargue nada. Se pide SIN rostro (la calibración sólo necesita la presencia corporal) y sin
+  // bloquear la interfaz: mientras carga, el botón queda deshabilitado y se explica el estado.
+  useEffect(() => {
+    if (!cameraActive) return undefined;
+    const video = videoRef.current;
+    if (!video) return undefined;
+
+    let cancelled = false;
+    const prepare = () => {
+      if (cancelled) return;
+      preload.ensure(video, { face: false });
+    };
+
+    // El <video> debe poder entregar cuadros (readyState ≥ 2); si aún no, se espera al primer cuadro.
+    if (video.readyState >= 2) {
+      prepare();
+      return () => {
+        cancelled = true;
+      };
+    }
+    video.addEventListener('loadeddata', prepare, { once: true });
+    return () => {
+      cancelled = true;
+      video.removeEventListener('loadeddata', prepare);
+    };
+  }, [cameraActive, preload]);
 
   // -----------------------------------------
   // Niveles de iluminación
@@ -455,7 +570,7 @@ export default function CheckTecnico() {
       ok: calibrationDone && calibrationOk,
       icon: 'person',
       progress: calibrating,
-      warn: calibrationDone && !calibrationOk,
+      warn: (calibrationDone && !calibrationOk) || calibrationInterrupted,
     },
     { label: tb.checkConsent, ok: consentOk, icon: 'shield' },
   ];
@@ -682,16 +797,49 @@ export default function CheckTecnico() {
                   </div>
                   <Progress value={calibrationProgress * 100} tone={calibrationDone && calibrationOk ? 'success' : 'accent'} />
                   <p className="text-xs text-faint mt-2">{calibrating ? tb.calibHintStay : tb.calibrationHint}</p>
+                  {/* Estado del medidor de postura (precarga C1), antes de calibrar. */}
+                  {!calibrating && trackerStatus !== TRACKER_STATES.idle && (
+                    <p
+                      className={cx(
+                        'text-xs mt-1',
+                        trackerStatus === TRACKER_STATES.failed ? 'text-danger' : 'text-muted',
+                      )}
+                    >
+                      {trackerStatus === TRACKER_STATES.loading
+                        ? tb.trackerPreparing
+                        : trackerStatus === TRACKER_STATES.failed
+                          ? tb.trackerFailed
+                          : tb.trackerReady}
+                    </p>
+                  )}
                 </div>
-                <Button
-                  variant="secondary"
-                  icon="person"
-                  onClick={startCalibration}
-                  disabled={!cameraActive || !microphoneActive || calibrating}
-                >
-                  {calibrating ? tb.calibrating : calibrationDone ? tb.recalibrate : tb.startCalibration}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    icon="person"
+                    onClick={startCalibration}
+                    disabled={
+                      !cameraActive ||
+                      !microphoneActive ||
+                      calibrating ||
+                      trackerStatus === TRACKER_STATES.loading
+                    }
+                  >
+                    {calibrating ? tb.calibrating : calibrationDone ? tb.recalibrate : tb.startCalibration}
+                  </Button>
+                  {/* Salida segura: cierra la medición con el mismo camino protegido. */}
+                  {calibrating && (
+                    <Button variant="ghost" size="sm" onClick={() => finishCalibration(FINISH_REASONS.cancelled)}>
+                      {t.cancel}
+                    </Button>
+                  )}
+                </div>
               </div>
+
+              {/* Qué requisito falta para poder calibrar (la razón, no solo el botón deshabilitado) */}
+              {!calibrating && (!cameraActive || !microphoneActive) && (
+                <p className="text-xs text-danger mt-2">{!cameraActive ? tb.errCameraFirst : tb.errMicFirst}</p>
+              )}
 
               {/* Resultado: qué se midió y qué debe corregir el vocero (si hace falta) */}
               {calibrationOutcome && !calibrating && (
@@ -719,6 +867,8 @@ export default function CheckTecnico() {
                         {hint}
                       </div>
                     ))}
+                    {/* Cierre sin la ventana completa (watchdog, error o cancelación): se explica. */}
+                    {calibrationInterrupted && <div className="text-danger">{tb.calibInterrupted}</div>}
                   </div>
                 </div>
               )}

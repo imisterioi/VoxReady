@@ -731,12 +731,18 @@ Reglas:
 | --- | --- |
 | `aggressiveness: "BAJA"` | Segunda línea: "Tu tono es cordial y colaborativo…"; la repregunta dice "Pide con amabilidad que aclare o profundice…" |
 | `aggressiveness: "MEDIA"` | "Eres incisivo pero respetuoso…"; y por las líneas rojas: "De vez en cuando formula preguntas que tienten al vocero a cruzar esas líneas rojas." |
-| `aggressiveness: "EXTREMA"` | "Eres hostil y buscas el titular… Nunca insultas ni usas groserías."; la repregunta pide devolver la frase en su peor interpretación, como pregunta de sí o no |
+| `aggressiveness: "EXTREMA"` | "Eres muy exigente en los asuntos críticos: pides respuestas inequívocas y confrontas directamente cuando existe evidencia suficiente, sin hostilidad, sin acusaciones sin base y sin dar por supuesto nada que el vocero no haya declarado."; la repregunta pide una respuesta inequívoca sobre el punto crítico, citando lo que el vocero realmente dijo |
 | `followUps: 0` | Se sustituyen las dos viñetas centrales por: "- Si el vocero evade o responde de forma genérica, repregunta. <instrucción del nivel>" y "- Si el vocero no dijo nada, reformula la pregunta anterior de forma más directa." |
 | `followUps > 0` y turno de repregunta | "- Este turno es una REPREGUNTA sobre la última respuesta del vocero. <instrucción del nivel>" |
 | Sin líneas rojas definidas | No aparece ni la lista ni la instrucción de tentarlas |
 | Sin tema (`theme == null`) | "Escenario: una empresa enfrenta una crisis que afecta a sus clientes." y nada más de contexto |
 | `interviewerRole` vacío | "Eres un periodista chileno y entrevistas en vivo…" |
+
+> **Actualización (Etapa 2, R4).** Los literales de `AGGRESSIVENESS.ALTA` y `.EXTREMA` —y su espejo en inglés— dejaron de pedir hostilidad, desconfianza por defecto o "la peor interpretación": ahora exigen explicaciones verificables y confrontan inconsistencias **solo cuando están respaldadas** por lo realmente dicho, con la presunción de que no se conocen hechos que el vocero no haya declarado. Ejemplos corregidos de EXTREMA (los anteriores daban por supuestos hechos no declarados):
+>
+> - **Antes:** "80.000 hogares y pacientes electrodependientes sin suministro durante 14 horas: ¿quién responde por esa demora?" → **Corregido:** "El corte dejó 14 horas sin suministro a 80.000 hogares, incluidos pacientes electrodependientes: ¿quién asume la responsabilidad por la demora en informar?"
+> - **Antes:** "¿por qué hay 80.000 hogares afectados si dijo que ya estaba restablecido?" → **Corregido:** "¿Cuántos hogares siguen sin suministro y qué está haciendo la empresa por los pacientes electrodependientes?"
+> - **Antes:** "Hay dos versiones suyas sobre lo mismo: ¿cuántas personas resultaron afectadas y por qué declaró antes que ninguna?" → **Corregido:** "Antes dijo que no hubo afectados y ahora habla de afectados compensados: ¿podría aclarar cuántas personas resultaron afectadas?"
 
 **Mensajes que acompañan al `system`** (ejemplo ficticio, tras dos turnos):
 
