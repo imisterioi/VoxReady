@@ -1,3 +1,5 @@
 # Claves privadas y archivos locales (no subir a GitHub)
+# `.env` (y sus variantes locales) contienen credenciales reales: nunca se versionan.
+.env
 .env.local
 uploads/
