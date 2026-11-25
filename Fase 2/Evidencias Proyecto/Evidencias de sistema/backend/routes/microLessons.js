@@ -4,11 +4,18 @@
 //   Una lección en español no aparece en el catálogo inglés y viceversa.
 // - Recomendación: se marca `recommended` en las lecciones que refuerzan el área más débil del
 //   vocero, con la misma regla del informe: de las áreas medidas, la de puntuación más baja de su
-//   última práctica evaluada. Sin datos no se recomienda nada.
-// - Administración (administrador del sistema): crear, editar, activar/desactivar, subir o
-//   reemplazar el video y eliminar (con borrado del archivo asociado).
+//   última práctica evaluada. Sin datos no se recomienda nada. Las lecciones GENERALES se recomiendan
+//   SIEMPRE (refuerzo transversal).
+// - Administración (administrador del sistema): crear, editar, activar/desactivar, subir, reemplazar
+//   o quitar (DELETE /:id/video) el video, y eliminar la lección (con borrado del archivo asociado).
+// - EXCLUSIVIDAD de fuentes: una microlección tiene un ARCHIVO subido O un ENLACE externo, nunca los
+//   dos. Se aplica también en el servidor (no solo en la interfaz): 409 si una petición intenta
+//   dejar ambas fuentes a la vez.
 // - El video se guarda en `uploads/lessons` y se entrega solo por la ruta protegida
 //   `GET /api/micro-lessons/:id/video` (sesión válida + estado + idioma). No hay ruta pública.
+// - Alternativa al archivo subido: un ENLACE EXTERNO (p. ej. YouTube) guardado en `videoUrl`
+//   (solo HTTPS y proveedores admitidos, URL canónica ya validada). Cuando existe, es la fuente de
+//   reproducción; el archivo subido, si lo hubiera, se conserva pero no se usa.
 const fs = require('fs');
 const path = require('path');
 const { requireAuth } = require('../auth');
@@ -17,14 +24,59 @@ const { saveStreamToFile } = require('../lib/uploadGuard');
 
 const LESSONS_DIR = path.join(__dirname, '..', 'uploads', 'lessons');
 
-// Áreas de la RÚBRICA que una microlección puede reforzar (no se crean áreas nuevas).
-const AREAS = ['expression', 'voice', 'coherence', 'empathy'];
+// Áreas que una microlección puede reforzar.
+//  - RUBRIC_AREAS: las cuatro dimensiones del informe. NO se crean áreas nuevas en la rúbrica.
+//  - GENERAL: refuerzo transversal. No corresponde a ninguna dimensión del informe, así que se
+//    recomienda SIEMPRE (sin depender de que alguna dimensión tenga una puntuación baja).
+const RUBRIC_AREAS = ['expression', 'voice', 'coherence', 'empathy'];
+const GENERAL_AREA = 'GENERAL';
+const AREAS = [...RUBRIC_AREAS, GENERAL_AREA];
 
 // Tipos de video admitidos (el contenedor decide la extensión del archivo).
 const MEDIA_TYPES = { 'video/webm': 'webm', 'video/mp4': 'mp4' };
 const MAX_VIDEO_BYTES = (Number(process.env.LESSON_MAX_VIDEO_MB) || 200) * 1024 * 1024;
 const MAX_TITLE = 120;
 const MAX_DESCRIPTION = 600;
+const MAX_VIDEO_URL = 500;
+
+// ------------------------------------------------------------ Video externo
+// Solo se admiten enlaces de YouTube por HTTPS. NUNCA se guarda HTML ni una URL sin validar: se
+// extrae el identificador del video y se guarda la URL CANÓNICA del proveedor. La reproducción
+// integrada la construye el frontend a partir de ese identificador (doble validación en el cliente).
+const YOUTUBE_HOSTS = new Set([
+  'youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be', 'www.youtu.be',
+]);
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+
+// Devuelve { url } (canónica) · { url: null } si viene vacío · { error } si no es admisible.
+function parseExternalVideoUrl(raw) {
+  const value = String(raw ?? '').trim();
+  if (!value) return { url: null };
+  if (value.length > MAX_VIDEO_URL) return { error: 'El enlace del video es demasiado largo.' };
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return { error: 'El enlace del video no es válido.' };
+  }
+  if (parsed.protocol !== 'https:') return { error: 'El enlace del video debe usar HTTPS.' };
+  if (!YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase())) {
+    return { error: 'Solo se admiten enlaces de YouTube.' };
+  }
+
+  let id = null;
+  if (/^(www\.)?youtu\.be$/.test(parsed.hostname.toLowerCase())) {
+    id = parsed.pathname.split('/').filter(Boolean)[0] || null;
+  } else if (parsed.pathname === '/watch') {
+    id = parsed.searchParams.get('v');
+  } else {
+    const match = parsed.pathname.match(/^\/(?:embed|shorts|live|v)\/([^/?#]+)/);
+    if (match) id = match[1];
+  }
+  if (!id || !YOUTUBE_ID.test(id)) return { error: 'No se reconoce el identificador del video de YouTube.' };
+  return { url: `https://www.youtube.com/watch?v=${id}`, videoId: id };
+}
 
 const UPLOAD_ERRORS = {
   TOO_LARGE: [413, 'El video supera el tamaño máximo permitido.'],
@@ -56,20 +108,27 @@ const normalizeAreas = (value) => {
 
 const areasOf = (lesson) => (Array.isArray(lesson.areas) ? lesson.areas : []);
 
-const toApiLesson = (lesson, { recommended = false } = {}) => ({
-  id: lesson.id,
-  title: lesson.title,
-  description: lesson.description,
-  language: lesson.language,
-  areas: areasOf(lesson),
-  active: lesson.active,
-  hasVideo: Boolean(lesson.videoFile),
-  videoMime: lesson.videoMime || null,
-  videoBytes: lesson.videoBytes ?? null,
-  recommended,
-  createdAt: lesson.createdAt,
-  updatedAt: lesson.updatedAt,
-});
+const toApiLesson = (lesson, { recommended = false } = {}) => {
+  const externalUrl = lesson.videoUrl || null;
+  const uploadedFile = lesson.videoFile || null;
+  return {
+    id: lesson.id,
+    title: lesson.title,
+    description: lesson.description,
+    language: lesson.language,
+    areas: areasOf(lesson),
+    active: lesson.active,
+    // El video externo tiene prioridad sobre el archivo subido.
+    hasVideo: Boolean(externalUrl || uploadedFile),
+    videoSource: externalUrl ? 'external' : uploadedFile ? 'upload' : null,
+    videoUrl: externalUrl,
+    videoMime: externalUrl ? null : lesson.videoMime || null,
+    videoBytes: externalUrl ? null : lesson.videoBytes ?? null,
+    recommended,
+    createdAt: lesson.createdAt,
+    updatedAt: lesson.updatedAt,
+  };
+};
 
 // Área más débil del vocero: misma regla que el informe (la puntuación más baja de las áreas
 // medidas en su última práctica evaluada). Si no hay datos, devuelve null.
@@ -80,7 +139,7 @@ async function weakestArea(prisma, userId) {
     select: { report: true },
   });
   const areas = Array.isArray(session?.report?.areas) ? session.report.areas : [];
-  const measured = areas.filter((area) => area && area.score != null && AREAS.includes(area.key));
+  const measured = areas.filter((area) => area && area.score != null && RUBRIC_AREAS.includes(area.key));
   if (!measured.length) return null;
   return measured.reduce((a, b) => (b.score < a.score ? b : a)).key || null;
 }
@@ -118,6 +177,13 @@ function validatePayload(body, { partial = false } = {}) {
 
   if (body.active !== undefined) data.active = Boolean(body.active);
 
+  if (body.videoUrl !== undefined) {
+    // Vacío o null → se quita el enlace externo y vuelve a usarse el video subido (si lo hay).
+    const parsed = parseExternalVideoUrl(body.videoUrl);
+    if (parsed.error) return { error: parsed.error };
+    data.videoUrl = parsed.url;
+  }
+
   return { data };
 }
 
@@ -142,10 +208,15 @@ module.exports = function registerMicroLessonRoutes(app, prisma) {
       const lessons = await prisma.microLesson.findMany({ where, orderBy: [{ createdAt: 'desc' }] });
 
       // La recomendación se calcula solo para el vocero: son SUS resultados.
+      //  - Las lecciones GENERALES se recomiendan SIEMPRE (refuerzo transversal).
+      //  - Las de rúbrica, solo si refuerzan el área más débil de su última práctica evaluada
+      //    (criterio actual, sin cambios).
       const weak = req.apiRole === 'user' ? await weakestArea(prisma, req.user.id) : null;
-      const items = lessons.map((lesson) =>
-        toApiLesson(lesson, { recommended: Boolean(weak && areasOf(lesson).includes(weak)) }),
-      );
+      const items = lessons.map((lesson) => {
+        const areas = areasOf(lesson);
+        const recommended = areas.includes(GENERAL_AREA) || Boolean(weak && areas.includes(weak));
+        return toApiLesson(lesson, { recommended });
+      });
 
       res.json({ status: 'ok', language, weakestArea: weak, lessons: items });
     } catch (error) {
@@ -201,6 +272,11 @@ module.exports = function registerMicroLessonRoutes(app, prisma) {
       if (!current) return fail(res, 404, 'Microlección no encontrada.');
       const { data, error } = validatePayload(req.body || {}, { partial: true });
       if (error) return fail(res, 422, error);
+      // Exclusividad de fuentes: una microlección no puede tener a la vez un archivo subido y un
+      // enlace externo. Si ya hay archivo, primero hay que quitarlo (DELETE /api/micro-lessons/:id/video).
+      if (data.videoUrl && current.videoFile) {
+        return fail(res, 409, 'Una microlección solo puede tener un video: quita el archivo subido antes de añadir un enlace.');
+      }
       const lesson = await prisma.microLesson.update({ where: { id: current.id }, data });
       res.json({ status: 'ok', lesson: toApiLesson(lesson) });
     } catch (error) {
@@ -229,6 +305,14 @@ module.exports = function registerMicroLessonRoutes(app, prisma) {
     try {
       const lesson = await prisma.microLesson.findUnique({ where: { id: req.params.id } });
       if (!lesson) return fail(res, 404, 'Microlección no encontrada.');
+      // Exclusividad de fuentes: si ya hay un enlace externo NO se sube el archivo (no se reemplaza
+      // una fuente por otra en silencio; el enlace se quita primero).
+      if (lesson.videoUrl) {
+        // Se descarta el cuerpo de la petición antes de responder: con un archivo grande, no
+        // consumirlo haría que el cliente viera un corte de conexión en lugar del mensaje.
+        if (typeof req.resume === 'function') req.resume();
+        return fail(res, 409, 'Una microlección solo puede tener un video: quita el enlace antes de subir un archivo.');
+      }
 
       const type = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
       const extension = MEDIA_TYPES[type];
@@ -247,6 +331,7 @@ module.exports = function registerMicroLessonRoutes(app, prisma) {
         });
         const updated = await prisma.microLesson.update({
           where: { id: lesson.id },
+          // Reemplaza al archivo anterior. Si hubiera un enlace externo, la petición se rechazó antes.
           data: { videoFile: fileName, videoMime: type, videoBytes: bytes },
         });
         // Reemplazo: si el archivo anterior era otro (otra extensión), se elimina.
@@ -260,6 +345,24 @@ module.exports = function registerMicroLessonRoutes(app, prisma) {
     } catch (error) {
       console.error('Error subiendo el video de la microlección:', error);
       fail(res, 500, 'No se pudo subir el video.');
+    }
+  });
+
+  // Quitar el video subido: deja a la microlección SIN archivo (y sin enlace) para poder usar la otra
+  // fuente. Es el paso previo obligatorio antes de añadir un enlace a una lección con archivo.
+  app.delete('/api/micro-lessons/:id/video', auth('system'), async (req, res) => {
+    try {
+      const lesson = await prisma.microLesson.findUnique({ where: { id: req.params.id } });
+      if (!lesson) return fail(res, 404, 'Microlección no encontrada.');
+      const updated = await prisma.microLesson.update({
+        where: { id: lesson.id },
+        data: { videoFile: null, videoMime: null, videoBytes: null },
+      });
+      unlinkQuiet(videoPathOf(lesson));
+      res.json({ status: 'ok', lesson: toApiLesson(updated) });
+    } catch (error) {
+      console.error('Error quitando el video de la microlección:', error);
+      fail(res, 500, 'No se pudo quitar el video.');
     }
   });
 };

@@ -4,16 +4,21 @@ import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import { Badge, Button, Card, EmptyState, PageHeader } from '../components/ui';
 import { API_URL, apiFetch, getToken } from '../lib/api';
-import { lessonVideoUrl } from '../lib/practice/lessonVideo';
+import { lessonVideoUrl, parseLessonVideoUrl } from '../lib/practice/lessonVideo';
+import { useVideoFrame, useYoutubePoster } from '../hooks/useLessonMedia';
 
 // Microlecciones del vocero (GET /api/micro-lessons).
 //
 // - Solo aparecen las lecciones ACTIVAS del idioma activo: lo filtra el BACKEND (no basta con
 //   ocultarlas aquí) y el video se entrega por una ruta protegida.
-// - Las recomendadas las marca el backend según el área más débil de la última práctica evaluada.
-// - Los videos están alojados en VoxReady: no hay YouTube ni enlaces externos.
+// - Las recomendadas las marca el backend: las de rúbrica según el área más débil de la última
+//   práctica evaluada y las GENERALES siempre (refuerzo transversal).
+// - El video puede estar alojado en VoxReady (ruta protegida) o ser un ENLACE EXTERNO validado
+//   (p. ej. YouTube), que se integra con un reproductor embebido sin salir de la aplicación.
+// - Cada tarjeta del catálogo muestra una MINIATURA real del video (portada de YouTube o primer
+//   fotograma del archivo), en 16:9 y sin deformar; si no hay video, se mantiene el icono.
 export default function Microleccion() {
-  const { d } = useI18n();
+  const { d, langVersion } = useI18n();
   const t = d.L.u8;
   const { id } = useParams();
   const [state, setState] = useState({ loading: true, error: '', lessons: [] });
@@ -28,9 +33,11 @@ export default function Microleccion() {
     }
   }, []);
 
+  // El catálogo lo filtra el BACKEND por el idioma del usuario: hay que volver a pedirlo cuando el
+  // idioma efectivo cambia (`langVersion` solo cambia con un cambio real), sin recargar la página.
   useEffect(() => {
     load();
-  }, [load]);
+  }, [load, langVersion]);
 
   if (state.loading) {
     return (
@@ -80,14 +87,49 @@ export default function Microleccion() {
   return <LessonList lessons={state.lessons} />;
 }
 
-// Reproductor del video alojado en VoxReady (ruta protegida con el token de la sesión).
+// Reproductor del video de la lección:
+//  - VIDEO EXTERNO (p. ej. YouTube): se integra con un <iframe> construido desde el identificador
+//    validado (youtube-nocookie). Nunca se navega fuera ni se inyecta HTML del usuario. Si el
+//    propietario deshabilitó la inserción, el propio reproductor lo indica y se ofrece un enlace
+//    manual (solo al pulsarlo) para verlo en YouTube.
+//  - VIDEO SUBIDO A VOXREADY: se sirve por la ruta protegida con el token de la sesión.
 function LessonVideo({ lesson, t }) {
   const [failed, setFailed] = useState(false);
-  const src = lesson.hasVideo ? lessonVideoUrl(lesson.id, { apiUrl: API_URL, token: getToken() }) : null;
+  const external = lesson.videoSource === 'external' ? parseLessonVideoUrl(lesson.videoUrl) : null;
+  const src = !external && lesson.hasVideo ? lessonVideoUrl(lesson.id, { apiUrl: API_URL, token: getToken() }) : null;
 
   useEffect(() => {
     setFailed(false);
-  }, [src]);
+  }, [src, lesson.videoUrl]);
+
+  if (external) {
+    return (
+      <div>
+        <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-[#0B1118] ring-1 ring-line">
+          <iframe
+            title={lesson.title}
+            src={external.embedUrl}
+            className="absolute inset-0 h-full w-full"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerPolicy="strict-origin-when-cross-origin"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+        <p className="text-xs text-faint mt-2 leading-relaxed">
+          {t.externalVideoNote}{' '}
+          <a
+            href={external.watchUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-muted hover:text-ink underline"
+          >
+            {t.watchOnYouTube}
+          </a>
+        </p>
+      </div>
+    );
+  }
 
   if (!src || failed) {
     return (
@@ -122,6 +164,38 @@ function AreaBadges({ lesson, t }) {
   ));
 }
 
+// Miniatura de la tarjeta del catálogo. Muestra una imagen representativa del video asociado:
+//  - ENLACE EXTERNO (YouTube): su portada real (derivada del identificador validado).
+//  - ARCHIVO SUBIDO: el primer fotograma, leído desde su RUTA PROTEGIDA con el token de la sesión.
+//  - SIN VIDEO (o si no se puede obtener la imagen): el icono, como hasta ahora.
+// La caja de la tarjeta ya reserva la proporción 16:9, así que la imagen no provoca saltos de diseño.
+function LessonThumb({ lesson }) {
+  const external = lesson.videoSource === 'external' ? parseLessonVideoUrl(lesson.videoUrl) : null;
+  // Portada en calidad de miniatura: `hqdefault` ya existe en cualquier vídeo válido, así que evita
+  // un 404 innecesario por tarjeta (el formulario de administración usa la portada grande).
+  const poster = useYoutubePoster(external, { quality: 'sd' });
+  const frame = useVideoFrame(
+    !external && lesson.videoSource === 'upload' ? lessonVideoUrl(lesson.id, { apiUrl: API_URL, token: getToken() }) : null,
+  );
+
+  const youtube = external ? poster.url : null;
+  const thumbnail = youtube || (frame.status === 'ok' ? frame.frame : null);
+
+  if (thumbnail) {
+    return (
+      <img
+        src={thumbnail}
+        alt=""
+        loading="lazy"
+        onError={youtube ? poster.onError : undefined}
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+    );
+  }
+
+  return <Icon name={lesson.hasVideo ? 'play' : 'video'} size={22} className="text-faint" />;
+}
+
 // Catálogo (/vocero/leccion)
 function LessonList({ lessons }) {
   const { d } = useI18n();
@@ -136,8 +210,8 @@ function LessonList({ lessons }) {
               padded={false}
               className="overflow-hidden h-full flex flex-col hover:shadow-lift hover:border-line-strong transition-all"
             >
-              <div className="relative aspect-video bg-subtle flex items-center justify-center">
-                <Icon name={lesson.hasVideo ? 'play' : 'video'} size={22} className="text-faint" />
+              <div className="relative aspect-video bg-subtle flex items-center justify-center overflow-hidden">
+                <LessonThumb lesson={lesson} />
                 {lesson.recommended && (
                   <span className="absolute top-3 left-3">
                     <Badge tone="success" icon="sparkles">

@@ -423,6 +423,10 @@ model MicroLesson {
   videoFile   String?
   videoMime   String?
   videoBytes  Int?
+  // Enlace externo (p. ej. YouTube) que SUSTITUYE al archivo subido cuando está presente.
+  // Se guarda la URL canónica del proveedor ya validada (nunca HTML ni protocolos inseguros).
+  // NULL = el video, si existe, es el archivo subido (videoFile).
+  videoUrl    String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   createdById String?
