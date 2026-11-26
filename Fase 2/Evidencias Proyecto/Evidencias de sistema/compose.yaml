@@ -120,11 +120,20 @@ services:
       # al final, así que esta variable SÍ manda. Reduce ~15x los stat() sobre el bind
       # mount de Windows sin desactivar la recarga automática.
       CHOKIDAR_INTERVAL: "1500"
-    # Regenera el cliente Prisma (por si cambió el schema montado) y arranca nodemon.
-    # `exec` sustituye el shell por nodemon: así nodemon pasa a ser el PID 1 del contenedor
-    # y recibe directamente las señales de Docker (p. ej. SIGTERM al parar), sin los
-    # envoltorios `npm run dev` y `sh -c nodemon` que había antes.
-    command: sh -c "npx prisma generate && exec node /app/node_modules/nodemon/bin/nodemon.js --legacy-watch index.js"
+    # Arranque del backend con migraciones automáticas (scripts/docker-start.sh):
+    #   1) espera a que PostgreSQL acepte conexiones;  2) genera el cliente Prisma;
+    #   3) aplica las migraciones PENDIENTES con `prisma migrate deploy` (nunca `migrate dev`
+    #      ni `reset`: no crea migraciones ni borra datos);  4) comprueba el estado.
+    # Si algo falla, el contenedor termina y el servidor NO arranca: nunca atiende peticiones
+    # con migraciones pendientes. `exec "$@"` deja a nodemon como PID 1 (recibe las señales de
+    # Docker directamente, igual que antes).
+    command:
+      - sh
+      - /app/scripts/docker-start.sh
+      - node
+      - /app/node_modules/nodemon/bin/nodemon.js
+      - --legacy-watch
+      - index.js
     volumes:
       # Código del host: incluye uploads/ (los videos existentes se conservan).
       - ./backend:/app
