@@ -577,7 +577,8 @@ module.exports = function registerInterviewerRoutes(app, prisma, deps = {}) {
         mainsTotal: meta ? meta.mainsTotal : null,
         assessment: result.assessment ? { status: result.assessment.status, source: result.assessment.source } : null,
         decision: result.decision ? { action: result.decision.action, budget: result.decision.budget || null, reason: result.decision.reason } : null,
-        interview: theme ? resolveInterviewConfig(theme) : null,
+        // Las preguntas personalizadas no se envían al vocero: son la sorpresa de la entrevista.
+        interview: theme ? (({ customQuestions, ...rest }) => ({ ...rest, customQuestions: [] }))(resolveInterviewConfig(theme)) : null,
         model: result.model,
         ms: result.ms ?? Date.now() - startedAt,
       });

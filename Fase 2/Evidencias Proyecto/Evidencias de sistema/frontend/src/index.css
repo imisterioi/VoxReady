@@ -37,6 +37,8 @@
   --c2: 224 102 42;
   --c3: 44 143 122;
   --c4: 148 160 178;
+  --c5: 142 84 178;
+  --c6: 196 62 110;
 
   color-scheme: light;
 }
@@ -69,6 +71,8 @@
   --c2: 240 128 70;
   --c3: 76 194 162;
   --c4: 120 132 150;
+  --c5: 184 140 222;
+  --c6: 236 110 150;
 
   color-scheme: dark;
 }
@@ -118,4 +122,13 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--line-strong)) transparent;
+}
+
+/* Descarga del informe (imprimir / guardar como PDF): solo el contenido, sin cortar tarjetas */
+@media print {
+  @page { margin: 12mm; }
+  html, body { background: #fff !important; }
+  .card, [class*='rounded-2xl'] { break-inside: avoid; box-shadow: none !important; }
+  video, iframe { display: none !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

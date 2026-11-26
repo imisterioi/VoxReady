@@ -25,10 +25,10 @@ const { saveStreamToFile } = require('../lib/uploadGuard');
 const LESSONS_DIR = path.join(__dirname, '..', 'uploads', 'lessons');
 
 // Áreas que una microlección puede reforzar.
-//  - RUBRIC_AREAS: las cuatro dimensiones del informe. NO se crean áreas nuevas en la rúbrica.
+//  - RUBRIC_AREAS: las dimensiones del informe.
 //  - GENERAL: refuerzo transversal. No corresponde a ninguna dimensión del informe, así que se
 //    recomienda SIEMPRE (sin depender de que alguna dimensión tenga una puntuación baja).
-const RUBRIC_AREAS = ['expression', 'voice', 'coherence', 'empathy'];
+const { AREA_KEYS: RUBRIC_AREAS } = require('../ai/patternConfig');
 const GENERAL_AREA = 'GENERAL';
 const AREAS = [...RUBRIC_AREAS, GENERAL_AREA];
 

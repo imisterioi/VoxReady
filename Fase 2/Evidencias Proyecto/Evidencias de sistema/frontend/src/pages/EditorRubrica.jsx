@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
@@ -18,7 +18,12 @@ const AREAS = [
   { key: 'voice', color: 'rgb(var(--c2))' },
   { key: 'coherence', color: 'rgb(var(--c3))' },
   { key: 'empathy', color: 'rgb(var(--c4))' },
+  { key: 'listening', color: 'rgb(var(--c5))' },
+  { key: 'pressure', color: 'rgb(var(--c6))' },
 ];
+
+// Áreas que evalúa la IA con una descripción editable
+const AI_AREAS = ['coherence', 'empathy', 'listening', 'pressure'];
 
 // Parámetros editables de cada criterio medido (claves internas; texto visible en el diccionario)
 const PARAMS = {
@@ -32,13 +37,21 @@ const PARAMS = {
     variation: [
       { key: 'idealMin', unit: 'pct' },
       { key: 'idealMax', unit: 'pct' },
+      { key: 'maxOutOfRangeSec', unit: 'seconds' },
     ],
     latency: [{ key: 'idealMaxSec', unit: 'seconds' }],
   },
   expression: {
-    presence: [{ key: 'idealMinPct', unit: 'pctOfTime' }],
     facing: [{ key: 'idealMinPct', unit: 'pctOfTime' }],
-    posture: [{ key: 'idealMaxDeg', unit: 'degrees' }],
+    emotions: [{ key: 'maxNegativePct', unit: 'pctOfTime' }],
+    posture: [
+      { key: 'idealMaxDeg', unit: 'degrees' },
+      { key: 'maxOffPoseSec', unit: 'seconds' },
+      { key: 'maxShrinkPct', unit: 'pctOfTime' },
+    ],
+  },
+  listening: {
+    noInterrupt: [{ key: 'tolerance', unit: 'times' }],
   },
 };
 
@@ -50,6 +63,48 @@ const STRICTNESS = [
 ];
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
+const SAVED_MS = 4000;
+
+// Confirmación visible de que el cambio quedó guardado (además del aviso flotante).
+function SavedBanner({ notice, onClose }) {
+  const { d } = useI18n();
+  const t = d.L.m2;
+  useEffect(() => {
+    if (!notice) return undefined;
+    const timer = setTimeout(onClose, 8000);
+    return () => clearTimeout(timer);
+  }, [notice, onClose]);
+  if (!notice) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="mb-6 flex items-start gap-3 rounded-2xl border border-success/40 bg-success/10 px-4 py-3 text-sm text-ink"
+    >
+      <span className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-success text-white">
+        <Icon name="check" size={14} />
+      </span>
+      <div className="flex-1 min-w-0">
+        <div className="font-medium">{t.changesSaved}</div>
+        <div className="text-[13px] text-muted">{notice.message}</div>
+      </div>
+      <button type="button" className="text-xs text-muted hover:text-ink" onClick={onClose}>
+        {t.dismiss}
+      </button>
+    </div>
+  );
+}
+
+// Marca temporal "Guardado" en la fila recién cambiada
+function useSavedMark() {
+  const [savedId, setSavedId] = useState(null);
+  useEffect(() => {
+    if (!savedId) return undefined;
+    const timer = setTimeout(() => setSavedId(null), SAVED_MS);
+    return () => clearTimeout(timer);
+  }, [savedId]);
+  return [savedId, setSavedId];
+}
 const STATUS = { ACTIVE: 'success', DRAFT: 'warning', INACTIVE: 'neutral' };
 
 // ------------------------------------------------------------------ Editor
@@ -122,7 +177,7 @@ function CriteriaCard({ area, config, setConfig }) {
         })}
       </div>
 
-      {(area.key === 'coherence' || area.key === 'empathy') && (
+      {AI_AREAS.includes(area.key) && config[area.key] && (
         <div className="mt-5 space-y-4">
           <Field label={t.aiDescriptor} hint={t.aiDescriptorHint}>
             <textarea
@@ -169,12 +224,15 @@ function PatternEditor({ defaults, patterns, initial, onSaved }) {
   const [name, setName] = useState(initial ? `${initial.name} (copia)` : '');
   const [base, setBase] = useState(initial?.id || 'defaults');
   const [saving, setSaving] = useState(false);
+  const [pristine, setPristine] = useState(() => JSON.stringify(initial?.config || defaults));
+  const dirty = JSON.stringify(config) !== pristine;
 
   // Cambiar el patrón de partida
   const loadBase = (id) => {
     setBase(id);
     const p = patterns.find((x) => x.id === id);
     setConfig(clone(p ? p.config : defaults));
+    setPristine(JSON.stringify(p ? p.config : defaults));
     setName(p ? `${p.name} (copia)` : '');
   };
 
@@ -194,8 +252,10 @@ function PatternEditor({ defaults, patterns, initial, onSaved }) {
     try {
       setSaving(true);
       const { pattern } = await apiFetch('/api/patterns', { method: 'POST', body: { name, config, activate } });
-      toast.success(activate ? t.activatedToast(pattern.name, pattern.version) : t.draftToast(pattern.version));
-      onSaved();
+      const message = activate ? t.activatedToast(pattern.name, pattern.version) : t.draftToast(pattern.version);
+      toast.success(message);
+      setPristine(JSON.stringify(config));
+      onSaved(message);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -279,6 +339,11 @@ function PatternEditor({ defaults, patterns, initial, onSaved }) {
 
       <div className="sticky bottom-4 z-10 flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-line bg-surface/95 backdrop-blur shadow-lift px-5 py-4">
         <p className="text-[13px] text-muted flex-1">
+          {dirty && (
+            <Badge tone="warning" icon="alert" className="mr-2 align-middle">
+              {t.unsavedChanges}
+            </Badge>
+          )}
           {t.saveCreates} <b className="text-ink font-medium">{t.saveNewVersion}</b>
           {t.saveCreatesTail}
         </p>
@@ -298,11 +363,14 @@ function PatternEditor({ defaults, patterns, initial, onSaved }) {
 function PatternVersions({ patterns, onChanged, onEdit }) {
   const { d, lang } = useI18n();
   const t = d.L.m2;
+  const [savedId, setSavedId] = useSavedMark();
   const activate = async (p) => {
     try {
       await apiFetch(`/api/patterns/${p.id}/activate`, { method: 'POST' });
-      toast.success(t.aiNowUses(p.name, p.version));
-      onChanged();
+      const message = t.aiNowUses(p.name, p.version);
+      toast.success(message);
+      setSavedId(p.id);
+      onChanged(message);
     } catch (err) {
       toast.error(err.message);
     }
@@ -328,6 +396,7 @@ function PatternVersions({ patterns, onChanged, onEdit }) {
                 <Badge tone={STATUS[p.status] || 'neutral'}>{t.patternStatus[p.status] || p.status}</Badge>
                 {p.overrides.length > 0 && <Badge tone="brand">{t.exclusiveThemes(p.overrides.length)}</Badge>}
                 {p.voceroOverrides?.length > 0 && <Badge tone="brand">{t.exclusiveVoceros(p.voceroOverrides.length)}</Badge>}
+                {savedId === p.id && <Badge tone="success" icon="check">{t.savedMark}</Badge>}
               </div>
               <p className="text-xs text-muted mt-1">
                 {p.createdBy?.name || '—'} · {formatDate(p.createdAt, lang)} ·{' '}
@@ -360,9 +429,10 @@ function PatternVersions({ patterns, onChanged, onEdit }) {
 
 // ------------------------------------------------ Excepciones por escenario
 
-function PatternOverrides({ patterns }) {
+function PatternOverrides({ patterns, onNotify }) {
   const { d } = useI18n();
   const t = d.L.m2;
+  const [savedId, setSavedId] = useSavedMark();
   const { data, loading, reload } = useApiData('/api/patterns/themes');
   const themes = useMemo(() => data?.themes || [], [data]);
   const [tenantFilter, setTenantFilter] = useState('all');
@@ -373,7 +443,10 @@ function PatternOverrides({ patterns }) {
     try {
       if (!patternId) await apiFetch(`/api/pattern-overrides/${theme.id}`, { method: 'DELETE' });
       else await apiFetch(`/api/pattern-overrides/${theme.id}`, { method: 'PUT', body: { patternId } });
-      toast.success(patternId ? t.themeExclusiveToast(theme.title) : t.themeActiveToast(theme.title));
+      const message = patternId ? t.themeExclusiveToast(theme.title) : t.themeActiveToast(theme.title);
+      toast.success(message);
+      setSavedId(theme.id);
+      onNotify?.(message);
       reload();
     } catch (err) {
       toast.error(err.message);
@@ -408,6 +481,7 @@ function PatternOverrides({ patterns }) {
                   <div className="text-sm font-medium text-ink truncate">{th.title}</div>
                   <div className="text-xs text-muted">{th.tenant.name}</div>
                 </div>
+                {savedId === th.id && <Badge tone="success" icon="check">{t.savedMark}</Badge>}
                 {th.override && <Badge tone="brand" icon="sliders">{t.exclusive}</Badge>}
                 <select className="input md:w-72" value={th.override?.patternId || ''} onChange={(e) => change(th, e.target.value)}>
                   <option value="">{t.usesActivePattern}</option>
@@ -427,9 +501,10 @@ function PatternOverrides({ patterns }) {
 
 // ------------------------------------------------ Excepciones por vocero
 
-function VoceroOverrides({ patterns }) {
+function VoceroOverrides({ patterns, onNotify }) {
   const { d } = useI18n();
   const t = d.L.m2;
+  const [savedId, setSavedId] = useSavedMark();
   const tenantsData = useApiData('/api/patterns/themes');
   const tenants = useMemo(
     () => [...new Map((tenantsData.data?.themes || []).map((t) => [t.tenant.id, t.tenant])).values()],
@@ -443,7 +518,10 @@ function VoceroOverrides({ patterns }) {
     try {
       if (!patternId) await apiFetch(`/api/pattern-overrides/vocero/${v.id}`, { method: 'DELETE' });
       else await apiFetch(`/api/pattern-overrides/vocero/${v.id}`, { method: 'PUT', body: { patternId } });
-      toast.success(patternId ? t.voceroExclusiveToast(v.name) : t.voceroGeneralToast(v.name));
+      const message = patternId ? t.voceroExclusiveToast(v.name) : t.voceroGeneralToast(v.name);
+      toast.success(message);
+      setSavedId(v.id);
+      onNotify?.(message);
       voceros.reload();
     } catch (err) {
       toast.error(err.message);
@@ -480,6 +558,7 @@ function VoceroOverrides({ patterns }) {
                   {v.area ? ` · ${d.L.dir.areaLabels[v.area] || v.area}` : ''}
                 </div>
               </div>
+              {savedId === v.id && <Badge tone="success" icon="check">{t.savedMark}</Badge>}
               {v.override && <Badge tone="brand" icon="person">{t.exclusive}</Badge>}
               <select className="input md:w-72" value={v.override?.patternId || ''} onChange={(e) => change(v, e.target.value)}>
                 <option value="">{t.usesGeneralPattern}</option>
@@ -506,6 +585,9 @@ export default function EditorRubrica() {
   const [tab, setTab] = useState('editor');
   const [editFrom, setEditFrom] = useState(null);
   const [editorKey, setEditorKey] = useState(0);
+  const [notice, setNotice] = useState(null);
+  const notify = (message) => setNotice({ message, at: Date.now() });
+  const closeNotice = useCallback(() => setNotice(null), []);
 
   const patterns = useMemo(() => data?.patterns || [], [data]);
   const active = patterns.find((p) => p.status === 'ACTIVE');
@@ -529,6 +611,8 @@ export default function EditorRubrica() {
         description={t.patternsSub}
         actions={active && <Badge tone="success" icon="check">{t.aiUsing(active.name, active.version)}</Badge>}
       />
+
+      <SavedBanner key={notice?.at} notice={notice} onClose={closeNotice} />
 
       <Segmented
         className="mb-6"
@@ -555,13 +639,21 @@ export default function EditorRubrica() {
           defaults={data.defaults}
           patterns={patterns}
           initial={editFrom}
-          onSaved={() => {
+          onSaved={(message) => {
+            notify(message);
             reload();
             setTab('versions');
           }}
         />
       ) : tab === 'versions' ? (
-        <PatternVersions patterns={patterns} onChanged={reload} onEdit={editPattern} />
+        <PatternVersions
+          patterns={patterns}
+          onChanged={(message) => {
+            if (message) notify(message);
+            reload();
+          }}
+          onEdit={editPattern}
+        />
       ) : (
         <div className="space-y-6">
           <div className="rounded-xl bg-subtle/60 px-4 py-3 text-[13px] text-muted flex items-start gap-2">
@@ -569,8 +661,8 @@ export default function EditorRubrica() {
             {t.priorityLead}<b className="text-ink font-medium">{t.priorityVocero}</b> → <b className="text-ink font-medium">{t.priorityScenario}</b> →{' '}
             <b className="text-ink font-medium">{t.priorityActive}</b>.
           </div>
-          <PatternOverrides patterns={patterns} />
-          <VoceroOverrides patterns={patterns} />
+          <PatternOverrides patterns={patterns} onNotify={notify} />
+          <VoceroOverrides patterns={patterns} onNotify={notify} />
         </div>
       )}
 

@@ -129,7 +129,7 @@ export function speak(text, voice, { onStart, onEnd, onError } = {}) {
     utterance.lang = 'es-CL';
   }
   // Velocidad del entrevistador (1 = normal). Las voces básicas suenan mejor algo más lentas que las naturales
-  utterance.rate = voice && isNaturalVoice(voice) ? 1.15 : 1.1;
+  utterance.rate = voice && isNaturalVoice(voice) ? 1.45 : 1.35;
   utterance.pitch = 1;
 
   utterance.onstart = () => onStart?.();

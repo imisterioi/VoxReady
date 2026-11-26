@@ -63,6 +63,8 @@ async function waitFor(predicate, timeout = 5000) {
 const verdict = () => ({
   coherencia: Object.fromEntries(Object.keys(DEFAULT_CONFIG.coherence.criteria).map((key) => [key, 80])),
   empatia: Object.fromEntries(Object.keys(DEFAULT_CONFIG.empathy.criteria).map((key) => [key, 70])),
+  escucha: Object.fromEntries(Object.entries(DEFAULT_CONFIG.listening.criteria).filter(([, c]) => !c.source).map(([k]) => [k, 70])),
+  presion: Object.fromEntries(Object.keys(DEFAULT_CONFIG.pressure.criteria).map((k) => [k, 70])),
   resumen: 'Buen desempeño.',
   cita: 'Cita.',
   fortalezas: ['Claridad'],
@@ -184,7 +186,9 @@ test('con audio que sostiene el texto, el WPM se verifica y puntúa', async () =
 
     assert.equal(wpm.verified, true);
     assert.equal(wpm.score, 100); // 150 pal/min está en el rango ideal (120-165)
-    assert.ok(wpm.value > 120 && wpm.value < 180, `wpm inesperado: ${wpm.value}`);
+    // El vocero ve «Fluidez al hablar» de 0 a 100; las palabras/min reales quedan en `raw`.
+    assert.equal(wpm.value, 100);
+    assert.ok(wpm.raw > 120 && wpm.raw < 180, `wpm inesperado: ${wpm.raw}`);
     assert.equal(voice.coverage, 1);
     assert.equal(row.report.coverage.wpmVerified, true);
     assert.equal(row.report.audit.metricSources.wpm, 'server-audio');

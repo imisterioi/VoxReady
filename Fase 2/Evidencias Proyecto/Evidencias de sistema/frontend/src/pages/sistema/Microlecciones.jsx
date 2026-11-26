@@ -20,7 +20,7 @@ import { lessonVideoUrl, parseLessonVideoUrl } from '../../lib/practice/lessonVi
 // - El archivo elegido se sube AL GUARDAR (con progreso real): así no quedan archivos huérfanos, la
 //   exclusividad se aplica en orden (quitar una fuente → añadir la otra) y no hay que guardar antes
 //   para poder elegir el video.
-const AREAS = ['expression', 'voice', 'coherence', 'empathy', 'GENERAL'];
+const AREAS = ['expression', 'voice', 'coherence', 'empathy', 'listening', 'pressure', 'GENERAL'];
 const EMPTY = { title: '', description: '', language: 'es', areas: [], active: true, videoUrl: '' };
 
 // Subida del video con progreso real (fetch no expone el progreso de subida).

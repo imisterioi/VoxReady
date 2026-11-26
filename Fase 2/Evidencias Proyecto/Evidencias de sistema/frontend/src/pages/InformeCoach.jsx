@@ -23,7 +23,7 @@ function recentSessionId() {
   }
 }
 
-const AREA_ICONS = { expression: 'person', voice: 'mic', coherence: 'message', empathy: 'users' };
+const AREA_ICONS = { expression: 'person', voice: 'mic', coherence: 'message', empathy: 'users', listening: 'eye', pressure: 'shield' };
 
 // Resaltado de un texto revisado: celeste (nunca el verde/rojo reservado a las puntuaciones).
 const HIGHLIGHT =
@@ -75,6 +75,29 @@ function formatSeconds(value) {
   if (value == null) return '—';
   const total = Math.round(value);
   return total >= 60 ? `${Math.floor(total / 60)} min ${total % 60} s` : `${total} s`;
+}
+
+// Datos complementarios de un criterio (racha máxima, encogimiento, emociones, palabras/min)
+function CriterionExtra({ detail: d, t }) {
+  const parts = [];
+  if (d.key === 'wpm' && d.raw != null) parts.push(t.extraWpm(d.raw));
+  if (d.outOfRangeMaxSec != null) parts.push(t.extraOutOfRange(d.outOfRangeMaxSec));
+  if (d.offPoseMaxSec != null) parts.push(t.extraOffPose(d.offPoseMaxSec));
+  if (d.shrinkPct != null) parts.push(t.extraShrink(d.shrinkPct));
+  if (d.emotions) {
+    const total = Object.values(d.emotions).reduce((a, b) => a + (Number(b) || 0), 0);
+    if (total > 0) {
+      parts.push(
+        Object.entries(d.emotions)
+          .filter(([, v]) => v > 0)
+          .sort((a, b) => b[1] - a[1])
+          .map(([k, v]) => `${t.emotionNames?.[k] || k} ${Math.round((v / total) * 100)}%`)
+          .join(' · '),
+      );
+    }
+  }
+  if (!parts.length) return null;
+  return <div className="text-[11px] text-faint mt-0.5 leading-snug">{parts.join(' · ')}</div>;
 }
 
 // Informe tipo coach de una sesión real (GET /api/sessions/:id).
@@ -304,6 +327,21 @@ export default function InformeCoach({ audience = 'user' }) {
 
   const backTo = audience === 'admin' ? '/admin/practicas' : audience === 'master' || isReview ? '/maestro/etiquetado' : null;
 
+  // Descarga del informe: abre el diálogo de impresión del navegador, que permite guardarlo como PDF.
+  // El título del documento define el nombre sugerido del archivo.
+  const downloadReport = () => {
+    const previous = document.title;
+    const who = (session.user?.name || '').trim();
+    const date = new Date(session.completedAt || session.createdAt || Date.now()).toISOString().slice(0, 10);
+    document.title = [t.reportFileTitle, who, session.theme?.title, date].filter(Boolean).join(' - ');
+    const restore = () => {
+      document.title = previous;
+      window.removeEventListener('afterprint', restore);
+    };
+    window.addEventListener('afterprint', restore);
+    window.print();
+  };
+
   const retry = () => {
     if (session.theme) {
       sessionStorage.setItem('voxready_escenario_seleccionado', JSON.stringify({ id: session.theme.id, title: session.theme.title }));
@@ -314,7 +352,7 @@ export default function InformeCoach({ audience = 'user' }) {
   return (
     <>
       {isVocero ? (
-        <PracticeSteps />
+        <div className="print:hidden"><PracticeSteps /></div>
       ) : (
         <Button variant="ghost" size="sm" icon="arrowLeft" to={backTo} className="-ml-3 mb-6">
           {t.back}
@@ -335,6 +373,9 @@ export default function InformeCoach({ audience = 'user' }) {
             </>
           ) : isVocero ? (
             <>
+              <Button variant="secondary" icon="download" onClick={downloadReport} className="print:hidden">
+                {t.downloadReport}
+              </Button>
               <Button variant="secondary" icon="chart" to="/vocero/progreso">
                 {t.progressL}
               </Button>
@@ -342,7 +383,11 @@ export default function InformeCoach({ audience = 'user' }) {
                 {t.redo}
               </Button>
             </>
-          ) : null
+          ) : (
+            <Button variant="secondary" icon="download" onClick={downloadReport} className="print:hidden">
+              {t.downloadReport}
+            </Button>
+          )
         }
       />
 
@@ -461,7 +506,7 @@ export default function InformeCoach({ audience = 'user' }) {
 
       {/* Grabación y lecciones recomendadas */}
       <div className={cx('grid grid-cols-1 gap-6 mb-6', isVocero && 'lg:grid-cols-[1.4fr_1fr]')}>
-        <Card padded={false} className="overflow-hidden">
+        <Card padded={false} className="overflow-hidden print:hidden">
           <div className="p-6 pb-4">
             <CardHeader className="mb-0" title={t.recordingTitle} description={t.recordingDesc} />
           </div>
@@ -494,7 +539,7 @@ export default function InformeCoach({ audience = 'user' }) {
 
       {/* Detalle por área */}
       <h2 className="text-[15px] font-semibold text-ink mb-4">{t.detail}</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6 print:grid-cols-3">
         {view.areas.map((area) => (
           <Card
             key={area.key}
@@ -533,15 +578,16 @@ export default function InformeCoach({ audience = 'user' }) {
                 {area.details
                   .filter((d) => d.value != null || d.verified === false)
                   .map((d) => (
-                    <li key={d.key} className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-muted truncate">{d.label}</span>
+                    <li key={d.key} className="text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted truncate">{t.criterionLabels?.[d.key] || d.label}</span>
                       {d.value == null ? (
                         // Criterio no verificable (p. ej. velocidad sin audio): se dice, no se puntúa.
                         <span className="text-faint italic" title={d.reason || ''}>{t.notVerified}</span>
                       ) : (
                         <span className="flex items-center gap-1.5">
                           <span className={cx('tabular-nums font-medium', d.score >= 70 ? 'text-ink' : d.score >= 40 ? 'text-warning' : 'text-danger')}>
-                            {d.value} {d.unit === '%' || d.unit === '°' || d.unit === 's' ? d.unit : ''}
+                            {d.value} {['%', '°', 's', '/100'].includes(d.unit) ? d.unit : String(d.unit || '').startsWith('%') ? '%' : ''}
                           </span>
                           {d.delta !== 0 && (
                             <span className={cx('flex items-center gap-0.5 text-[11px] tabular-nums font-medium', d.delta > 0 ? 'text-success' : 'text-danger')}>
@@ -551,6 +597,8 @@ export default function InformeCoach({ audience = 'user' }) {
                           )}
                         </span>
                       )}
+                      </div>
+                      <CriterionExtra detail={d} t={t} />
                     </li>
                   ))}
               </ul>

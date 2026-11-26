@@ -64,6 +64,7 @@ export default function SesionPractica() {
   // Evita repetir el mismo aviso en consola durante toda la práctica.
   const loggedRef = useRef(new Set());
   const audioRef = useRef(null);
+  const interruptionsRef = useRef(null);
   const poseRef = useRef(null);
   // Origen temporal común: instante en que arranca el grabador que produce <id>.audio.webm.
   const audioOriginRef = useRef(0);
@@ -359,6 +360,10 @@ export default function SesionPractica() {
     if (finishingRef.current) return;
     questionRef.current = text;
     poseRef.current?.beginSegment(); // el tramo incluye la pregunta: también importa cómo la escucha
+    // La pose inicial se marca al comenzar la primera pregunta
+    if (poseRef.current && !poseRef.current.baseline && turnsRef.current.length === 0) poseRef.current.markBaseline();
+    // Escucha activa: mientras el entrevistador habla se cuentan las interrupciones del vocero
+    audioRef.current?.startGuard();
     setQuestion(text);
     setTyped('');
     setPhase('speaking');
@@ -389,6 +394,7 @@ export default function SesionPractica() {
     answerStartRef.current = audioOriginRef.current
       ? Math.round(performance.now() - audioOriginRef.current)
       : null;
+    interruptionsRef.current = audioRef.current?.stopGuard() ?? null;
     audioRef.current?.startAnswer();
 
     // Control de silencios: intervención de rescate y fin de respuesta
@@ -482,6 +488,8 @@ export default function SesionPractica() {
     }
     // El video del tramo se consume UNA sola vez (endSegment cierra el segmento actual).
     const video = poseRef.current?.endSegment() ?? null;
+    const interruptions = interruptionsRef.current;
+    interruptionsRef.current = null;
     const turnMetrics = (answerText) => {
       const analyzed = analyzeText(answerText);
       const minutes = (audio?.speakingMs || 0) / 60000;
@@ -495,6 +503,8 @@ export default function SesionPractica() {
         speakingMs: audio?.speakingMs ?? null,
         longPauses: audio?.longPauses ?? 0,
         volumeVariation: audio?.volumeVariation ?? null,
+        volumeOutMaxMs: audio?.volumeOutMaxMs ?? null,
+        interruptions: interruptions,
         // Mirada y risa durante esta pregunta y su respuesta (análisis de sensibilidad)
         video,
       };
@@ -568,6 +578,8 @@ export default function SesionPractica() {
     const words = sum('words');
     const latencies = turns.map((turn) => turn.metrics.latencyMs).filter((v) => v != null);
     const variations = turns.map((turn) => turn.metrics.volumeVariation).filter((v) => v != null);
+    const outMax = turns.map((turn) => turn.metrics.volumeOutMaxMs).filter((v) => v != null);
+    const interrupts = turns.map((turn) => turn.metrics.interruptions).filter((v) => v != null);
     const pose = poseRef.current?.summary() || { body: { available: false }, lighting: { average: null } };
 
     return {
@@ -579,6 +591,8 @@ export default function SesionPractica() {
         longPauses: sum('longPauses'),
         longPausesPerAnswer: turns.length ? sum('longPauses') / turns.length : null,
         volumeVariation: variations.length ? variations.reduce((a, b) => a + b, 0) / variations.length : null,
+        volumeOutMaxMs: outMax.length ? Math.max(...outMax) : null,
+        interruptions: interrupts.length ? interrupts.reduce((a, b) => a + b, 0) : null,
         avgLatencyMs: latencies.length ? latencies.reduce((a, b) => a + b, 0) / latencies.length : null,
         speakingSeconds: Math.round(speakingMin * 60),
         transcription: textModeRef.current ? 'texto' : 'voz',

@@ -17,7 +17,11 @@
 //   · comentario adicional (opcional: si llega vacío se BORRA el anterior).
 //   · NUNCA la puntuación de un área ni el puntaje global: se derivan aquí con la rúbrica del informe.
 
-const AREAS = ['expression', 'voice', 'coherence', 'empathy'];
+const AREAS = ['expression', 'voice', 'coherence', 'empathy', 'listening', 'pressure'];
+
+// Áreas del informe (los informes antiguos tienen cuatro; los nuevos, seis)
+const areaKeysOf = (report) =>
+  Array.isArray(report?.areas) && report.areas.length ? report.areas.map((area) => area.key).filter(Boolean) : AREAS.slice(0, 4);
 
 const num = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 const round = (value) => (value == null || !Number.isFinite(value) ? null : Math.round(value));
@@ -146,10 +150,11 @@ function areaScore(report, draft, key) {
 // `report` es el informe ORIGINAL de la IA (fuente de la rúbrica: áreas, subcriterios y pesos).
 function buildReview(report, draft, { reviewer = null, at = null, sentAt = null } = {}) {
   const normalized = normalizeDraft(draft);
+  const keys = areaKeysOf(report);
 
   const scores = {};
   const areaSources = {};
-  for (const key of AREAS) {
+  for (const key of keys) {
     const resolved = areaScore(report, normalized, key);
     scores[key] = resolved.score;
     areaSources[key] = resolved.source;
@@ -158,7 +163,7 @@ function buildReview(report, draft, { reviewer = null, at = null, sentAt = null 
   // Puntaje global: media ponderada de las áreas, con los pesos del informe original.
   const global = round(
     weightedAverage(
-      AREAS.map((key) => ({
+      keys.map((key) => ({
         weight: report?.areas?.find((area) => area.key === key)?.weight ?? report?.weights?.[key] ?? 0,
         score: scores[key],
       })),
@@ -167,7 +172,7 @@ function buildReview(report, draft, { reviewer = null, at = null, sentAt = null 
 
   // Diferencia con la IA por área (mide el acuerdo IA-humano; se conserva el campo histórico).
   const agreement = Object.fromEntries(
-    AREAS.map((key) => {
+    keys.map((key) => {
       const ai = report?.areas?.find((area) => area.key === key)?.score ?? null;
       return [key, ai != null && scores[key] != null ? Math.abs(ai - scores[key]) : null];
     }),

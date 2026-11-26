@@ -162,7 +162,9 @@ test('POST /api/library/themes guarda la configuración válida tal como se norm
     followUps: 1,
     estimatedMinutes: 5,
     interviewerRole: '',
+    spokespersonRole: '',
     maxAnswerSeconds: null,
+    customQuestions: [],
   });
   assert.equal(res.body.theme.interview.questionCount, 3);
   assert.equal(res.body.theme.interview.estimatedMinutes, 5, 'la duración llega a la respuesta de la API');
@@ -316,7 +318,9 @@ test('POST /api/themes (index.js) guarda la configuración válida y los valores
     followUps: 1,
     estimatedMinutes: 5,
     interviewerRole: '',
+    spokespersonRole: '',
     maxAnswerSeconds: null,
+    customQuestions: [],
   });
 
   const withoutConfig = await run(body(undefined));

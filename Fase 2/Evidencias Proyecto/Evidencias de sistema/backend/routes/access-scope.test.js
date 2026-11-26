@@ -233,7 +233,7 @@ test('SYSTEM filtra los usuarios por organización', async () => {
   const res = await call(app, '/api/users?tenantId=T2', 'staff');
   assert.equal(res.status, 200);
   assert.equal(res.body.users[0].sessions, 3);
-  assert.deepEqual(calls.user.at(-1).where, { tenantId: 'T2' });
+  assert.deepEqual(calls.user.at(-1).where, { tenantId: 'T2', anonymizedAt: null });
 });
 
 test('un ADMIN ignora ?tenantId= y sigue viendo solo su organización', async () => {

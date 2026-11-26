@@ -3,10 +3,10 @@
 //  - Solo un patrón está ACTIVO: es el que usa la IA por defecto.
 //  - Un escenario concreto de una organización puede tener un patrón excepcional.
 const { requireAuth } = require('../auth');
-const { DEFAULT_CONFIG, resolveConfig, deepMerge } = require('../ai/patternConfig');
+const { AREA_KEYS, DEFAULT_CONFIG, resolveConfig, deepMerge, normalizeConfig } = require('../ai/patternConfig');
 
 const fail = (res, code, mensaje) => res.status(code).json({ status: 'error', mensaje });
-const AREAS = ['expression', 'voice', 'coherence', 'empathy'];
+const AREAS = AREA_KEYS;
 
 function toApiPattern(p) {
   return {
@@ -32,9 +32,13 @@ function toApiPattern(p) {
 
 function validateConfig(config) {
   if (!config?.areas) return 'Falta la configuración de las áreas.';
+  for (const k of AREAS) {
+    const w = Number(config.areas[k]);
+    if (!Number.isFinite(w) || w < 0 || w > 100) return `El peso del área "${k}" no es válido.`;
+  }
   const total = AREAS.reduce((s, k) => s + Number(config.areas[k] || 0), 0);
   if (total !== 100) return `Los pesos de las áreas deben sumar 100% (suman ${total}%).`;
-  for (const area of ['voice', 'expression', 'coherence', 'empathy']) {
+  for (const area of AREAS) {
     const criteria = config[area]?.criteria || {};
     const sum = Object.values(criteria).reduce((s, c) => s + Number(c.weight || 0), 0);
     if (sum <= 0) return `El área "${area}" necesita al menos un criterio con peso mayor a 0.`;
@@ -65,7 +69,7 @@ module.exports = function registerPatternRoutes(app, prisma) {
     try {
       const { name, activate = false } = req.body || {};
       // Lo que no venga en la configuración se completa con los valores recomendados
-      const config = deepMerge(DEFAULT_CONFIG, req.body?.config || {});
+      const config = normalizeConfig(deepMerge(DEFAULT_CONFIG, req.body?.config || {}));
       const invalid = validateConfig(config);
       if (invalid) return fail(res, 400, invalid);
 

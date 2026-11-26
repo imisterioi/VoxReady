@@ -14,21 +14,21 @@ const {
   MAX_MODELS,
 } = require('./evaluatorModels');
 
-const OBSOLETOS = ['moonshotai/kimi-k3', 'nvidia/nemotron-3-super-120b-a12b', 'google/gemma-4-31b-it'];
+const OBSOLETOS = ['moonshotai/kimi-k3', 'nvidia/nemotron-3-super-120b-a12b', 'google/gemma-4-31b-it', 'z-ai/glm-5.3', 'openai/gpt-oss-20b', 'deepseek-ai/deepseek-v4.1-flash'];
 
 test('las variables de entorno tienen prioridad sobre los valores por defecto', () => {
   const models = evaluatorModels({ env: { AI_EVAL_MODEL: 'modelo/a', AI_EVAL_FALLBACK_MODEL: 'modelo/b' } });
   // Los modelos configurados van primero y los defaults validados quedan como red de seguridad.
   assert.deepEqual(models.slice(0, 2), ['modelo/a', 'modelo/b']);
-  assert.ok(models.includes('z-ai/glm-5.3'));
+  assert.ok(models.includes('minimaxai/minimax-m3.1-flash'));
   assert.equal(evaluatorModelsSource({ env: { AI_EVAL_MODEL: 'modelo/a' } }).envOverrides, true);
 });
 
 test('sin variables de entorno se usan el modelo validado y los candidatos verificados', () => {
   assert.deepEqual(evaluatorModels({ env: {} }), DEFAULT_MODELS);
-  assert.deepEqual(VALIDATED_DEFAULTS, ['z-ai/glm-5.3'], 'único modelo validado a tamaño real de informe');
+  assert.deepEqual(VALIDATED_DEFAULTS, ['minimaxai/minimax-m3.1-flash'], 'único modelo validado a tamaño real de informe');
   assert.ok(CANDIDATE_DEFAULTS.length > 0, 'hay candidatos verificados que se consultan en paralelo');
-  assert.deepEqual(evaluatorModels({ env: {} }).slice(0, 1), ['z-ai/glm-5.3']);
+  assert.deepEqual(evaluatorModels({ env: {} }).slice(0, 1), ['minimaxai/minimax-m3.1-flash']);
 });
 
 test('los identificadores obsoletos del incidente no reaparecen por ningún camino', () => {
@@ -49,20 +49,20 @@ test('la lista se sanea: espacios, vacíos, duplicados y tope', () => {
   assert.deepEqual(cleanList([' a ', '', '   ', 'a', 'b,c']), ['a', 'b', 'c']);
   assert.equal(cleanList(['1', '2', '3', '4', '5', '6', '7']).length, MAX_MODELS, 'tope defensivo de modelos');
   // Un respaldo vacío no reintroduce nada y el duplicado se colapsa.
-  assert.deepEqual(evaluatorModels({ env: { AI_EVAL_MODEL: 'z-ai/glm-5.3', AI_EVAL_FALLBACK_MODEL: '' } }), [
-    'z-ai/glm-5.3',
+  assert.deepEqual(evaluatorModels({ env: { AI_EVAL_MODEL: 'minimaxai/minimax-m3.1-flash', AI_EVAL_FALLBACK_MODEL: '' } }), [
+    'minimaxai/minimax-m3.1-flash',
     ...CANDIDATE_DEFAULTS.slice(0, MAX_MODELS - 1),
   ]);
   assert.deepEqual(evaluatorModels({ env: { AI_EVAL_MODEL: 'x', AI_EVAL_FALLBACK_MODEL: 'x' } }).slice(0, 2), [
     'x',
-    'z-ai/glm-5.3',
+    'minimaxai/minimax-m3.1-flash',
   ]);
 });
 
 test('AI_EVAL_MODELS habilita varios modelos en paralelo (lista separada por comas)', () => {
   const models = evaluatorModels({ env: { AI_EVAL_MODELS: 'modelo/a, modelo/b ,modelo/c' } });
   assert.deepEqual(models.slice(0, 3), ['modelo/a', 'modelo/b', 'modelo/c'], 'se consultan TODOS los habilitados');
-  assert.ok(models.includes('z-ai/glm-5.3'), 'el validado sigue como red de seguridad');
+  assert.ok(models.includes('minimaxai/minimax-m3.1-flash'), 'el validado sigue como red de seguridad');
   assert.ok(models.length <= MAX_MODELS);
   // La lista del entorno manda y se combina con las otras dos variables (sin duplicados).
   assert.deepEqual(evaluatorModels({ env: { AI_EVAL_MODELS: 'a,b', AI_EVAL_MODEL: 'c' } }).slice(0, 3), ['a', 'b', 'c']);

@@ -22,6 +22,8 @@ function juicioCompleto() {
   return {
     coherencia: Object.fromEntries(Object.keys(DEFAULT_CONFIG.coherence.criteria).map((clave) => [clave, 80])),
     empatia: Object.fromEntries(Object.keys(DEFAULT_CONFIG.empathy.criteria).map((clave) => [clave, 70])),
+    escucha: Object.fromEntries(Object.entries(DEFAULT_CONFIG.listening.criteria).filter(([, c]) => !c.source).map(([k]) => [k, 70])),
+    presion: Object.fromEntries(Object.keys(DEFAULT_CONFIG.pressure.criteria).map((k) => [k, 70])),
     resumen: REF,
     cita: REF,
     fortalezas: [REF],

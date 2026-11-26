@@ -8,7 +8,7 @@ import { displayEmail } from '../../lib/displayEmail';
 import useApiData from '../../hooks/useApiData';
 import Icon from '../../components/Icon';
 import UserFormModal from '../../components/UserFormModal';
-import { Avatar, Badge, Button, Card, EmptyState, PageHeader, Segmented, Table } from '../../components/ui';
+import { Avatar, Badge, Button, Card, EmptyState, Modal, PageHeader, Segmented, Table } from '../../components/ui';
 
 export default function Usuarios() {
   const { d } = useI18n();
@@ -39,6 +39,23 @@ export default function Usuarios() {
       return matchesRole && matchesTenant && matchesQuery;
     });
   }, [users, roleFilter, tenantFilter, query]);
+
+  const [deleting, setDeleting] = useState(null);
+  const [removing, setRemoving] = useState(false);
+  const remove = async () => {
+    const u = deleting;
+    try {
+      setRemoving(true);
+      await apiFetch(`/api/users/${u.id}`, { method: 'DELETE' });
+      toast.success(t.deletedToast(u.name));
+      setDeleting(null);
+      usersData.reload();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setRemoving(false);
+    }
+  };
 
   const toggle = async (u) => {
     const next = u.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
@@ -139,9 +156,14 @@ export default function Usuarios() {
                   <td className="py-3.5 px-6 text-xs text-muted whitespace-nowrap">{timeAgo(u.lastLoginAt, d)}</td>
                   <td className="py-3.5 px-6 text-right">
                     {!isMe && (
-                      <Button variant="ghost" size="sm" onClick={() => toggle(u)}>
-                        {u.status === 'SUSPENDED' ? t.reactivate : t.suspend}
-                      </Button>
+                      <div className="inline-flex gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => toggle(u)}>
+                          {u.status === 'SUSPENDED' ? t.reactivate : t.suspend}
+                        </Button>
+                        <Button variant="ghost" size="sm" icon="trash" className="text-danger" onClick={() => setDeleting(u)}>
+                          {t.delete}
+                        </Button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -150,6 +172,23 @@ export default function Usuarios() {
           </Table>
         )}
       </Card>
+
+      <Modal
+        open={Boolean(deleting)}
+        onClose={() => !removing && setDeleting(null)}
+        title={t.deleteTitle}
+        description={deleting ? t.deleteDesc(deleting.name, displayEmail(deleting)) : ''}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setDeleting(null)} disabled={removing}>
+              {t.cancel}
+            </Button>
+            <Button variant="danger" icon="trash" onClick={remove} disabled={removing}>
+              {removing ? t.deleting : t.deleteConfirm}
+            </Button>
+          </>
+        }
+      />
 
       <UserFormModal
         open={creating}

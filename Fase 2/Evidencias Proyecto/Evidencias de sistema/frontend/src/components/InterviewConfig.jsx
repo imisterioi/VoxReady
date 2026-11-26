@@ -1,5 +1,6 @@
 import { useI18n } from '../lib/i18n';
-import { Badge, Field, Segmented } from './ui';
+import Icon from './Icon';
+import { Badge, Button, Field, Segmented } from './ui';
 import { DEFAULT_MINUTES, MINUTES_RANGE, interviewConfigIssues, maxTurnsPotential, TURN_LIMIT } from '../lib/practice/interviewLimits';
 
 // Configuración de la entrevista de un escenario (misma estructura que backend/ai/interviewConfig.js):
@@ -24,8 +25,13 @@ export const DEFAULT_INTERVIEW = {
   // límite de tiempo, así que un escenario antiguo sin duración guardada también usa 5.
   estimatedMinutes: DEFAULT_MINUTES,
   interviewerRole: '',
+  spokespersonRole: '',
   maxAnswerSeconds: '', // vacío = sin límite
+  customQuestions: [], // preguntas propias del escenario (se hacen primero, en orden)
 };
+
+export const MAX_CUSTOM_QUESTIONS = 12;
+const MAX_CUSTOM_CHARS = 300;
 
 const MINUTES_PER_TURN = 1.2;
 const MAX_TURNS = 30;
@@ -44,7 +50,9 @@ export function toInterviewForm(interview) {
     // escenario no tenía duración guardada). El formulario nunca queda vacío.
     estimatedMinutes: interview.estimatedMinutes ?? DEFAULT_MINUTES,
     interviewerRole: interview.interviewerRole || '',
+    spokespersonRole: interview.spokespersonRole || '',
     maxAnswerSeconds: interview.maxAnswerSeconds ?? '',
+    customQuestions: Array.isArray(interview.customQuestions) ? interview.customQuestions : [],
   };
 }
 
@@ -59,8 +67,60 @@ export function toInterviewPayload(form) {
     // valida (422 si no es válida) y el formulario bloquea el guardado antes de enviarla.
     estimatedMinutes: Number(form.estimatedMinutes),
     interviewerRole: form.interviewerRole.trim(),
+    spokespersonRole: (form.spokespersonRole || '').trim(),
     maxAnswerSeconds: numberOrNull(form.maxAnswerSeconds),
+    customQuestions: (form.customQuestions || []).map((q) => String(q).trim()).filter(Boolean),
   };
+}
+
+// Editor de preguntas personalizadas: el entrevistador IA las hace primero, en el orden indicado.
+function CustomQuestions({ value = [], onChange, t }) {
+  const list = value.length ? value : [];
+  const update = (i, text) => onChange(list.map((q, j) => (j === i ? text : q)));
+  const remove = (i) => onChange(list.filter((_, j) => j !== i));
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= list.length) return;
+    const next = [...list];
+    [next[i], next[j]] = [next[j], next[i]];
+    onChange(next);
+  };
+  return (
+    <Field label={t.customQuestionsL} hint={t.customQuestionsHint}>
+      <div className="space-y-2">
+        {list.map((q, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <span className="mt-2.5 w-6 shrink-0 text-right text-xs font-semibold tabular-nums text-muted">{i + 1}.</span>
+            <textarea
+              className="textarea min-h-[44px] flex-1"
+              rows={1}
+              maxLength={MAX_CUSTOM_CHARS}
+              value={q}
+              placeholder={t.customQuestionPh}
+              aria-label={t.customQuestionAria(i + 1)}
+              onChange={(e) => update(i, e.target.value)}
+            />
+            <div className="flex flex-col">
+              <button type="button" className="px-1 text-xs text-muted hover:text-ink disabled:opacity-30" disabled={i === 0} onClick={() => move(i, -1)} aria-label={t.moveUp}>
+                ▲
+              </button>
+              <button type="button" className="px-1 text-xs text-muted hover:text-ink disabled:opacity-30" disabled={i === list.length - 1} onClick={() => move(i, 1)} aria-label={t.moveDown}>
+                ▼
+              </button>
+            </div>
+            <button type="button" className="mt-2 text-muted hover:text-danger" onClick={() => remove(i)} aria-label={t.removeQuestion}>
+              <Icon name="trash" size={16} />
+            </button>
+          </div>
+        ))}
+        {list.length < MAX_CUSTOM_QUESTIONS && (
+          <Button type="button" variant="secondary" size="sm" icon="plus" onClick={() => onChange([...list, ''])}>
+            {t.addQuestion}
+          </Button>
+        )}
+      </div>
+    </Field>
+  );
 }
 
 export function InterviewConfigFields({ value, onChange }) {
@@ -139,6 +199,29 @@ export function InterviewConfigFields({ value, onChange }) {
           onChange={set('interviewerRole')}
         />
       </Field>
+
+      <CustomQuestions
+        value={value.customQuestions || []}
+        // Cada pregunta personalizada es una pregunta principal: el total se ajusta para que quepan.
+        onChange={(questions) =>
+          onChange({
+            ...value,
+            customQuestions: questions,
+            questionCount: Math.max(Number(value.questionCount) || 1, questions.filter((q) => q.trim()).length),
+          })
+        }
+        t={t}
+      />
+
+      <Field label={t.spokespersonL} hint={t.spokespersonHint}>
+        <input
+          className="input"
+          maxLength={120}
+          value={value.spokespersonRole || ''}
+          placeholder={t.spokespersonPh}
+          onChange={set('spokespersonRole')}
+        />
+      </Field>
     </div>
   );
 }
@@ -165,6 +248,11 @@ export function InterviewSummary({ interview, className }) {
       <Badge tone={levelValue.tone === 'neutral' ? 'outline' : levelValue.tone} icon="zap">
         {t.summaryPressure(level.label.toLowerCase())}
       </Badge>
+      {interview.customQuestions?.length > 0 && (
+        <Badge tone="brand" icon="edit">
+          {t.summaryCustom(interview.customQuestions.length)}
+        </Badge>
+      )}
     </div>
   );
 }

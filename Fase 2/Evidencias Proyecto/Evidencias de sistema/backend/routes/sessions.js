@@ -1039,7 +1039,14 @@ module.exports = function registerSessionRoutes(app, prisma, deps = {}) {
             ? {
                 coherence: config.coherence?.descriptor || null,
                 empathy: config.empathy?.descriptor || null,
-                criteria: { coherence: config.coherence?.criteria || null, empathy: config.empathy?.criteria || null },
+                listening: config.listening?.descriptor || null,
+                pressure: config.pressure?.descriptor || null,
+                criteria: {
+                  coherence: config.coherence?.criteria || null,
+                  empathy: config.empathy?.criteria || null,
+                  listening: config.listening?.criteria || null,
+                  pressure: config.pressure?.criteria || null,
+                },
               }
             : null,
           config,

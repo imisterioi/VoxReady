@@ -5,7 +5,10 @@
 //  - followUps: cuántas repreguntas hace después de cada pregunta principal,
 //  - estimatedMinutes: duración estimada (null = se calcula según las preguntas),
 //  - interviewerRole: quién entrevista (periodista de TV, dirigente sindical…),
-//  - maxAnswerSeconds: tiempo máximo por respuesta (null = sin límite).
+//  - spokespersonRole: quién es el vocero que practica (gerente de la empresa, apoderado…),
+//  - maxAnswerSeconds: tiempo máximo por respuesta (null = sin límite),
+//  - customQuestions: preguntas propias del escenario; el entrevistador las hace primero, en orden,
+//    como preguntas principales (luego continúa con preguntas generadas por la IA).
 
 // Niveles de agresividad del entrevistador.
 //
@@ -102,7 +105,9 @@ const DEFAULTS = {
   // predeterminado de 5 minutos. La estimacion orientativa es `estimateMinutes()` y NO es un limite.
   estimatedMinutes: 5,
   interviewerRole: '',
+  spokespersonRole: '',
   maxAnswerSeconds: null,
+  customQuestions: [],
 };
 
 const LIMITS = {
@@ -112,7 +117,26 @@ const LIMITS = {
   maxAnswerSeconds: [15, 600],
   totalTurns: 30,
   interviewerRole: 120,
+  spokespersonRole: 120,
+  customQuestions: 12,
+  customQuestionChars: 300,
 };
+
+// Preguntas personalizadas: textos no vacíos, recortados y sin duplicados.
+function normalizeCustomQuestions(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of value) {
+    const text = String(item ?? '').replace(/\s+/g, ' ').trim().slice(0, LIMITS.customQuestionChars);
+    const key = text.toLowerCase();
+    if (!text || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+    if (out.length >= LIMITS.customQuestions) break;
+  }
+  return out;
+}
 
 const MINUTES_PER_TURN = 1.2; // pregunta leída en voz alta + respuesta
 
@@ -154,13 +178,18 @@ function normalizeInterviewConfig(input) {
   const raw = isObject(input) ? input : {};
   const followUps = intIn(raw.followUps, LIMITS.followUps, DEFAULTS.followUps);
   const maxQuestions = Math.min(LIMITS.questionCount[1], Math.floor(LIMITS.totalTurns / (1 + followUps)));
+  const customQuestions = normalizeCustomQuestions(raw.customQuestions).slice(0, maxQuestions);
+  const questionCount = intIn(raw.questionCount, [LIMITS.questionCount[0], maxQuestions], DEFAULTS.questionCount);
   return {
     aggressiveness: AGGRESSIVENESS[raw.aggressiveness] ? raw.aggressiveness : DEFAULTS.aggressiveness,
-    questionCount: intIn(raw.questionCount, [LIMITS.questionCount[0], maxQuestions], DEFAULTS.questionCount),
+    // Todas las preguntas personalizadas caben: si hay más que preguntas principales, se amplía.
+    questionCount: Math.max(questionCount, customQuestions.length),
     followUps,
     estimatedMinutes: durationIn(raw.estimatedMinutes),
     interviewerRole: String(raw.interviewerRole ?? '').trim().slice(0, LIMITS.interviewerRole),
+    spokespersonRole: String(raw.spokespersonRole ?? '').trim().slice(0, LIMITS.spokespersonRole),
     maxAnswerSeconds: intIn(raw.maxAnswerSeconds, LIMITS.maxAnswerSeconds, null),
+    customQuestions,
   };
 }
 
@@ -354,6 +383,7 @@ module.exports = {
   INTERVIEW_TIMING,
   EXTRAORDINARY_BY_LEVEL,
   normalizeInterviewConfig,
+  normalizeCustomQuestions,
   resolveInterviewConfig,
   turnPlan,
   totalTurns,

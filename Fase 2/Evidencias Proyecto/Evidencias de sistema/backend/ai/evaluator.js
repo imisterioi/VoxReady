@@ -25,7 +25,14 @@ const EVAL_TEXTS = {
       'Eres un coach experto en vocería y comunicación de crisis. Evalúas entrevistas simuladas de voceros corporativos en español de Chile. ',
     tone: 'Háblale directamente al vocero en segunda persona (tú): "mostraste", "dijiste", nunca "el vocero mostró". ',
     outputLanguage: 'textos en español',
-    areas: { expression: 'Expresión', voice: 'Tono de voz', coherence: 'Coherencia', empathy: 'Empatía' },
+    areas: {
+      expression: 'Expresión',
+      voice: 'Tono de voz',
+      coherence: 'Control del mensaje',
+      empathy: 'Gestión del contexto',
+      listening: 'Escucha activa',
+      pressure: 'Tolerancia a la presión',
+    },
     sources: { camera: 'Cámara (MediaPipe)', mic: 'Micrófono', ai: 'IA evaluadora' },
   },
   en: {
@@ -33,7 +40,14 @@ const EVAL_TEXTS = {
       'You are an expert coach in spokesperson training and crisis communication. You evaluate simulated interviews of corporate spokespeople in English. ',
     tone: 'Address the spokesperson directly in the second person ("you"): "you showed", "you said", never "the spokesperson showed". ',
     outputLanguage: 'texts in English',
-    areas: { expression: 'Expression', voice: 'Voice tone', coherence: 'Coherence', empathy: 'Empathy' },
+    areas: {
+      expression: 'Expression',
+      voice: 'Voice tone',
+      coherence: 'Message control',
+      empathy: 'Context management',
+      listening: 'Active listening',
+      pressure: 'Pressure tolerance',
+    },
     sources: { camera: 'Camera (MediaPipe)', mic: 'Microphone', ai: 'AI evaluator' },
   },
 };
@@ -45,8 +59,8 @@ const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
 // Versión del evaluador y del prompt: se guardan en el informe para rastrear cómo se produjo
 // cada puntaje. NO implican reproducibilidad exacta (el proveedor no es determinista).
-const EVALUATOR_VERSION = '2.0.0';
-const PROMPT_VERSION = 'eval-es-2026-10-v2';
+const EVALUATOR_VERSION = '3.0.0';
+const PROMPT_VERSION = 'eval-es-2026-11-v3';
 
 // La IA respondió algo que no se puede usar como informe (estructura o puntajes inválidos).
 class EvaluationResponseError extends Error {
@@ -91,20 +105,29 @@ function scoreVoice(voice = {}, cfg) {
   const varMin = num(c.variation.idealMin, 35) / 100;
   const varMax = num(c.variation.idealMax, 90) / 100;
   const latMax = num(c.latency.idealMaxSec, 2.5) * 1000;
+  const outMax = num(c.variation.maxOutOfRangeSec, 4);
 
   // La velocidad solo puntúa si viene del audio de la sesión (Whisper). Si no está
   // verificada, el criterio queda EXCLUIDO: no vale 0 ni 100, simplemente no entra en la
   // media ponderada (que reparte su peso entre los criterios que sí se midieron).
   const wpmVerified = voice.wpmSource === 'audio' && Number.isFinite(voice.wpm);
 
+  // Fluidez (0-100): la velocidad medida se traduce a un puntaje; las palabras/min quedan en `raw`.
+  const fluency = wpmVerified ? rangeScore(voice.wpm, wpmMin, wpmMax, wpmMin * 0.5, wpmMax * 1.4) : null;
+  // Variación de volumen: el rango ideal y el tiempo máximo continuo fuera de rango.
+  const variationScore = rangeScore(voice.volumeVariation, varMin, varMax, varMin * 0.3, varMax * 1.7);
+  const outScore = Number.isFinite(voice.volumeOutMaxSec) ? rangeScore(voice.volumeOutMaxSec, 0, outMax, 0, Math.max(outMax * 4, 1)) : null;
+  const variationParts = [variationScore, outScore].filter((v) => v != null);
+
   const details = [
     {
       key: 'wpm',
       label: c.wpm.label,
-      value: wpmVerified ? round(voice.wpm) : null,
-      unit: 'palabras/min',
+      value: fluency != null ? round(fluency) : null,
+      unit: '/100',
+      raw: wpmVerified ? round(voice.wpm) : null,
       weight: num(c.wpm.weight, 0),
-      score: wpmVerified ? rangeScore(voice.wpm, wpmMin, wpmMax, wpmMin * 0.5, wpmMax * 1.4) : null,
+      score: fluency,
       verified: wpmVerified,
       // Motivo legible para la interfaz y para la auditoría (p. ej. NO_AUDIO, TIMEOUT).
       reason: wpmVerified ? null : voice.wpmReason || 'UNVERIFIED',
@@ -130,8 +153,9 @@ function scoreVoice(voice = {}, cfg) {
       label: c.variation.label,
       value: Number.isFinite(voice.volumeVariation) ? round(voice.volumeVariation * 100) : null,
       unit: '%',
+      outOfRangeMaxSec: Number.isFinite(voice.volumeOutMaxSec) ? Number(voice.volumeOutMaxSec.toFixed(1)) : null,
       weight: num(c.variation.weight, 0),
-      score: rangeScore(voice.volumeVariation, varMin, varMax, varMin * 0.3, varMax * 1.7),
+      score: variationParts.length ? variationParts.reduce((a, b) => a + b, 0) / variationParts.length : null,
     },
     {
       key: 'latency',
@@ -157,17 +181,55 @@ function coverageOf(details = []) {
 
 // ------------------------------------------------ Expresión corporal (reglas)
 
+// Emociones negativas (enojo, tristeza) como % del tiempo con rostro visible
+function negativeEmotionPct(emotions) {
+  if (!emotions) return null;
+  const total = Object.values(emotions).reduce((acc, v) => acc + num(v, 0), 0);
+  if (!(total > 0)) return null;
+  return ((num(emotions.anger, 0) + num(emotions.sadness, 0)) / total) * 100;
+}
+
 function scoreBody(body = {}, cfg) {
   if (!body.available) return { score: null, details: [] };
   const c = cfg.expression.criteria;
-  const presenceMin = num(c.presence.idealMinPct, 90) / 100;
   const facingMin = num(c.facing.idealMinPct, 75) / 100;
   const tiltMax = num(c.posture.idealMaxDeg, 4);
+  const offPoseMax = num(c.posture.maxOffPoseSec, 6);
+  const shrinkMax = num(c.posture.maxShrinkPct, 10);
+  const negMax = num(c.emotions?.maxNegativePct, 15);
+
+  // Postura: hombros nivelados + tiempo máximo continuo fuera de la pose inicial + encogimiento
+  const analyzed = num(body.analyzedSeconds, 0);
+  const shrinkPct = Number.isFinite(body.shrinkSeconds) && analyzed > 0 ? (body.shrinkSeconds / analyzed) * 100 : null;
+  const postureParts = [
+    rangeScore(body.shoulderTilt, 0, tiltMax, 0, tiltMax * 4),
+    Number.isFinite(body.offPoseMaxSeconds) ? rangeScore(body.offPoseMaxSeconds, 0, offPoseMax, 0, Math.max(offPoseMax * 4, 1)) : null,
+    shrinkPct != null ? rangeScore(shrinkPct, 0, shrinkMax, 0, Math.max(shrinkMax * 4, 1)) : null,
+  ].filter((v) => v != null);
+
+  const negativePct = negativeEmotionPct(body.emotions);
 
   const details = [
-    { key: 'presence', label: c.presence.label, value: round(body.presence * 100), unit: '%', weight: num(c.presence.weight, 0), score: rangeScore(body.presence, presenceMin, 1, presenceMin * 0.3, 2) },
     { key: 'facing', label: c.facing.label, value: round(body.facingCamera * 100), unit: '%', weight: num(c.facing.weight, 0), score: rangeScore(body.facingCamera, facingMin, 1, facingMin * 0.25, 2) },
-    { key: 'posture', label: c.posture.label, value: body.shoulderTilt != null ? Number(body.shoulderTilt.toFixed(1)) : null, unit: '°', weight: num(c.posture.weight, 0), score: rangeScore(body.shoulderTilt, 0, tiltMax, 0, tiltMax * 4) },
+    {
+      key: 'emotions',
+      label: c.emotions?.label || 'Expresiones faciales',
+      value: negativePct != null ? round(negativePct) : null,
+      unit: '% negativas',
+      emotions: body.emotions || null,
+      weight: num(c.emotions?.weight, 0),
+      score: negativePct != null ? rangeScore(negativePct, 0, negMax, 0, Math.max(negMax * 4, 1)) : null,
+    },
+    {
+      key: 'posture',
+      label: c.posture.label,
+      value: body.shoulderTilt != null ? Number(body.shoulderTilt.toFixed(1)) : null,
+      unit: '°',
+      offPoseMaxSec: Number.isFinite(body.offPoseMaxSeconds) ? body.offPoseMaxSeconds : null,
+      shrinkPct: shrinkPct != null ? round(shrinkPct) : null,
+      weight: num(c.posture.weight, 0),
+      score: postureParts.length ? postureParts.reduce((acc, v) => acc + v, 0) / postureParts.length : null,
+    },
     { key: 'head', label: c.head.label, value: body.headMovement != null ? Number((body.headMovement * 1000).toFixed(1)) : null, unit: 'mov.', weight: num(c.head.weight, 0), score: rangeScore(body.headMovement, 0.001, 0.006, 0, 0.02) },
     { key: 'hands', label: c.hands.label, value: body.handActivity != null ? Number((body.handActivity * 1000).toFixed(1)) : null, unit: 'mov.', weight: num(c.hands.weight, 0), score: rangeScore(body.handActivity, 0.002, 0.012, 0, 0.035) },
   ];
@@ -248,7 +310,7 @@ const strictnessText = (lang, strictness) =>
 
 function criteriaText(area) {
   return Object.entries(area.criteria)
-    .filter(([, c]) => num(c.weight, 0) > 0)
+    .filter(([, c]) => num(c.weight, 0) > 0 && !c.source)
     .map(([key, c]) => `    "${key}": <0-100>  // ${c.label} (peso ${c.weight})`)
     .join(',\n');
 }
@@ -282,7 +344,7 @@ function validateJudgement(judgement, cfg) {
     }
     const scores = {};
     for (const [criterion, config] of Object.entries(area.criteria)) {
-      if (!(num(config.weight, 0) > 0)) continue;
+      if (!(num(config.weight, 0) > 0) || config.source) continue;
       const raw = judged[criterion];
       if (typeof raw !== 'number' || !Number.isFinite(raw) || raw < 0 || raw > 100) {
         issues.push(`${key}.${criterion}: se esperaba un número finito entre 0 y 100`);
@@ -295,6 +357,8 @@ function validateJudgement(judgement, cfg) {
 
   const coherencia = areaScores(cfg.coherence, 'coherencia');
   const empatia = areaScores(cfg.empathy, 'empatia');
+  const escucha = cfg.listening ? areaScores(cfg.listening, 'escucha') : null;
+  const presion = cfg.pressure ? areaScores(cfg.pressure, 'presion') : null;
   if (issues.length) {
     throw new EvaluationResponseError('La IA devolvió puntajes inválidos o incompletos.', issues);
   }
@@ -346,6 +410,8 @@ function validateJudgement(judgement, cfg) {
     judgement: {
       coherencia,
       empatia,
+      escucha,
+      presion,
       resumen: asText(judgement.resumen),
       cita: asText(judgement.cita),
       fortalezas: asList(judgement.fortalezas),
@@ -386,9 +452,15 @@ function buildPrompt({ theme, transcript, voice, body, lighting, cfg, lang = 'es
     voice?.available
       ? `Voz: ${Math.round(voice.wpm || 0)} palabras/min, ${voice.fillersPerMin?.toFixed(1)} muletillas/min (${(voice.fillerWords || []).join(', ') || 'ninguna'}), ${voice.longPauses} pausas largas, variación de volumen ${Math.round((voice.volumeVariation || 0) * 100)}%.`
       : 'Voz: no se pudo medir.',
+    voice?.available && Number.isFinite(voice.interruptions)
+      ? `Escucha: interrumpió al periodista ${voice.interruptions} ${voice.interruptions === 1 ? 'vez' : 'veces'} mientras preguntaba.`
+      : '',
     body?.available
-      ? `Cuerpo: mirada a cámara ${Math.round(body.facingCamera * 100)}% del tiempo, presencia ${Math.round(body.presence * 100)}%, inclinación de hombros ${body.shoulderTilt?.toFixed(1)}°, movimiento de cabeza ${body.headMovement > 0.006 ? 'alto (nervioso)' : body.headMovement < 0.001 ? 'muy bajo (rígido)' : 'adecuado'}, gestos de manos ${body.handActivity > 0.012 ? 'excesivos' : body.handActivity < 0.002 ? 'casi nulos' : 'moderados'}.`
+      ? `Cuerpo: mirada a cámara ${Math.round(body.facingCamera * 100)}% del tiempo, inclinación de hombros ${body.shoulderTilt?.toFixed(1)}°, movimiento de cabeza ${body.headMovement > 0.006 ? 'alto (nervioso)' : body.headMovement < 0.001 ? 'muy bajo (rígido)' : 'adecuado'}, gestos de manos ${body.handActivity > 0.012 ? 'excesivos' : body.handActivity < 0.002 ? 'casi nulos' : 'moderados'}.`
       : 'Cuerpo: no se pudo medir (sin cámara).',
+    body?.available && body.emotions
+      ? `Expresiones faciales (segundos): neutral ${num(body.emotions.neutral, 0).toFixed(0)}, felicidad ${num(body.emotions.happiness, 0).toFixed(0)}, enojo ${num(body.emotions.anger, 0).toFixed(0)}, sorpresa ${num(body.emotions.surprise, 0).toFixed(0)}, tristeza ${num(body.emotions.sadness, 0).toFixed(0)}.`
+      : '',
     body?.available && body.analyzedSeconds != null
       ? `Mirada: ${num(body.facingSeconds, 0).toFixed(0)} s mirando a la cámara y ${num(body.awaySeconds, 0).toFixed(0)} s mirando a otro lado (de ${num(body.analyzedSeconds, 0).toFixed(0)} s).${
           body.faceAvailable ? ` Sonrisa o risa: ${num(body.smileSeconds, 0).toFixed(1)} s en total.` : ''
@@ -422,8 +494,10 @@ Métricas medidas automáticamente:
 ${measured}
 
 Estándar de evaluación (patrón maestro):
-- Coherencia: ${cfg.coherence.descriptor}
-- Empatía: ${cfg.empathy.descriptor}
+- Control del mensaje (coherencia): ${cfg.coherence.descriptor}
+- Gestión del contexto (empatía): ${cfg.empathy.descriptor}
+- Escucha activa: ${cfg.listening.descriptor}
+- Tolerancia a la presión y manejo de la hostilidad: ${cfg.pressure.descriptor}
 
 Devuelve este JSON (puntajes enteros 0-100, ${T.outputLanguage}, tuteando al vocero;
 dentro de los textos usa comillas simples ' en vez de comillas dobles):
@@ -433,6 +507,12 @@ ${criteriaText(cfg.coherence)}
   },
   "empatia": {
 ${criteriaText(cfg.empathy)}
+  },
+  "escucha": {
+${criteriaText(cfg.listening)}
+  },
+  "presion": {
+${criteriaText(cfg.pressure)}
   },
   "resumen": "<2 frases con la evaluación general>",
   "cita": "<una observación de coach que cruce lo que dijo con cómo lo dijo, usando las métricas>",
@@ -459,7 +539,7 @@ ${criteriaText(cfg.empathy)}
 // valor fuera de rango (validateJudgement ya rechazó ese caso).
 function scoreFromCriteria(area, judged) {
   const details = Object.entries(area.criteria)
-    .filter(([, c]) => num(c.weight, 0) > 0)
+    .filter(([, c]) => num(c.weight, 0) > 0 && !c.source)
     .map(([key, c]) => {
       const raw = judged?.[key];
       const valid = typeof raw === 'number' && Number.isFinite(raw) && raw >= 0 && raw <= 100;
@@ -682,11 +762,35 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
   const empathy =
     empathyContent.score == null ? null : facing == null ? empathyContent.score : empathyContent.score * (1 - visualShare) + facing * visualShare;
 
+  // Escucha activa: criterios de la IA + interrupciones medidas con el micrófono
+  const listeningAi = scoreFromCriteria(cfg.listening, judgement.escucha);
+  const interruptCfg = cfg.listening.criteria.noInterrupt;
+  const interruptions = metrics?.voice?.available && Number.isFinite(metrics.voice.interruptions) ? metrics.voice.interruptions : null;
+  const listeningDetails = [
+    ...(num(interruptCfg?.weight, 0) > 0
+      ? [
+          {
+            key: 'noInterrupt',
+            label: interruptCfg.label,
+            value: interruptions,
+            unit: 'interrupciones',
+            weight: num(interruptCfg.weight, 0),
+            score: interruptions == null ? null : clamp(100 - Math.max(0, interruptions - num(interruptCfg.tolerance, 0)) * 25),
+          },
+        ]
+      : []),
+    ...listeningAi.details,
+  ];
+  const listening = { score: average(listeningDetails), details: listeningDetails, coverage: coverageOf(listeningDetails) };
+  const pressureArea = scoreFromCriteria(cfg.pressure, judgement.presion);
+
   const weights = {
-    expression: num(cfg.areas.expression, 25),
-    voice: num(cfg.areas.voice, 25),
-    coherence: num(cfg.areas.coherence, 30),
-    empathy: num(cfg.areas.empathy, 20),
+    expression: num(cfg.areas.expression, 20),
+    voice: num(cfg.areas.voice, 20),
+    coherence: num(cfg.areas.coherence, 20),
+    empathy: num(cfg.areas.empathy, 15),
+    listening: num(cfg.areas.listening, 10),
+    pressure: num(cfg.areas.pressure, 15),
   };
 
   const LT = evalTexts(lang);
@@ -703,6 +807,16 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
       coverage: 1,
       source: facing == null ? LT.sources.ai : `${LT.sources.ai} + mirada (${Math.round(visualShare * 100)}%)`,
     },
+    {
+      key: 'listening',
+      label: LT.areas.listening,
+      score: round(listening.score),
+      weight: weights.listening,
+      details: listening.details,
+      coverage: listening.coverage ?? 1,
+      source: interruptions == null ? LT.sources.ai : `${LT.sources.ai} + ${LT.sources.mic}`,
+    },
+    { key: 'pressure', label: LT.areas.pressure, score: round(pressureArea.score), weight: weights.pressure, details: pressureArea.details, coverage: 1, source: LT.sources.ai },
   ];
 
   // Si un área no se pudo medir (sin cámara/micrófono), su peso se reparte entre las demás
@@ -735,6 +849,8 @@ async function evaluateSession({ theme, transcript, metrics, pattern, patternSou
       voice: voice.coverage ?? 0,
       coherence: 1,
       empathy: 1,
+      listening: listening.coverage ?? 1,
+      pressure: 1,
       wpmVerified,
     },
     ai: { evaluator: model, ms },

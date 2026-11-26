@@ -4,10 +4,11 @@ import { useI18n } from '../lib/i18n';
 import Icon from '../components/Icon';
 import PracticeSteps from '../components/PracticeSteps';
 import { Button, Card, EmptyState, cx } from '../components/ui';
-import { apiFetch } from '../lib/api';
+import { apiFetch, getCurrentUser } from '../lib/api';
 import { runAnalysis } from '../lib/practice/analysisRunner';
 import { describeEvaluationError } from '../lib/practice/evaluationErrors';
 import { describeStage, failureMessage } from '../lib/practice/reportAccess';
+import { unwatchReport, watchReport } from '../lib/practice/reportWatch';
 import { RESULT_KEY } from './SesionPractica';
 
 // Los motivos que el backend puede devolver en `evaluation.reason` se traducen desde el diccionario
@@ -33,6 +34,7 @@ export default function Analizando() {
     }
   });
   const sessionId = payload?.sessionId || params.get('sesion') || null;
+  const userId = getCurrentUser()?.id || null;
 
   const steps = [
     { label: t.p1, icon: 'file' },
@@ -58,9 +60,11 @@ export default function Analizando() {
     (sessionId) => {
       setCurrent(steps.length);
       sessionStorage.removeItem(RESULT_KEY);
+      // Se abre aquí mismo: no hace falta avisar después.
+      unwatchReport(userId, sessionId);
       setTimeout(() => navigate(`/vocero/informe?sesion=${sessionId}`), 700);
     },
-    [navigate, steps.length],
+    [navigate, steps.length, userId],
   );
 
   const evaluate = useCallback(async () => {
@@ -74,6 +78,8 @@ export default function Analizando() {
     setError('');
     setCurrent(0);
     setProgress(an.analyzing);
+    // Si el vocero sale de esta pantalla, el layout sigue consultando y le avisa cuando esté listo.
+    watchReport(userId, { sessionId, theme: payload?.theme?.title || '' });
 
     // Solo se PIDE evaluación si venimos de una práctica recién terminada y no se ha
     // pedido ya en este mismo intento. Con ?sesion= solo se consulta el estado.
@@ -101,7 +107,10 @@ export default function Analizando() {
     } catch (error) {
       // 503 (integración desactivada), 422 (sin ventanas válidas) y 502 (fallo de
       // transcripción) se muestran como mensaje claro; no se abre el informe.
-      if (isCurrent()) setError(describeEvaluationError(error, d.evalErrors) || '');
+      if (isCurrent()) {
+        unwatchReport(userId, sessionId);
+        setError(describeEvaluationError(error, d.evalErrors) || '');
+      }
       return;
     }
 
@@ -115,6 +124,7 @@ export default function Analizando() {
       // Un fallo de evaluación se explica con la clasificación del backend (`errorKind`): temporal
       // (se reintentará solo) o pendiente de revisión técnica. Sin códigos internos.
       const fromEvaluation = result.errorKind ? failureMessage({ errorKind: result.errorKind }, d.report) : '';
+      unwatchReport(userId, sessionId);
       setError(
         fromEvaluation ||
           an.fail[result.reason] ||
@@ -126,7 +136,7 @@ export default function Analizando() {
     // El sondeo se agotó pero la generación continúa en el backend: se muestra el aviso de «sigue en
     // segundo plano» (no es un error) y NO se cancela nada. El informe llegará a «Mi progreso».
     if (result.status === 'pending') setSlow(true);
-  }, [sessionId, payload, attempt, finish]);
+  }, [sessionId, payload, attempt, finish, userId]);
 
   // Arranca al entrar (con payload recién guardado o con ?sesion=) y cancela al salir.
   useEffect(() => {
@@ -175,6 +185,22 @@ export default function Analizando() {
   return (
     <>
       <PracticeSteps />
+
+      {/* Mientras se genera: el vocero puede salir y se le avisará arriba cuando esté listo */}
+      {!done && !error && (
+        <div className="max-w-xl mx-auto mb-4 flex items-start gap-3 rounded-2xl border border-accent/25 bg-accent-soft px-4 py-3">
+          <span className="h-8 w-8 shrink-0 rounded-lg bg-accent/15 text-accent-fg flex items-center justify-center">
+            <Icon name="bell" size={16} />
+          </span>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-ink">{an.notifyTitle}</div>
+            <p className="text-[13px] text-muted mt-0.5 leading-relaxed">{an.notifyMessage}</p>
+          </div>
+          <Button variant="secondary" size="sm" to="/vocero" className="shrink-0 self-center">
+            {an.keepBrowsing}
+          </Button>
+        </div>
+      )}
 
       <div className="flex justify-center">
         <Card className="w-full max-w-xl p-8 md:p-12 text-center">

@@ -131,7 +131,13 @@ export function localizedLesson(lesson, lang = 'es') {
 }
 
 // Lecciones recomendadas para un área débil (o las primeras si no hay datos)
+// Áreas nuevas de la rúbrica sin lecciones fijas propias: se recomiendan las más cercanas.
+const AREA_ALIAS = { listening: 'coherence', pressure: 'coherence' };
+
 export function lessonsForArea(areaKey, limit = 2) {
-  const matches = LESSONS.filter((l) => l.area === areaKey);
+  const area = AREA_ALIAS[areaKey] || areaKey;
+  const matches = LESSONS.filter((l) => l.area === area);
+  // Tolerancia a la presión: primero la lección de preguntas hostiles
+  if (areaKey === 'pressure') matches.sort((x, y) => (y.id === 'preguntas-hostiles') - (x.id === 'preguntas-hostiles'));
   return (matches.length ? matches : LESSONS).slice(0, limit);
 }

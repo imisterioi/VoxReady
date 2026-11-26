@@ -240,8 +240,8 @@ module.exports = function registerAccountRoutes(app, prisma) {
       const where = req.apiRole === 'admin'
         ? { tenantId: req.user.tenantId, role: 'VOCERO' }
         : requested
-          ? { tenantId: requested }
-          : {};
+          ? { tenantId: requested, anonymizedAt: null }
+          : { anonymizedAt: null };
       const users = await prisma.user.findMany({
         where,
         orderBy: { createdAt: 'desc' },
@@ -350,11 +350,18 @@ module.exports = function registerAccountRoutes(app, prisma) {
     try {
       const target = await prisma.user.findUnique({ where: { id: req.params.id } });
       if (!target) return fail(res, 404, 'Usuario no encontrado.');
-      if (target.role !== 'VOCERO') return fail(res, 403, 'Solo se pueden eliminar voceros.');
-      if (req.apiRole === 'admin' && target.tenantId !== req.user.tenantId) {
-        return fail(res, 403, 'Solo puedes eliminar voceros de tu organización.');
+      if (target.id === req.user.id) return fail(res, 403, 'No puedes eliminar tu propia cuenta.');
+      // El administrador del cliente solo elimina voceros de su organización; el administrador del
+      // sistema puede eliminar cualquier cuenta (vocero, admin, maestro u otro administrador).
+      if (req.apiRole === 'admin') {
+        if (target.role !== 'VOCERO') return fail(res, 403, 'Solo se pueden eliminar voceros.');
+        if (target.tenantId !== req.user.tenantId) return fail(res, 403, 'Solo puedes eliminar voceros de tu organización.');
       }
+      if (target.anonymizedAt) return fail(res, 409, 'Este usuario ya fue eliminado.');
+      // Se borran sus datos personales y grabaciones; la fila queda anonimizada y sin acceso para
+      // conservar la integridad de patrones, solicitudes y auditoría que la referencian.
       const result = await anonymizeUser(prisma, target.id);
+      await prisma.user.update({ where: { id: target.id }, data: { status: 'SUSPENDED' } });
       res.json({ status: 'ok', result });
     } catch (error) {
       console.error('Error eliminando usuario:', error);

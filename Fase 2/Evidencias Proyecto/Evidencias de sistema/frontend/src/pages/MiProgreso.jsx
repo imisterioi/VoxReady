@@ -15,7 +15,7 @@ import Pagination from '../components/Pagination';
 
 // Claves de las cuatro áreas evaluadas. La etiqueta visible la aporta el diccionario (t.series), en el
 // mismo orden: no se traduce la clave interna.
-const AREAS = [{ key: 'expression' }, { key: 'voice' }, { key: 'coherence' }, { key: 'empathy' }];
+const AREAS = [{ key: 'expression' }, { key: 'voice' }, { key: 'coherence' }, { key: 'empathy' }, { key: 'listening' }, { key: 'pressure' }];
 
 // Progreso real del vocero a partir de sus prácticas evaluadas (GET /api/sessions).
 //
@@ -175,7 +175,7 @@ export default function MiProgreso({ audience = 'user' }) {
       ) : (
         <>
           {/* Resumen por área: última vs primera práctica */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
             {areas.map((a, i) => {
               const values = series[i].filter((v) => v != null);
               const current = values.at(-1);

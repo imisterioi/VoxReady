@@ -1,8 +1,9 @@
 // Entrevistador IA: genera la siguiente pregunta usando la API de NVIDIA
 // (compatible con OpenAI). Configuración en backend/.env.local:
 //   NVIDIA_API_KEY=nvapi-...
-//   AI_MODEL=deepseek-ai/deepseek-v4.1-flash          (modelo principal)
-//   AI_FALLBACK_MODEL=google/gemma-4-31b-it           (respaldo si el principal no responde)
+//   AI_MODEL=nvidia/nemotron-3.5-lightning-30b-a3b    (modelo principal)
+//   AI_FALLBACK_MODEL=minimaxai/minimax-m3.1-flash    (respaldo si el principal no responde)
+// deepseek-v4.1-flash, gemma-4-31b-it y glm-5.3-flash fueron retirados por el proveedor (HTTP 410).
 //   AI_TIMEOUT_MS=20000                               (espera máxima por modelo)
 //   AI_EXTRA_MODELS=moonshotai/kimi-k3,nvidia/nemotron-3-super-120b-a12b  (más respaldos)
 //
@@ -14,9 +15,9 @@ const { recordAi } = require('../lib/runtimeStatus');
 
 const BASE_URL = 'https://integrate.api.nvidia.com/v1';
 
-const DEFAULT_MODEL = 'deepseek-ai/deepseek-v4.1-flash';
-const DEFAULT_FALLBACK = 'google/gemma-4-31b-it';
-const DEFAULT_EXTRA = 'z-ai/glm-5.3-flash,nvidia/nemotron-3.5-lightning-30b-a3b';
+const DEFAULT_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
+const DEFAULT_FALLBACK = 'minimaxai/minimax-m3.1-flash';
+const DEFAULT_EXTRA = 'nvidia/nemotron-3-ultra-550b-a55b';
 
 // Longitud de la pregunta. `QUESTION_TARGET_WORDS` es el objetivo que se pide al modelo y
 // `MAX_QUESTION_WORDS` es el tope REAL que aplica `cleanQuestion`: una sola fuente de verdad
@@ -88,9 +89,21 @@ const LEVELS = { es: AGGRESSIVENESS, en: AGGRESSIVENESS_EN };
 // mensajes clave y líneas rojas) proviene de la base de datos y se inserta tal cual.
 const TEXTS_ES = {
   interviewerFallback: 'un periodista chileno',
-  opening: (who) => `Eres ${who} y entrevistas en vivo al vocero de una organización.`,
+  opening: (who) =>
+    `Eres ${who}. Hablas y preguntas como lo haría ${who} en la vida real: con su forma de hablar, su relación con quien responde y sus propias preocupaciones.`,
+  // Quién es quién: evita que el modelo le atribuya al vocero el papel del entrevistador.
+  rolesHeader: 'Quién es quién (no lo confundas):',
+  roles: (who, spokesperson) => [
+    `- Tú eres ${who}. Ese papel es solo tuyo.`,
+    spokesperson
+      ? `- Quien te responde es ${spokesperson}: el vocero que practica esta entrevista y representa la postura descrita en el escenario. Tus preguntas van dirigidas a esa persona. Si el contexto está escrito en primera persona ("queremos", "nuestra empresa", "nos vamos"), quien habla ahí es el vocero, no tú.`
+      : '- Quien te responde es el vocero: la persona que representa la postura descrita en el escenario. Si el contexto está escrito en primera persona ("queremos", "nuestra empresa", "nos vamos"), quien habla ahí es el vocero, no tú.',
+    spokesperson
+      ? '- Háblale directamente a esa persona, en segunda persona y de usted ("usted", "su…"). Nunca hables de ella en tercera persona como si fuera otra persona, ni le atribuyas tu papel: no le des tu cargo, profesión ni título.'
+      : '- Nunca trates al vocero como si tuviera tu papel ni le atribuyas tu cargo, profesión o título. Si el escenario no indica su nombre o su cargo, háblale de usted, sin títulos.',
+  ],
   scenario: (title) => `Escenario: ${title}.`,
-  context: (text) => `Contexto: ${text}`,
+  context: (text) => `Contexto (la situación del vocero): ${text}`,
   keyMessages: (list) => `Mensajes que el vocero intentará sostener: ${list.join(' | ')}`,
   redLines: (list) => `Cosas que el vocero NO debe decir (líneas rojas): ${list.join(' | ')}`,
   scenarioDefault: 'Escenario: una empresa enfrenta una crisis que afecta a sus clientes.',
@@ -101,6 +114,12 @@ const TEXTS_ES = {
   silentLow: '- El vocero se quedó en silencio. Señálalo con amabilidad, sin afirmar por qué ocurrió, e invítalo a contestar la pregunta anterior.',
   silentHigh: '- El vocero se quedó en SILENCIO y no respondió. Háblale de usted, señala sin interpretar que no hubo respuesta, pregunta qué deben entender las personas afectadas y vuelve a plantear la pregunta anterior.',
   followUpTurn: '- Este turno es una REPREGUNTA sobre la última respuesta del vocero.',
+  // Si el vocero pregunta algo, el entrevistador no rompe el personaje: contesta breve y sigue.
+  stayInCharacter:
+    '- Si el vocero te hizo una pregunta o pidió una aclaración, primero respóndele en una frase breve, en tu papel, y luego haz tu pregunta. Nunca digas que no entiendes ni salgas de tu papel.',
+  // Naturalidad: sin un nombre o cargo repetido como muletilla al inicio de cada pregunta.
+  naturalAddress:
+    '- Habla como en una conversación real: no empieces tus preguntas con su nombre o su cargo. Úsalo solo de vez en cuando y nunca en dos intervenciones seguidas.',
   newQuestion: '- Este turno es una pregunta NUEVA: aborda un aspecto de la situación que todavía no se haya tratado.',
   noAnswerInsist: '- Si el vocero no dijo nada, insiste en la pregunta anterior de forma más directa.',
   evasive: '- Si el vocero evade o responde de forma genérica, repregunta sobre el punto concreto que quedó sin responder.',
@@ -114,8 +133,11 @@ const TEXTS_ES = {
     '- Si ese aspecto no permite formular una pregunta pertinente, mantén la coherencia con la conversación y no inventes información.',
   noTranscript: '- No hay transcripción utilizable de su última respuesta: pide una aclaración concreta sobre el punto central, sin afirmar lo que dijo.',
   noRepeat: '- No repitas preguntas que ya hiciste.',
+  customQuestion: (q) =>
+    `- PREGUNTA DEFINIDA POR EL ESCENARIO: en este turno haz exactamente esta pregunta, sin cambiar su sentido (puedes añadir como máximo una breve transición): «${q}»`,
   onlyQuestion:
     '- Responde solo con la pregunta, en una sola línea: sin saludos, viñetas, comillas, explicaciones ni etiquetas. Puedes empezar esa misma línea con un conector muy breve ("Entiendo,", "De acuerdo,") si ayuda a la conversación; nunca lo pongas en otra línea. Si escribes varias líneas, se usará solo la que contenga la pregunta.',
+  onlySpoken: '- Responde solo con lo que dirías en voz alta, en una sola línea: sin comillas, explicaciones ni etiquetas, y sin anteponer tu nombre o cargo.',
   // Bloque de IDIOMA: se declara en cada solicitud (el idioma de la sesión manda, pase lo que pase).
   languageHeader: 'Idioma de la entrevista (obligatorio, no negociable):',
   languageRules: [
@@ -127,8 +149,9 @@ const TEXTS_ES = {
   ],
   spokeNoText: '(habló, pero no se pudo transcribir su respuesta)',
   silence: '(silencio, no respondió)',
-  answerPrefix: (text) => `Respuesta del vocero: ${text}`,
-  startInterview: 'Comienza la entrevista con tu primera pregunta.',
+  answerPrefix: (text, spokesperson) => (spokesperson ? `Respuesta de ${spokesperson} (el vocero): ${text}` : `Respuesta del vocero: ${text}`),
+  startInterview: (spokesperson) =>
+    spokesperson ? `Comienza la conversación con tu primera pregunta para ${spokesperson}.` : 'Comienza la entrevista con tu primera pregunta.',
 
   // ---- Etapa 1: bloques nuevos (objetivo, método, comportamiento, prohibiciones, contexto y memoria) ----
   objectiveHeader: 'Objetivo de la entrevista:',
@@ -183,9 +206,21 @@ const TEXTS_ES = {
 // Textos fijos del entrevistador en inglés (equivalente a TEXTS_ES).
 const TEXTS_EN = {
   interviewerFallback: 'a Chilean journalist',
-  opening: (who) => `You are ${who} and you are interviewing the spokesperson of an organization live.`,
+  opening: (who) =>
+    `You are ${who}. You speak and ask questions as ${who} would in real life: with their way of speaking, their relationship with the person answering and their own concerns.`,
+  // Who is who: keeps the model from giving the spokesperson the interviewer's role.
+  rolesHeader: 'Who is who (do not mix them up):',
+  roles: (who, spokesperson) => [
+    `- You are ${who}. That role is yours alone.`,
+    spokesperson
+      ? `- The person answering you is ${spokesperson}: the spokesperson practicing this interview, who represents the position described in the scenario. Your questions are addressed to that person. If the context is written in the first person ("we want", "our company", "we are leaving"), the one speaking there is the spokesperson, not you.`
+      : '- The person answering you is the spokesperson: the one who represents the position described in the scenario. If the context is written in the first person ("we want", "our company", "we are leaving"), the one speaking there is the spokesperson, not you.',
+    spokesperson
+      ? '- Speak directly to that person, in the second person ("you", "your…"). Never talk about them in the third person as if they were someone else, and never give them your role: not your position, profession or title.'
+      : '- Never treat the spokesperson as if they had your role and never give them your position, profession or title. If the scenario does not state their name or position, address them formally, without titles.',
+  ],
   scenario: (title) => `Scenario: ${title}.`,
-  context: (text) => `Context: ${text}`,
+  context: (text) => `Context (the spokesperson’s situation): ${text}`,
   keyMessages: (list) => `Messages the spokesperson will try to uphold: ${list.join(' | ')}`,
   redLines: (list) => `Things the spokesperson must NOT say (red lines): ${list.join(' | ')}`,
   scenarioDefault: 'Scenario: a company faces a crisis that affects its customers.',
@@ -194,6 +229,12 @@ const TEXTS_EN = {
   silentLow: '- The spokesperson stayed silent. Kindly point it out, without asserting why, and invite them to answer the previous question.',
   silentHigh: '- The spokesperson stayed SILENT and did not answer. Address them formally, state without interpreting that there was no answer, ask what the affected people should understand and pose the previous question again.',
   followUpTurn: '- This turn is a FOLLOW-UP on the spokesperson last answer.',
+  // If the spokesperson asks something, the interviewer stays in character: short answer, then the question.
+  stayInCharacter:
+    '- If the spokesperson asked you a question or asked for clarification, first answer it in one short sentence, in your role, and then ask your question. Never say you do not understand and never step out of your role.',
+  // Naturalness: no name or title repeated as a filler at the start of every question.
+  naturalAddress:
+    '- Speak as in a real conversation: do not start your questions with their name or title. Use it only now and then, and never in two turns in a row.',
   newQuestion: '- This turn is a NEW question: cover an aspect of the situation that has not been addressed yet.',
   noAnswerInsist: '- If the spokesperson said nothing, press the previous question more directly.',
   evasive: '- If the spokesperson evades or answers generically, follow up on the concrete point that was left unanswered.',
@@ -206,8 +247,11 @@ const TEXTS_EN = {
     '- If that point does not allow a relevant question, stay consistent with the conversation and do not invent information.',
   noTranscript: '- There is no usable transcript of their last answer: ask for a concrete clarification on the central point, without asserting what they said.',
   noRepeat: '- Do not repeat questions you already asked.',
+  customQuestion: (q) =>
+    `- QUESTION DEFINED BY THE SCENARIO: in this turn ask exactly this question, without changing its meaning (you may add at most a brief transition): "${q}"`,
   onlyQuestion:
     '- Reply only with the question, on a single line: no greetings, bullets, quotes, explanations or labels. You may start that same line with a very short connector ("I see,", "Right,") if it helps the conversation flow; never put it on a separate line. If you write several lines, only the one containing the question will be used.',
+  onlySpoken: '- Reply only with what you would say out loud, on a single line: no quotes, explanations or labels, and do not put your name or role in front of it.',
   // Language block: stated in EVERY request (the session language wins, no matter what).
   languageHeader: 'Interview language (mandatory, non-negotiable):',
   languageRules: [
@@ -219,8 +263,9 @@ const TEXTS_EN = {
   ],
   spokeNoText: '(they spoke, but their answer could not be transcribed)',
   silence: '(silence, no answer)',
-  answerPrefix: (text) => `Spokesperson answer: ${text}`,
-  startInterview: 'Start the interview with your first question.',
+  answerPrefix: (text, spokesperson) => (spokesperson ? `Answer from ${spokesperson} (the spokesperson): ${text}` : `Spokesperson answer: ${text}`),
+  startInterview: (spokesperson) =>
+    spokesperson ? `Start the conversation with your first question for ${spokesperson}.` : 'Start the interview with your first question.',
 
   // ---- Stage 1: new blocks (objective, method, behaviour, prohibitions, context and memory) ----
   objectiveHeader: 'Interview objective:',
@@ -586,6 +631,47 @@ function isReservedQuestionStale(item, { asked = [], resolutions = [] } = {}) {
   );
 }
 
+// "La profesora jefe…" → "la profesora jefe…": el papel va en medio de la frase. Solo se baja
+// la inicial de un artículo (se respetan nombres propios y siglas).
+const midSentence = (text) => String(text).trim().replace(/^(El|La|Los|Las|Un|Una|The|A|An)(?=\s)/, (w) => w.toLowerCase());
+
+// Quién es el vocero que practica (opcional): a esa persona van dirigidas las preguntas.
+const spokespersonOf = (cfg) => (cfg?.spokespersonRole ? midSentence(cfg.spokespersonRole) : '');
+
+// Los modelos pequeños abren cada pregunta llamando al vocero por su nombre o cargo
+// ("Manuel, ¿…?"), aunque el prompt lo prohíba. Se quita ese vocativo inicial: debe empezar por
+// la palabra principal del papel (la primera significativa: "Manuel", "papá") y contener solo
+// palabras del papel. Así "Benjamín faltó…" no se toca aunque "Benjamín" aparezca en el papel.
+const ARTICLES = new Set(['el', 'la', 'los', 'las', 'un', 'una', 'del', 'de', 'que', 'the', 'a', 'an', 'of']);
+// Patrón tolerante a tildes: "papa" reconoce "Papá" y viceversa.
+const ACCENTS = { a: '[aáàä]', e: '[eéèë]', i: '[iíìï]', o: '[oóòö]', u: '[uúùü]', n: '[nñ]' };
+const loosePattern = (word) =>
+  word
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/[aeioun]/g, (c) => ACCENTS[c]);
+function dropLeadingAddress(question, cfg) {
+  const role = String(cfg?.spokespersonRole || '');
+  const words = role.split(/[^\p{L}]+/u).filter((w) => w.length >= 3 && !ARTICLES.has(w.toLowerCase()));
+  if (!question || !words.length) return question;
+  const head = loosePattern(words[0]);
+  const any = [...words.map(loosePattern), ...ARTICLES].join('|');
+  // "Manuel, ¿…", "¿Don Manuel, …", "Papá de Benjamín, ¿…": la palabra principal y, como mucho,
+  // tres palabras más del propio papel, seguidas de coma.
+  // Con un tratamiento delante ("Señor Relámpago") basta cualquier palabra del papel.
+  const honorific = '(?:señor|señora|señorita|don|doña|sr\\.|sra\\.|mr\\.|mrs\\.|ms\\.|sir)';
+  const vocative = new RegExp(`^(¿?)\\s*(?:${honorific}\\s+(?:${any})|${head})(?:\\s+(?:${any})){0,3}\\s*,\\s*`, 'iu');
+  const match = question.match(vocative);
+  if (!match) return question;
+  const rest = question.slice(match[0].length).trim();
+  if (!rest) return question;
+  // Si el vocativo estaba dentro de los signos de pregunta ("¿Manuel, cómo…?"), se conserva el "¿".
+  const opened = match[1] && !rest.startsWith('¿') ? `¿${rest}` : rest;
+  return opened.charAt(0) === '¿' ? `¿${opened.charAt(1).toUpperCase()}${opened.slice(2)}` : opened.charAt(0).toUpperCase() + opened.slice(1);
+}
+
 // Instrucciones del entrevistador. El bloque estable (rol, objetivo, método, comportamiento del
 // nivel, prohibiciones e idioma) es común a todos los escenarios; el bloque dinámico aporta el
 // escenario, la organización y la memoria de la conversación.
@@ -595,12 +681,13 @@ function isReservedQuestionStale(item, { asked = [], resolutions = [] } = {}) {
 function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false, lang = 'es', extras = {}) {
   const T = textsFor(lang);
   const level = (LEVELS[lang] || LEVELS.es)[cfg.aggressiveness];
-  const who = cfg.interviewerRole || T.interviewerFallback;
+  const who = midSentence(cfg.interviewerRole || T.interviewerFallback);
+  const spokesperson = spokespersonOf(cfg);
   const memory = extras.memory || null;
   const tenant = extras.tenant || theme?.tenant || null;
   const assessment = extras.assessment || null;
   const L = T.levelLines;
-  const lines = [T.opening(who)];
+  const lines = [T.opening(who), T.rolesHeader, ...T.roles(who, spokesperson)];
 
   // --- Bloque estable: qué debe lograr la entrevista y cómo se construye ---
   lines.push(T.objectiveHeader, T.objective, T.methodHeader, ...T.methodSteps);
@@ -663,6 +750,7 @@ function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false, lang = '
   }
 
   lines.push(T.rulesHeader, T.oneQuestion(QUESTION_TARGET_WORDS, MAX_QUESTION_WORDS));
+  if (spokesperson) lines.push(T.stayInCharacter, T.naturalAddress);
   if (silent) {
     // El vocero no respondió: el entrevistador no lo deja pasar
     lines.push(cfg.aggressiveness === 'BAJA' ? T.silentLow : T.silentHigh);
@@ -693,7 +781,9 @@ function buildSystemPrompt(theme, cfg, plan, turn = {}, silent = false, lang = '
   // Estado de la última respuesta según el análisis ya existente. El clasificador no se
   // modifica: aquí solo se usa su resultado para que el entrevistador actúe según su nivel.
   if (assessment?.status && !silent) lines.push(T.assessment(assessment.status));
-  lines.push(T.noRepeat, T.onlyQuestion);
+  // Pregunta personalizada del escenario pendiente (solo en preguntas principales)
+  if (extras.customQuestion && !silent && !isFollowUp) lines.push(T.customQuestion(extras.customQuestion));
+  lines.push(T.noRepeat, spokesperson ? T.onlySpoken : T.onlyQuestion);
   return lines.join('\n');
 }
 
@@ -707,6 +797,38 @@ const noAnswerLabel = (turn, lang = 'es') => {
 // history: [{ role: 'interviewer' | 'vocero', text: string, spoke?: boolean }]
 // `turn` es el turno real que se pide (kind/mainQuestion/focus/hasTranscript) y se usa para que el
 // prompt describa la intervención que de verdad se envía. `lang` es el idioma efectivo del vocero.
+// Palabras significativas de un texto (sin tildes ni signos), para reconocer una pregunta ya hecha
+// aunque el modelo le haya añadido una transición o cambiado una palabra.
+function contentWords(text) {
+  return new Set(
+    String(text || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9ñ\s]/g, ' ')
+      .split(/\s+/)
+      .filter((word) => word.length > 3),
+  );
+}
+
+// Primera pregunta personalizada del escenario que el entrevistador todavía no hizo (o null).
+function pendingCustomQuestion(cfg, history = []) {
+  const custom = cfg?.customQuestions || [];
+  if (!custom.length) return null;
+  const asked = history.filter((turn) => turn.role === 'interviewer').map((turn) => contentWords(turn.text));
+  for (const question of custom) {
+    const words = contentWords(question);
+    if (!words.size) continue;
+    const done = asked.some((said) => {
+      let hits = 0;
+      for (const word of words) if (said.has(word)) hits += 1;
+      return hits / words.size >= 0.6;
+    });
+    if (!done) return question;
+  }
+  return null;
+}
+
 function buildMessages(theme, history = [], cfg, plan, turn = {}, lang = 'es', extras = {}) {
   const T = textsFor(lang);
   // Silencio real: el último turno es del vocero, sin texto y sin voz detectada
@@ -722,22 +844,25 @@ function buildMessages(theme, history = [], cfg, plan, turn = {}, lang = 'es', e
       role: 'system',
       content: buildSystemPrompt(theme, cfg, plan, turn, silent, lang, {
         memory,
+        customQuestion: pendingCustomQuestion(cfg, history),
         tenant: extras.tenant || theme?.tenant || null,
         assessment: extras.assessment || (turn?.assessmentStatus ? { status: turn.assessmentStatus } : null),
       }),
     },
   ];
+  // Cada respuesta llega identificada con el papel del vocero: así el modelo lo recuerda en cada turno.
+  const spokesperson = spokespersonOf(cfg);
 
   for (const item of history.slice(-10)) {
     const text = (item.text || '').trim();
     messages.push({
       role: item.role === 'interviewer' ? 'assistant' : 'user',
-      content: item.role === 'interviewer' ? text : T.answerPrefix(text || noAnswerLabel(item, lang)),
+      content: item.role === 'interviewer' ? text : T.answerPrefix(text || noAnswerLabel(item, lang), spokesperson),
     });
   }
 
   if (history.length === 0) {
-    messages.push({ role: 'user', content: T.startInterview });
+    messages.push({ role: 'user', content: T.startInterview(spokesperson) });
   }
   return messages;
 }
@@ -758,6 +883,8 @@ function cleanQuestion(text, lang = 'es') {
         .replace(/\*/g, '') // negritas de markdown
         .trim()
         .replace(/^(pregunta|periodista|question|journalist)\s*[:.-]\s*/i, '')
+        // Etiqueta de quien habla, como en un guion ("Profesora: ¿…?"): la voz la leería en voz alta
+        .replace(/^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ][A-Za-zÁÉÍÓÚÜÑáéíóúüñ .]{0,39}:\s+(?=[¿¡"“«A-ZÁÉÍÓÚÑ])/, '')
         .replace(/^["“«]+|["”»]+$/g, '')
         .trim(),
     )
@@ -844,10 +971,11 @@ function interviewTimeoutMs() {
 // construirlos con la misma función que usa producción (`buildMessages`).
 function askModelFromContext(model, context = {}, options = {}) {
   let messages;
+  let cfg;
   try {
     // `cfg`/`plan` pueden faltar si el llamador no los adjuntó: se derivan con las funciones
     // reales del proyecto (mismo diseño: un tema sin configuración usa los valores por defecto).
-    const cfg = context.cfg || normalizeInterviewConfig(context.theme?.interviewConfig);
+    cfg = context.cfg || normalizeInterviewConfig(context.theme?.interviewConfig);
     const plan =
       context.plan || turnPlan(cfg, (context.history || []).filter((turn) => turn.role === 'interviewer').length);
     // Turno real que se está pidiendo: el `kind` del contexto manda sobre el plan nominal, y el
@@ -875,7 +1003,12 @@ function askModelFromContext(model, context = {}, options = {}) {
     error.code = 'CONTEXT_BUILD_FAILED';
     throw error;
   }
-  return askModel(model, messages, { lang: context.lang, ...options });
+  const asked = askModel(model, messages, { lang: context.lang, ...options });
+  // Las respuestas `raw` (evaluación en JSON) no son preguntas: se devuelven intactas.
+  if (options.raw) return asked;
+  return Promise.resolve(asked).then((result) =>
+    result?.question ? { ...result, question: dropLeadingAddress(result.question, cfg) } : result,
+  );
 }
 
 // Consulta el modelo principal y el de respaldo EN paralelo y usa la primera
@@ -949,6 +1082,7 @@ module.exports = {
   askModel,
   askModelFromContext,
   cleanQuestion,
+  dropLeadingAddress,
   interviewModels,
   interviewTimeoutMs,
 };

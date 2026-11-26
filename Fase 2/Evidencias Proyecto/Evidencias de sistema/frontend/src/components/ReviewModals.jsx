@@ -10,7 +10,7 @@ import { resolveAreaScore } from '../lib/practice/reviewModel';
 // Las etiquetas y los textos del informe vienen del diccionario del idioma activo.
 
 const HIGHLIGHT = 'border-sky-200 bg-sky-50 dark:border-sky-500/30 dark:bg-sky-500/10';
-const AREA_ICON = { expression: 'person', voice: 'mic', coherence: 'message', empathy: 'users' };
+const AREA_ICON = { expression: 'person', voice: 'mic', coherence: 'message', empathy: 'users', listening: 'eye', pressure: 'shield' };
 
 // Indicador de cambio de puntuación: triángulo y número del MISMO color (verde sube, rojo baja).
 // Sin cambio no se muestra nada. Se comparte con el informe (mismo lenguaje visual).

@@ -9,7 +9,7 @@ const { resolveConfig } = require('../ai/patternConfig');
 const health = require('../lib/evaluatorHealth');
 
 const ENV = { NVIDIA_API_KEY: 'clave-de-prueba' };
-const VALID = { choices: [{ finish_reason: 'stop', message: { content: '{"coherencia":{"a":50},"empatia":{"b":50}}' } }] };
+const VALID = { choices: [{ finish_reason: 'stop', message: { content: '{"coherencia":{"a":50},"empatia":{"b":50},"escucha":{"c":50},"presion":{"d":50}}' } }] };
 const jsonOk = (body = VALID, status = 200) => ({ ok: status < 300, status, json: async () => body });
 
 const INPUT = {
@@ -26,6 +26,8 @@ const INPUT = {
 const JUDGEMENT = {
   coherencia: { keyMessages: 80, directness: 70, redLines: 90, clarity: 75 },
   empatia: { impact: 70, warmth: 65, responsibility: 80 },
+  escucha: { noEvade: 70, relevance: 70 },
+  presion: { hardQuestions: 70, noAttack: 70, diplomacy: 70 },
 };
 
 // Cambia una variable de entorno y devuelve la función que la restaura.

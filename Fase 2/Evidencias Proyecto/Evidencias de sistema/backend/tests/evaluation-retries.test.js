@@ -121,6 +121,8 @@ function judgement() {
   return {
     coherencia,
     empatia,
+    escucha: Object.fromEntries(Object.entries(DEFAULT_CONFIG.listening.criteria).filter(([, c]) => !c.source).map(([k]) => [k, 70])),
+    presion: Object.fromEntries(Object.keys(DEFAULT_CONFIG.pressure.criteria).map((k) => [k, 70])),
     resumen: 'Buen desempeno.',
     cita: 'Cita de coach.',
     fortalezas: ['Claridad'],

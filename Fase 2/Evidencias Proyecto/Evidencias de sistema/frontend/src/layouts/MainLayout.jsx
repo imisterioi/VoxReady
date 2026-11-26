@@ -4,6 +4,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import { useI18n } from '../lib/i18n';
 import { isPracticeRoute } from '../lib/practice/practiceLock';
+import { HEARTBEAT_MS, newUnread, requestRefresh } from '../lib/liveRefresh';
+import { showLiveNotice } from '../components/LiveNotice';
+import { REPORTS_EVENT, clearUnseen, markReportReady, pendingReports, unseenReports, unwatchReport } from '../lib/practice/reportWatch';
 import { roleIndex, homeFor, ROLE_HOME } from '../data/mockData';
 import useTheme from '../hooks/useTheme';
 import Logo from '../components/Logo';
@@ -19,6 +22,8 @@ export default function MainLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [bellOpen, setBellOpen] = useState(false);
   const [notifications, setNotifications] = useState({ unread: 0, items: [] });
+  // Informes que se generaron en segundo plano y el vocero aún no abre (contador de Progreso)
+  const [newReports, setNewReports] = useState([]);
   const { isDark, toggleTheme } = useTheme();
   const menuRef = useRef(null);
   const bellRef = useRef(null);
@@ -91,11 +96,30 @@ export default function MainLayout() {
   // IMPORTANTE: se declara ANTES del efecto que la usa. La lista de dependencias de un `useEffect`
   // se evalúa durante el render, así que un `const` declarado más abajo todavía estaría en la zona
   // muerta temporal y lanzaría «Cannot access 'loadNotifications' before initialization».
+  // Claves de las no leídas ya conocidas: solo se avisa de las que aparecen después.
+  const knownUnreadRef = useRef(null);
   const loadNotifications = useCallback(async () => {
     if (!getToken()) return;
     try {
       const data = await apiFetch('/api/notifications');
-      setNotifications({ unread: data.unread || 0, items: data.items || [] });
+      const items = data.items || [];
+      setNotifications({ unread: data.unread || 0, items });
+      const { fresh, keys } = newUnread(items, knownUnreadRef.current);
+      knownUnreadRef.current = keys;
+      if (fresh.length) {
+        const t = dRef.current.mainLayout;
+        const latest = fresh[0];
+        showLiveNotice({
+          id: `review-${latest.sessionId}`,
+          icon: 'message',
+          title: t.reviewReadyTitle,
+          message: t.reviewReadyMessage(latest.theme, latest.reviewer),
+          actionLabel: t.notificationOpen,
+          closeLabel: t.noticeClose,
+          onAction: () => openNotificationRef.current?.(latest),
+        });
+        requestRefresh();
+      }
     } catch {
       /* sin conexión se conserva lo último mostrado */
     }
@@ -105,12 +129,107 @@ export default function MainLayout() {
   // las genera al enviar la revisión; aquí solo se consultan y se marcan como leídas.
   useEffect(() => {
     if (user?.role !== 'user') return undefined;
+    // Latido: consulta cada pocos segundos, solo con la pestaña visible.
     loadNotifications();
-    const timer = setInterval(loadNotifications, 120000);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (!document.hidden) loadNotifications();
+    }, HEARTBEAT_MS);
+    const onVisible = () => {
+      if (!document.hidden) loadNotifications();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [user?.role, loadNotifications]);
 
+  // Informes en segundo plano: al terminar la entrevista el vocero puede seguir navegando. Mientras
+  // haya informes en preparación se consultan cada 5 s; al quedar listos se avisa arriba y Progreso
+  // muestra un contador. `pathRef`/`dRef` evitan reiniciar el sondeo en cada navegación.
+  const pathRef = useRef(location.pathname);
+  pathRef.current = location.pathname;
+  const dRef = useRef(d);
+  dRef.current = d;
+
+  useEffect(() => {
+    if (user?.role !== 'user') return undefined;
+    const refresh = () => setNewReports(unseenReports(user.id));
+    refresh();
+    window.addEventListener(REPORTS_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    return () => {
+      window.removeEventListener(REPORTS_EVENT, refresh);
+      window.removeEventListener('storage', refresh);
+    };
+  }, [user?.role, user?.id]);
+
+  useEffect(() => {
+    if (user?.role !== 'user') return undefined;
+    let busy = false;
+    const check = async () => {
+      // En «Analizando» la propia pantalla sigue el informe y lo abre al terminar.
+      if (busy || document.hidden || pathRef.current.startsWith('/vocero/analizando')) return;
+      const pending = pendingReports(user.id);
+      if (!pending.length) return;
+      busy = true;
+      for (const item of pending) {
+        try {
+          const data = await apiFetch(`/api/sessions/${item.sessionId}`);
+          if (data?.session?.report) {
+            markReportReady(user.id, item);
+            const t = dRef.current.mainLayout;
+            showLiveNotice({
+              id: `report-${item.sessionId}`,
+              icon: 'sparkles',
+              title: t.reportReadyTitle,
+              message: t.reportReadyMessage(item.theme),
+              actionLabel: t.reportReadyOpen,
+              closeLabel: t.noticeClose,
+              onAction: () => navigate(`/vocero/informe?sesion=${item.sessionId}`),
+            });
+            requestRefresh();
+          } else if (['failed', 'stalled'].includes(data?.evaluation?.state)) {
+            unwatchReport(user.id, item.sessionId);
+            toast.error(dRef.current.mainLayout.reportFailed, { position: 'top-center', duration: 8000 });
+          }
+        } catch (error) {
+          // La sesión ya no existe (descartada o eliminada): se deja de vigilar.
+          if (error?.status === 404) unwatchReport(user.id, item.sessionId);
+        }
+      }
+      busy = false;
+    };
+    check();
+    const timer = setInterval(check, HEARTBEAT_MS);
+    const onVisible = () => {
+      if (!document.hidden) check();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [user?.role, user?.id, navigate]);
+
+  // Mientras haya informes sin ver, la pestaña del navegador lo indica: «(1) VoxReady».
+  useEffect(() => {
+    const base = document.title.replace(/^\(\d+\)\s*/, '');
+    document.title = newReports.length ? `(${newReports.length}) ${base}` : base;
+  }, [newReports.length]);
+
+  // El contador se limpia al entrar a Progreso (todos) o al abrir un informe (solo ese).
+  useEffect(() => {
+    if (user?.role !== 'user') return;
+    if (location.pathname.startsWith('/vocero/progreso')) clearUnseen(user.id);
+    else if (location.pathname.startsWith('/vocero/informe')) {
+      const opened = new URLSearchParams(location.search).get('sesion');
+      if (opened) clearUnseen(user.id, opened);
+    }
+  }, [location.pathname, location.search, user?.role, user?.id]);
+
   // Abrir una notificación: se marca como leída y se abre SU informe.
+  const openNotificationRef = useRef(null);
   const openNotification = async (item) => {
     setBellOpen(false);
     try {
@@ -124,6 +243,7 @@ export default function MainLayout() {
     }));
     navigate(`/vocero/informe?sesion=${item.sessionId}`);
   };
+  openNotificationRef.current = openNotification;
 
   const markAllRead = async () => {
     try {
@@ -167,7 +287,7 @@ export default function MainLayout() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Barra superior */}
-      <header className="sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-xl">
+      <header className="print:hidden sticky top-0 z-40 border-b border-line bg-canvas/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto h-16 px-4 md:px-6 flex items-center gap-6">
           <Link to={homeFor(user.role)} className="shrink-0" aria-label={d.mainLayout.homeLabel}>
             <Logo />
@@ -177,6 +297,14 @@ export default function MainLayout() {
             {links.map((l) => (
               <NavLink key={l.to} to={l.to} end={l.end} className={linkClass}>
                 {l.label}
+                {l.to === '/vocero/progreso' && newReports.length > 0 && (
+                  <span
+                    className="min-w-[18px] h-[18px] px-1 rounded-full bg-danger text-white text-[11px] font-semibold leading-none flex items-center justify-center"
+                    aria-label={d.mainLayout.newReports(newReports.length)}
+                  >
+                    {newReports.length}
+                  </span>
+                )}
               </NavLink>
             ))}
           </nav>
@@ -386,6 +514,14 @@ export default function MainLayout() {
                   >
                     <Icon name={l.icon} size={17} />
                     {l.label}
+                    {l.to === '/vocero/progreso' && newReports.length > 0 && (
+                      <span
+                        className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-danger text-white text-[11px] font-semibold flex items-center justify-center"
+                        aria-label={d.mainLayout.newReports(newReports.length)}
+                      >
+                        {newReports.length}
+                      </span>
+                    )}
                   </NavLink>
                 ))}
                 {user.role === 'user' && (
@@ -419,7 +555,7 @@ export default function MainLayout() {
         </AnimatePresence>
       </main>
 
-      <footer className={cx('border-t border-line', inSession && 'hidden')}>
+      <footer className={cx('print:hidden border-t border-line', inSession && 'hidden')}>
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-14 flex items-center justify-between text-xs text-faint">
           <span>© 2026 VoxReady</span>
           <span className="hidden sm:inline">{d.mainLayout.footerTagline}</span>

@@ -22,6 +22,30 @@ const EYES_SIDE_MAX = 0.55; // ojos hacia un costado
 const EYES_UP_MAX = 0.5; // ojos hacia arriba
 const EYES_DOWN_MAX = 0.75; // ojos hacia abajo (tolerante: la pantalla suele estar bajo la cámara)
 
+// Pose inicial: se toma con los primeros cuadros con persona después de marcarla
+const BASELINE_FRAMES = 15;
+const OFF_POSE_TILT_DEG = 6; // hombros más inclinados que la pose inicial
+const OFF_POSE_SHIFT = 0.35; // cabeza desplazada (en anchos de hombro)
+const SHRINK_MIN = 0.15; // encogimiento: el cuello "se acorta" un 15 % respecto de la pose inicial
+
+export const EMOTIONS = ['neutral', 'happiness', 'anger', 'surprise', 'sadness'];
+
+// Emoción dominante del rostro a partir de los blendshapes de MediaPipe (0-1)
+export function classifyEmotion(v) {
+  const avg = (a, b) => ((v[a] || 0) + (v[b] || 0)) / 2;
+  if (avg('mouthSmileLeft', 'mouthSmileRight') > SMILE_MIN) return 'happiness';
+  const browDown = avg('browDownLeft', 'browDownRight');
+  const sneer = avg('noseSneerLeft', 'noseSneerRight');
+  const press = avg('mouthPressLeft', 'mouthPressRight');
+  if (browDown > 0.4 && (sneer > 0.25 || press > 0.3)) return 'anger';
+  const eyeWide = avg('eyeWideLeft', 'eyeWideRight');
+  if ((v.browInnerUp || 0) > 0.5 && (eyeWide > 0.35 || (v.jawOpen || 0) > 0.4)) return 'surprise';
+  if (avg('mouthFrownLeft', 'mouthFrownRight') > 0.3 && (v.browInnerUp || 0) > 0.25) return 'sadness';
+  return 'neutral';
+}
+
+const emptyEmotions = () => Object.fromEntries(EMOTIONS.map((e) => [e, 0]));
+
 // Índices de MediaPipe Pose
 const NOSE = 0;
 const L_EAR = 7;
@@ -47,7 +71,12 @@ export default class PoseTracker {
   reset() {
     this.stats = { frames: 0, withPerson: 0, facing: 0, tiltSum: 0, tiltN: 0, headSum: 0, headN: 0, handSum: 0, handN: 0 };
     // Tiempos acumulados (ms): analizado, mirando a la cámara, mirando a otro lado y sonriendo
-    this.time = { analyzed: 0, facing: 0, away: 0, smile: 0 };
+    this.time = { analyzed: 0, facing: 0, away: 0, smile: 0, offPose: 0, shrink: 0 };
+    this.emotions = emptyEmotions();
+    this.offPoseRun = 0;
+    this.offPoseMax = 0;
+    this.baseline = null;
+    this.baselineSamples = [];
     this.faceFrames = 0;
     this.segmentStart = null;
     this.lastFrameAt = null;
@@ -124,7 +153,14 @@ export default class PoseTracker {
     this.timer = setTimeout(this.loop, FRAME_MS);
   };
 
-  // Gestos del rostro en este cuadro: { smiling, eyesAway } o null si no se ve la cara
+  // Marca la pose inicial: los próximos cuadros con persona definen la postura de referencia
+  markBaseline() {
+    this.baseline = null;
+    this.baselineSamples = [];
+    this.offPoseRun = 0;
+  }
+
+  // Gestos del rostro en este cuadro: { smiling, eyesAway, emotion } o null si no se ve la cara
   readFace(now) {
     if (!this.faceLandmarker) return null;
     const shapes = this.faceLandmarker.detectForVideo(this.video, now).faceBlendshapes?.[0]?.categories;
@@ -136,6 +172,7 @@ export default class PoseTracker {
     return {
       smiling: (v.mouthSmileLeft + v.mouthSmileRight) / 2 > SMILE_MIN,
       eyesAway: side > EYES_SIDE_MAX || up > EYES_UP_MAX || down > EYES_DOWN_MAX,
+      emotion: classifyEmotion(v),
     };
   }
 
@@ -157,6 +194,7 @@ export default class PoseTracker {
     if (face) {
       this.faceFrames += 1;
       if (face.smiling) t.smile += elapsed;
+      this.emotions[face.emotion] = (this.emotions[face.emotion] || 0) + elapsed;
     }
 
     // Iluminación: una muestra por segundo
@@ -189,8 +227,10 @@ export default class PoseTracker {
     // Inclinación de hombros en grados
     const dy = Math.abs(lm[L_SHOULDER].y - lm[R_SHOULDER].y);
     const dx = Math.abs(lm[L_SHOULDER].x - lm[R_SHOULDER].x) || 1e-6;
-    s.tiltSum += (Math.atan2(dy, dx) * 180) / Math.PI;
+    const tilt = (Math.atan2(dy, dx) * 180) / Math.PI;
+    s.tiltSum += tilt;
     s.tiltN += 1;
+    this.trackPose(lm, tilt, shoulderWidth, elapsed);
 
     // Movimiento de cabeza y manos entre análisis (normalizado)
     if (this.prev) {
@@ -204,6 +244,36 @@ export default class PoseTracker {
       }
     }
     this.prev = lm;
+  }
+
+  // Compara el cuadro con la pose inicial: tiempo fuera de ella (y su racha más larga) y encogimiento
+  trackPose(lm, tilt, width, elapsed) {
+    const midX = (lm[L_SHOULDER].x + lm[R_SHOULDER].x) / 2;
+    const midY = (lm[L_SHOULDER].y + lm[R_SHOULDER].y) / 2;
+    // Altura del cuello: nariz sobre la línea de hombros, en anchos de hombro
+    const neck = (midY - lm[NOSE].y) / width;
+    const sample = { tilt, neck, noseX: (lm[NOSE].x - midX) / width, width };
+    if (!this.baseline) {
+      this.baselineSamples.push(sample);
+      if (this.baselineSamples.length >= BASELINE_FRAMES) {
+        const n = this.baselineSamples.length;
+        const mean = (k) => this.baselineSamples.reduce((a, x) => a + x[k], 0) / n;
+        this.baseline = { tilt: mean('tilt'), neck: mean('neck'), noseX: mean('noseX'), width: mean('width') };
+      }
+      return;
+    }
+    const b = this.baseline;
+    const shrunk = b.neck > 0 && neck < b.neck * (1 - SHRINK_MIN);
+    const off =
+      shrunk || Math.abs(tilt - b.tilt) > OFF_POSE_TILT_DEG || Math.abs(sample.noseX - b.noseX) > OFF_POSE_SHIFT;
+    if (shrunk) this.time.shrink += elapsed;
+    if (off) {
+      this.time.offPose += elapsed;
+      this.offPoseRun += elapsed;
+      this.offPoseMax = Math.max(this.offPoseMax, this.offPoseRun);
+    } else {
+      this.offPoseRun = 0;
+    }
   }
 
   // Tramo de la entrevista (una pregunta y su respuesta): permite saber en qué
@@ -258,6 +328,13 @@ export default class PoseTracker {
         awaySeconds: toSeconds(t.away),
         smileSeconds: toSeconds(t.smile),
         faceAvailable: this.faceFrames > 0, // sin rostro detectado no se puede medir la risa
+        // Postura respecto de la pose inicial (null si no se alcanzó a marcarla)
+        baselineCaptured: Boolean(this.baseline),
+        offPoseSeconds: this.baseline ? toSeconds(t.offPose) : null,
+        offPoseMaxSeconds: this.baseline ? toSeconds(this.offPoseMax) : null,
+        shrinkSeconds: this.baseline ? toSeconds(t.shrink) : null,
+        // Expresiones faciales: segundos con cada emoción dominante
+        emotions: this.faceFrames > 0 ? Object.fromEntries(EMOTIONS.map((e) => [e, toSeconds(this.emotions[e] || 0)])) : null,
       },
       lighting,
     };

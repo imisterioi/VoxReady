@@ -66,7 +66,8 @@ const LABS = [
 
 // Primitivas visuales sin textos propios (iconos y marca): no contienen copia de interfaz, por eso
 // no se les exige `useI18n()`. Cualquier texto visible que se añada aquí debe pasar a TRANSLATED.
-const PRIMITIVES = ['components/Icon.jsx', 'components/Logo.jsx'];
+// LiveNotice recibe todos sus textos ya traducidos desde quien lo llama (MainLayout).
+const PRIMITIVES = ['components/Icon.jsx', 'components/Logo.jsx', 'components/LiveNotice.jsx'];
 
 const ACCENTS = /[áéíóúñ¿¡]/i;
 

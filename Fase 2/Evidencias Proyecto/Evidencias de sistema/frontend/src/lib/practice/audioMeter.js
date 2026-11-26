@@ -4,6 +4,26 @@
 
 const SAMPLE_MS = 100; // una muestra cada 100 ms
 const LONG_PAUSE_MS = 1500; // silencio que cuenta como "pausa larga"
+// Volumen "fuera de rango": con voz, muy por encima (grito) o muy por debajo (se apaga) de su media
+const VOLUME_HIGH = 2.2;
+const VOLUME_LOW = 0.35;
+// Interrupción: voz sostenida del vocero mientras el entrevistador todavía habla
+const INTERRUPT_MIN_MS = 600;
+const INTERRUPT_RESET_MS = 400;
+
+// Racha continua más larga (ms) de muestras con voz fuera del rango de volumen.
+// Un silencio corta la racha (callar no es "pasarse" de volumen).
+export function longestOutOfRangeMs(samples, mean, sampleMs = SAMPLE_MS) {
+  if (!(mean > 0)) return null;
+  let run = 0;
+  let best = 0;
+  for (const s of samples) {
+    const out = s.speaking && (s.rms > mean * VOLUME_HIGH || s.rms < mean * VOLUME_LOW);
+    run = out ? run + sampleMs : 0;
+    if (run > best) best = run;
+  }
+  return best;
+}
 
 export default class AudioMeter {
   constructor(stream) {
@@ -45,6 +65,36 @@ export default class AudioMeter {
     if (speaking) this.lastVoiceAt = now;
 
     if (this.answer && !this.answer.paused) this.answer.samples.push({ t: now, rms, speaking });
+    if (this.guard) this.trackGuard(speaking);
+  }
+
+  // Escucha activa: mientras el entrevistador habla, cuenta las veces que el vocero lo interrumpe
+  startGuard() {
+    this.guard = { count: 0, voicedMs: 0, quietMs: 0, counted: false };
+  }
+
+  trackGuard(speaking) {
+    const g = this.guard;
+    if (speaking) {
+      g.voicedMs += SAMPLE_MS;
+      g.quietMs = 0;
+      if (!g.counted && g.voicedMs >= INTERRUPT_MIN_MS) {
+        g.count += 1;
+        g.counted = true;
+      }
+    } else {
+      g.quietMs += SAMPLE_MS;
+      if (g.quietMs >= INTERRUPT_RESET_MS) {
+        g.voicedMs = 0;
+        g.counted = false;
+      }
+    }
+  }
+
+  stopGuard() {
+    const count = this.guard?.count ?? null;
+    this.guard = null;
+    return this.available ? count : null;
   }
 
   isSpeakingRecently(ms = 400) {
@@ -95,6 +145,8 @@ export default class AudioMeter {
       longPauses,
       volumeMean: mean,
       volumeVariation: volumes.length > 5 ? Math.sqrt(variance) / mean : null, // coeficiente de variación
+      // Tiempo continuo máximo con el volumen fuera de rango (grito o voz que se apaga)
+      volumeOutMaxMs: volumes.length > 5 ? longestOutOfRangeMs(samples, mean) : null,
     };
   }
 

@@ -36,6 +36,7 @@ const LIMITS = {
   handActivity: 1,
   seconds: 86400, // 24 h
   light: 255,
+  interruptions: 200,
   warnings: 60, // tope para no inflar el JSON con un payload malicioso
 };
 
@@ -128,6 +129,8 @@ function normalizeTurnMetrics(raw, index, warnings) {
     speakingMs: null,
     longPauses: null,
     volumeVariation: null,
+    volumeOutMaxMs: null,
+    interruptions: null,
     video: null,
   };
   if (!isObject(raw)) {
@@ -146,6 +149,8 @@ function normalizeTurnMetrics(raw, index, warnings) {
     speakingMs: boundedNumber(raw.speakingMs, { max: LIMITS.speakingMs, path: `${base}.speakingMs`, warnings }),
     longPauses: boundedNumber(raw.longPauses, { max: LIMITS.longPauses, integer: true, path: `${base}.longPauses`, warnings }),
     volumeVariation: boundedNumber(raw.volumeVariation, { max: LIMITS.volumeVariation, path: `${base}.volumeVariation`, warnings }),
+    volumeOutMaxMs: boundedNumber(raw.volumeOutMaxMs, { max: LIMITS.durationMs, path: `${base}.volumeOutMaxMs`, warnings }),
+    interruptions: boundedNumber(raw.interruptions, { max: LIMITS.interruptions, integer: true, path: `${base}.interruptions`, warnings }),
     video: normalizeVideo(raw.video, index, warnings),
   };
 }
@@ -207,6 +212,8 @@ function normalizeTranscript(rawTranscript, warnings) {
         speakingMs: declared.speakingMs,
         longPauses: declared.longPauses,
         volumeVariation: declared.volumeVariation,
+        volumeOutMaxMs: declared.volumeOutMaxMs,
+        interruptions: declared.interruptions,
         video: declared.video,
       },
     });
@@ -245,6 +252,11 @@ function buildVoice(turns, rawVoice, warnings) {
     meanOf('latencyMs') ??
     boundedNumber(rawVoice.avgLatencyMs, { max: LIMITS.latencyMs, path: `${base}.avgLatencyMs`, warnings });
 
+  // Racha más larga con el volumen fuera de rango (máximo entre respuestas) e interrupciones totales
+  const outValues = valuesOf('volumeOutMaxMs');
+  const volumeOutMaxSec = outValues.length ? Math.max(...outValues) / 1000 : null;
+  const interruptions = sumOf('interruptions');
+
   // La velocidad NO se calcula con la duración que declara el navegador: no es una fuente
   // verificada. Solo el audio de la sesión (Whisper) puede rellenar `wpm`; hasta entonces
   // queda en null y el criterio se excluye del cálculo (ver `applySpeechEvidence`).
@@ -271,6 +283,8 @@ function buildVoice(turns, rawVoice, warnings) {
     longPauses,
     longPausesPerAnswer: longPauses != null ? longPauses / turns.length : null,
     volumeVariation,
+    volumeOutMaxSec,
+    interruptions,
     avgLatencyMs,
     speakingSeconds: speakingMs != null ? Math.round(speakingMs / 1000) : 0,
     transcription: rawVoice.transcription === 'texto' ? 'texto' : 'voz',
@@ -290,15 +304,26 @@ function normalizeBody(raw, warnings) {
   const facingSeconds = boundedNumber(raw.facingSeconds, { max: LIMITS.seconds, path: `${base}.facingSeconds`, warnings });
   const awaySeconds = boundedNumber(raw.awaySeconds, { max: LIMITS.seconds, path: `${base}.awaySeconds`, warnings });
   const faceAvailable = raw.faceAvailable === true;
+  const sec = (key) => boundedNumber(raw[key], { max: LIMITS.seconds, path: `${base}.${key}`, warnings });
+  const offPoseSeconds = sec('offPoseSeconds');
+  const offPoseMaxSeconds = sec('offPoseMaxSeconds');
+  const shrinkSeconds = sec('shrinkSeconds');
+  let emotions = null;
+  if (faceAvailable && isObject(raw.emotions)) {
+    emotions = {};
+    for (const key of ['neutral', 'happiness', 'anger', 'surprise', 'sadness']) {
+      emotions[key] = boundedNumber(raw.emotions[key], { max: LIMITS.seconds, path: `${base}.emotions.${key}`, warnings }) ?? 0;
+    }
+  }
   const smileSeconds = faceAvailable
     ? boundedNumber(raw.smileSeconds, { max: LIMITS.seconds, path: `${base}.smileSeconds`, warnings })
     : null;
 
   const declaredAvailable = raw.available === true;
-  // Sin presencia ni mirada válidas no se puede puntuar el área: se deja sin medir.
-  const available = declaredAvailable && presence != null && facingCamera != null;
+  // Sin mirada válida no se puede puntuar el área: se deja sin medir.
+  const available = declaredAvailable && facingCamera != null;
   if (declaredAvailable && !available) {
-    pushWarning(warnings, 'BODY_INCOMPLETE', base, 'El navegador declaró el cuerpo medido pero faltan presencia o mirada; el área queda sin medir.');
+    pushWarning(warnings, 'BODY_INCOMPLETE', base, 'El navegador declaró el cuerpo medido pero falta la mirada; el área queda sin medir.');
   }
   if (!available) return { available: false };
 
@@ -314,6 +339,10 @@ function normalizeBody(raw, warnings) {
     awaySeconds,
     smileSeconds,
     faceAvailable,
+    offPoseSeconds,
+    offPoseMaxSeconds,
+    shrinkSeconds,
+    emotions,
   };
 }
 

@@ -15,7 +15,7 @@ export const CHARTDATA = [
 ];
 
 // Colores de series definidos como variables CSS (se adaptan al modo oscuro)
-export const CHARTCOLORS = ['rgb(var(--c1))', 'rgb(var(--c2))', 'rgb(var(--c3))', 'rgb(var(--c4))'];
+export const CHARTCOLORS = ['rgb(var(--c1))', 'rgb(var(--c2))', 'rgb(var(--c3))', 'rgb(var(--c4))', 'rgb(var(--c5))', 'rgb(var(--c6))'];
 
 const ROLE_ORDER = ['user', 'admin', 'master', 'system'];
 export const roleIndex = (role) => Math.max(0, ROLE_ORDER.indexOf(role));

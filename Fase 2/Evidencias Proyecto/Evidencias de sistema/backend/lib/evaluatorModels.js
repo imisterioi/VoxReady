@@ -11,10 +11,11 @@
 //
 // Notas sobre los modelos:
 //  - Estar en el catálogo del proveedor no implica que el modelo acepte `chat/completions`.
-//  - `z-ai/glm-5.3` es el único validado con un informe de tamaño real (12/12 criterios).
+//  - `minimaxai/minimax-m3.1-flash` es el validado con un informe real de la rúbrica de 6 áreas
+//    (2026-11-25). `z-ai/glm-5.3` y `openai/gpt-oss-20b` fueron retirados por el proveedor (HTTP 410).
 //  - Los candidatos de abajo responden al contrato con `max_tokens` pequeño; los que razonan agotan
 //    el presupuesto de tokens y devuelven `finish_reason: length`, así que los descarta la validación.
-const VALIDATED_DEFAULTS = ['z-ai/glm-5.3'];
+const VALIDATED_DEFAULTS = ['minimaxai/minimax-m3.1-flash'];
 
 // Candidatos habilitados: existen en el catálogo del proveedor, aceptan `chat/completions` y
 // COMPLETARON un informe sintético a tamaño real con el prompt de producción (sonda real del
@@ -34,8 +35,6 @@ const VALIDATED_DEFAULTS = ['z-ai/glm-5.3'];
 //   catálogo: no aceptan chat/completions.
 const CANDIDATE_DEFAULTS = [
   'nvidia/nemotron-3-ultra-550b-a55b',
-  'openai/gpt-oss-20b',
-  'minimaxai/minimax-m3.1-flash',
 ];
 
 const DEFAULT_MODELS = [...VALIDATED_DEFAULTS, ...CANDIDATE_DEFAULTS];

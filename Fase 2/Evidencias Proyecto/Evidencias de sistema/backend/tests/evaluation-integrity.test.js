@@ -73,6 +73,8 @@ function judgementFixture(overrides = {}) {
   return {
     coherencia,
     empatia,
+    escucha: Object.fromEntries(Object.entries(DEFAULT_CONFIG.listening.criteria).filter(([, c]) => !c.source).map(([k]) => [k, 70])),
+    presion: Object.fromEntries(Object.keys(DEFAULT_CONFIG.pressure.criteria).map((k) => [k, 70])),
     resumen: 'Buen desempeño.',
     cita: 'Cita de coach.',
     fortalezas: ['Claridad'],
@@ -146,7 +148,8 @@ test('NaN, Infinity y valores no numéricos no puntúan ni llegan al JSON', () =
   assert.equal(input.transcript[0].metrics.latencyMs, null);
   assert.equal(input.transcript[0].metrics.longPauses, null);
   assert.equal(input.metrics.voice.available, false); // sin duración válida no hay voz
-  assert.equal(input.metrics.body.available, false);
+  // La presencia ya no es obligatoria: con mirada válida el cuerpo se mide, sin el NaN.
+  assert.equal(input.metrics.body.available, true);
   assert.equal(input.metrics.lighting, null);
   assert.equal(/NaN|Infinity/.test(JSON.stringify(input.metrics)), false);
   assert.ok(input.warnings.some((warning) => warning.code === 'INVALID_NUMBER'));
@@ -358,8 +361,8 @@ test('el informe conserva la estructura que consume la interfaz y añade la audi
   ]) {
     assert.ok(key in report, `falta el campo ${key}`);
   }
-  assert.equal(report.areas.length, 4);
-  assert.deepEqual(report.areas.map((area) => area.key), ['expression', 'voice', 'coherence', 'empathy']);
+  assert.equal(report.areas.length, 6);
+  assert.deepEqual(report.areas.map((area) => area.key), ['expression', 'voice', 'coherence', 'empathy', 'listening', 'pressure']);
 
   // El global que se persiste es el promedio ponderado de las áreas medidas.
   const measuredAreas = report.areas.filter((area) => area.score != null);

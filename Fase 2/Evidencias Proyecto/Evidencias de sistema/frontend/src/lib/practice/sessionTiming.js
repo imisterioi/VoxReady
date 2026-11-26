@@ -5,7 +5,7 @@
 //  - END_SILENCE_MS: el vocero habló y luego guarda silencio → se da por terminada la respuesta
 //    y la entrevista avanza sola. Es el único umbral del avance automático.
 export const NO_ANSWER_MS = 12000;
-export const END_SILENCE_MS = 10000;
+export const END_SILENCE_MS = 4000;
 
 // Tiempo que falta (ms) para que se dispare el avance automático. Negativo = ya venció.
 export function silenceRemainingMs({ spoke, quietForMs }) {

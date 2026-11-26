@@ -16,7 +16,7 @@ const {
 } = require('./evaluatorHealth');
 
 const ENV = { NVIDIA_API_KEY: 'clave-de-prueba' };
-const VALID = { choices: [{ finish_reason: 'stop', message: { content: '{"coherencia":{"a":50},"empatia":{"b":50}}' } }] };
+const VALID = { choices: [{ finish_reason: 'stop', message: { content: '{"coherencia":{"a":50},"empatia":{"b":50},"escucha":{"c":50},"presion":{"d":50}}' } }] };
 const jsonOk = (body = VALID, status = 200) => ({ ok: status < 300, status, json: async () => body });
 const jsonStatus = (status) => async () => jsonOk({}, status);
 const never = () =>
